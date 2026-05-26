@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Techniline Ops</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -112,6 +113,57 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .ticket-save { font-size: 11px; padding: 6px 12px; border: 1px solid var(--navy); background: white; color: var(--navy); border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; }
     .ticket-save:hover { background: var(--navy); color: white; }
     .ticket-ok { color: var(--green); font-size: 16px; font-weight: 700; }
+    .disp-table-wrap { overflow-x: auto; border: 1px solid #E2E8F0; border-radius: var(--radius-md); background: white; }
+    .disp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .disp-table thead th { background: #0F2744; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; position: sticky; top: 0; white-space: nowrap; }
+    .disp-table thead th .sort-ind { opacity: 0.6; margin-left: 4px; font-size: 9px; }
+    .disp-table tbody td { padding: 10px 12px; border-top: 1px solid #E2E8F0; vertical-align: middle; }
+    .disp-table tbody tr:nth-child(4n+3) { background: #F8FAFC; }
+    .disp-table tbody tr:hover { background: #EFF6FF; }
+    .disp-table tbody tr.expand-row { background: #F8FAFC !important; }
+    .disp-table .mono { font-family: 'DM Mono', monospace; font-size: 12px; }
+    .disp-table .num-cell { text-align: right; font-family: 'DM Mono', monospace; font-size: 12px; white-space: nowrap; }
+    .disp-table .gap-red { color: #B91C1C; font-weight: 600; }
+    .disp-table .gap-green { color: #047857; font-weight: 500; }
+    .disp-table .approved-full { color: #047857; font-weight: 500; }
+    .disp-table .dispute-id-cell { color: var(--navy); font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; font-weight: 500; }
+    .disp-table .dispute-id-cell:hover { text-decoration: underline; }
+    .disp-pill { display: inline-block; padding: 3px 8px; font-size: 10px; font-weight: 600; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    .disp-pill.open { background: #DBEAFE; color: #1E40AF; }
+    .disp-pill.approved { background: #D1FAE5; color: #065F46; }
+    .disp-pill.partial { background: #FED7AA; color: #9A3412; }
+    .disp-pill.rejected { background: #FEE2E2; color: #991B1B; }
+    .disp-pill.resolved { background: #E0E7FF; color: #3730A3; }
+    .disp-pill.awaiting { background: #FEF3C7; color: #92400E; }
+    .inline-edit { display: inline-flex; align-items: center; gap: 4px; }
+    .inline-edit input { font-family: 'DM Mono', monospace; font-size: 11px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; width: 110px; background: white; }
+    .inline-edit input:focus { outline: none; border-color: var(--navy); }
+    .inline-edit .display { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--navy); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+    .inline-edit .display:hover { background: #EFF6FF; }
+    .inline-edit .display.placeholder { color: var(--text-muted); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; }
+    .inline-edit .pencil { font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.1s; }
+    .inline-edit:hover .pencil { opacity: 1; }
+    .inline-edit .tick { color: var(--green); font-weight: 700; font-size: 12px; }
+    .act-btn { font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: 500; border: 1px solid; background: white; white-space: nowrap; }
+    .act-btn.navy { color: var(--navy); border-color: var(--navy); }
+    .act-btn.navy:hover { background: var(--navy); color: white; }
+    .act-btn.amber { color: #92400E; border-color: #D97706; }
+    .act-btn.amber:hover { background: #D97706; color: white; }
+    .act-btn.green { color: #065F46; border-color: #059669; }
+    .act-btn.green:hover { background: #059669; color: white; }
+    .disp-expand { padding: 12px 18px; font-size: 12px; color: var(--text-muted); }
+    .disp-expand .row { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 6px; }
+    .disp-expand .row > div { min-width: 180px; }
+    .disp-expand .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px; }
+    .disp-expand .val { color: var(--navy); font-size: 13px; }
+    .recovery-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; }
+    .recovery-value { font-size: 32px; font-weight: 600; font-family: 'DM Sans', sans-serif; }
+    .recovery-value.green { color: #047857; }
+    .recovery-value.amber { color: #D97706; }
+    .recovery-value.red { color: #B91C1C; }
+    .recovery-value.gray { color: var(--text-muted); }
+    .recovery-sub { font-size: 13px; color: var(--text-muted); }
+    .recovery-detail { font-size: 12px; color: var(--slate); margin-top: 4px; }
     .po-actions-header { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px 0; }
     .po-actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
     .tab-pane { display: none; }
@@ -440,6 +492,8 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       <div class="kpi-grid" id="kpi-grid"><div class="loading-state">Loading KPIs…</div></div>
       <div class="po-actions-header" id="po-actions-header" style="display:none">Today’s PO actions</div>
       <div class="po-actions-grid" id="po-actions-grid"></div>
+      <div class="po-actions-header" id="recovery-header" style="display:none">Dispute recovery</div>
+      <div id="recovery-grid" style="margin-bottom:18px"></div>
       <div class="kpi-links" id="kpi-links"></div>
     </div>
 
@@ -481,6 +535,11 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Download disputes PDF
           </button>
+          <button class="export-btn" onclick="document.getElementById('soa-file-input').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Import SOA data
+          </button>
+          <input type="file" id="soa-file-input" accept=".xlsx" style="display:none" onchange="importSOAData(this)" />
         </div>
       </div>
       <div class="filter-chips" id="disp-filters">
@@ -1295,6 +1354,42 @@ async function loadKPIs() {
       <svg class="kpi-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </div>`;
   await loadPOActionsKPI();
+  await loadDisputeRecoveryKPI();
+}
+
+async function loadDisputeRecoveryKPI() {
+  const header = document.getElementById('recovery-header');
+  const grid = document.getElementById('recovery-grid');
+  if (!grid || !header) return;
+  const { data, error } = await sb.from('disputes')
+    .select('invoice_amount_aed, approved_amount_aed, dispute_status')
+    .in('dispute_status', ['amazon_approved','amazon_partial','resolved']);
+  if (error) { grid.innerHTML = ''; header.style.display = 'none'; return; }
+  const rows = data || [];
+  let totalInv = 0, totalApp = 0;
+  rows.forEach(r => {
+    const inv = parseFloat(r.invoice_amount_aed);
+    const app = parseFloat(r.approved_amount_aed);
+    if (!isNaN(inv)) totalInv += inv;
+    if (!isNaN(app)) totalApp += app;
+  });
+  if (totalInv <= 0) {
+    header.style.display = 'block';
+    grid.innerHTML = '<div class="recovery-card"><div class="recovery-value gray">—</div><div class="recovery-sub">No resolved disputes yet</div></div>';
+    return;
+  }
+  const rate = (totalApp / totalInv) * 100;
+  const rateStr = rate.toFixed(1) + '%';
+  let cls = 'red';
+  if (rate >= 80) cls = 'green';
+  else if (rate >= 50) cls = 'amber';
+  const fmt = (n) => n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  header.style.display = 'block';
+  grid.innerHTML = '<div class="recovery-card">'
+    + '<div class="recovery-value ' + cls + '">' + rateStr + '</div>'
+    + '<div class="recovery-sub">of AED ' + fmt(totalInv) + ' recovered via disputes</div>'
+    + '<div class="recovery-detail">AED ' + fmt(totalApp) + ' approved of AED ' + fmt(totalInv) + ' disputed</div>'
+    + '</div>';
 }
 
 // ── Priorities ─────────────────────────────────────────
@@ -1517,45 +1612,242 @@ function disputeStatusLabel(key) {
   return ({open:'Open', approved:'Approved', partial:'Partially approved', rejected:'Rejected by Amazon', resolved:'Resolved'})[key] || 'Open';
 }
 
+let _dispSort = { col: 'date_raised', dir: 'desc' };
+
+function fmtDispDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '—';
+  const dd = String(dt.getDate()).padStart(2,'0');
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  return dd + '/' + mm + '/' + dt.getFullYear();
+}
+
+function fmtDispAed(a) {
+  return (a !== null && a !== undefined && !isNaN(Number(a))) ? Number(a).toFixed(2) : '—';
+}
+
+function sortDisputes(col) {
+  if (_dispSort.col === col) {
+    _dispSort.dir = _dispSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _dispSort.col = col; _dispSort.dir = 'asc';
+  }
+  const filtered = filterDisputesByKey(allDisputes, currentDisputeFilter);
+  renderDisputes(filtered);
+}
+
+function filterDisputesByKey(rows, key) {
+  if (!key || key === 'all') return rows;
+  return rows.filter(d => disputeStatusKey(d) === key);
+}
+
+function getDispSortVal(d, col) {
+  switch(col) {
+    case 'dispute_number': return d.dispute_number || '';
+    case 'status': return disputeStatusKey(d);
+    case 'tle_invoice': return d.tle_invoice_number || '';
+    case 'po_number': return d.po_number || '';
+    case 'payment_number': return d.payment_number || '';
+    case 'invoice_aed': return Number(d.invoice_amount_aed) || 0;
+    case 'approved_aed': return Number(d.approved_amount_aed) || 0;
+    case 'gap_aed': {
+      const inv = Number(d.invoice_amount_aed);
+      const app = Number(d.approved_amount_aed);
+      if (isNaN(inv) || isNaN(app)) return 0;
+      return inv - app;
+    }
+    case 'date_raised': return d.submitted_for_approval_at || d.created_at || '';
+    case 'srt': return d.srt_number || '';
+    case 'prt': return d.prt_number || '';
+    default: return '';
+  }
+}
+
 function renderDisputes(rows) {
   const list = document.getElementById('disp-list');
   if (!rows || rows.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-title">No disputes yet</div><div class="empty-sub">Raise a dispute from a shortage claim notification to see it here.</div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-title">No disputes yet</div><div class="empty-sub">Raise a dispute from a shortage claim notification, or click Import SOA data to load historical disputes.</div></div>';
     return;
   }
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '—';
-  const fmtAed = a => (a !== null && a !== undefined && !isNaN(Number(a))) ? Number(a).toFixed(2) : '—';
-  list.innerHTML = rows.map(d => {
+
+  const sorted = rows.slice().sort((a, b) => {
+    const va = getDispSortVal(a, _dispSort.col);
+    const vb = getDispSortVal(b, _dispSort.col);
+    let cmp = 0;
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+    else cmp = String(va).localeCompare(String(vb));
+    return _dispSort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  const sortInd = (col) => _dispSort.col === col ? '<span class="sort-ind">' + (_dispSort.dir === 'asc' ? '▲' : '▼') + '</span>' : '';
+
+  const head = '<thead><tr>'
+    + '<th onclick="sortDisputes(\'dispute_number\')">Dispute ID' + sortInd('dispute_number') + '</th>'
+    + '<th onclick="sortDisputes(\'status\')">Status' + sortInd('status') + '</th>'
+    + '<th onclick="sortDisputes(\'tle_invoice\')">TLE Invoice' + sortInd('tle_invoice') + '</th>'
+    + '<th onclick="sortDisputes(\'po_number\')">PO No' + sortInd('po_number') + '</th>'
+    + '<th onclick="sortDisputes(\'payment_number\')">Payment No' + sortInd('payment_number') + '</th>'
+    + '<th onclick="sortDisputes(\'invoice_aed\')" style="text-align:right">Invoice AED' + sortInd('invoice_aed') + '</th>'
+    + '<th onclick="sortDisputes(\'approved_aed\')" style="text-align:right">Approved AED' + sortInd('approved_aed') + '</th>'
+    + '<th onclick="sortDisputes(\'gap_aed\')" style="text-align:right">Gap AED' + sortInd('gap_aed') + '</th>'
+    + '<th onclick="sortDisputes(\'date_raised\')">Date raised' + sortInd('date_raised') + '</th>'
+    + '<th onclick="sortDisputes(\'srt\')">SRT' + sortInd('srt') + '</th>'
+    + '<th onclick="sortDisputes(\'prt\')">PRT' + sortInd('prt') + '</th>'
+    + '<th>Actions</th>'
+    + '</tr></thead>';
+
+  const body = sorted.map(d => {
     const k = disputeStatusKey(d);
-    const gap = (d.invoice_amount_aed !== null && d.approved_amount_aed !== null && !isNaN(Number(d.invoice_amount_aed)) && !isNaN(Number(d.approved_amount_aed)))
-      ? (Number(d.invoice_amount_aed) - Number(d.approved_amount_aed)).toFixed(2) : '—';
-    const srtVal = (d.srt_number || '').replace(/"/g, '&quot;');
-    const prtVal = (d.prt_number || '').replace(/"/g, '&quot;');
-    return `<div class="dispute-row-wrap">
-      <div class="dispute-row">
-        <div class="dispute-row-main">
-          <div class="dispute-row-title">${d.dispute_number || '(no DSPT)'} · ${d.tle_invoice_number || '—'}</div>
-          <div class="dispute-row-sub">PO: ${d.po_number || '—'} · Payment: ${d.payment_number || '—'} · Raised: ${fmtDate(d.submitted_for_approval_at)}</div>
-        </div>
-        <div class="dispute-amount">AED ${fmtAed(d.invoice_amount_aed)}</div>
-        <span class="dispute-pill ${k}">${disputeStatusLabel(k)}</span>
-      </div>
-      <div class="dispute-tickets">
-        <div class="ticket-field">
-          <label class="ticket-label">SRT</label>
-          <input type="text" class="ticket-input" id="srt-${d.id}" value="${srtVal}" placeholder="SRT number" />
-          <button class="ticket-save" onclick="saveDisputeTicket('${d.id}', 'srt')">Save</button>
-          <span class="ticket-ok" id="srt-ok-${d.id}" style="display:none">✓</span>
-        </div>
-        <div class="ticket-field">
-          <label class="ticket-label">PRT</label>
-          <input type="text" class="ticket-input" id="prt-${d.id}" value="${prtVal}" placeholder="PRT number" />
-          <button class="ticket-save" onclick="saveDisputeTicket('${d.id}', 'prt')">Save</button>
-          <span class="ticket-ok" id="prt-ok-${d.id}" style="display:none">✓</span>
-        </div>
-      </div>
-    </div>`;
+    const inv = (d.invoice_amount_aed !== null && d.invoice_amount_aed !== undefined && !isNaN(Number(d.invoice_amount_aed))) ? Number(d.invoice_amount_aed) : null;
+    const app = (d.approved_amount_aed !== null && d.approved_amount_aed !== undefined && !isNaN(Number(d.approved_amount_aed))) ? Number(d.approved_amount_aed) : null;
+    const gap = (inv !== null && app !== null) ? inv - app : null;
+    const invStr = inv !== null ? inv.toFixed(2) : '—';
+    const appStr = app !== null ? app.toFixed(2) : '—';
+    const appCls = (inv !== null && app !== null && app >= inv) ? ' approved-full' : '';
+    let gapCls = '';
+    let gapStr = '—';
+    if (gap !== null) {
+      gapStr = gap.toFixed(2);
+      if (gap > 0.001) gapCls = 'gap-red';
+      else gapCls = 'gap-green';
+    }
+    const dateStr = fmtDispDate(d.submitted_for_approval_at || d.created_at);
+    const srtVal = (d.srt_number || '').replace(/"/g,'&quot;');
+    const prtVal = (d.prt_number || '').replace(/"/g,'&quot;');
+
+    const srtCell = '<span class="inline-edit" id="srt-wrap-' + d.id + '">'
+      + (d.srt_number
+          ? '<span class="display" onclick="editInline(\'' + d.id + '\',\'srt\')">' + d.srt_number + '</span><span class="pencil">✎</span>'
+          : '<span class="display placeholder" onclick="editInline(\'' + d.id + '\',\'srt\')">Add SRT</span>')
+      + '</span>';
+    const prtCell = '<span class="inline-edit" id="prt-wrap-' + d.id + '">'
+      + (d.prt_number
+          ? '<span class="display" onclick="editInline(\'' + d.id + '\',\'prt\')">' + d.prt_number + '</span><span class="pencil">✎</span>'
+          : '<span class="display placeholder" onclick="editInline(\'' + d.id + '\',\'prt\')">Add PRT</span>')
+      + '</span>';
+
+    let actions = '';
+    if (k === 'open') {
+      actions = '<button class="act-btn navy" onclick="event.stopPropagation();updateDisputeStatus(\'' + d.id + '\')">Update</button>';
+    } else if (k === 'awaiting') {
+      actions = '<button class="act-btn amber" onclick="event.stopPropagation();chaseDispute(\'' + d.id + '\')">Chase</button> '
+              + '<button class="act-btn green" onclick="event.stopPropagation();markDisputeResolved(\'' + d.id + '\')">Resolve</button>';
+    } else {
+      actions = d.resolved_at ? '<span style="color:var(--text-muted);font-size:11px">' + fmtDispDate(d.resolved_at) + '</span>' : '<span style="color:var(--text-muted)">—</span>';
+    }
+
+    const main = '<tr>'
+      + '<td><span class="dispute-id-cell" onclick="toggleDisputeExpand(\'' + d.id + '\')">' + (d.dispute_number || '(no DSPT)') + '</span></td>'
+      + '<td><span class="disp-pill ' + k + '">' + disputeStatusLabel(k) + '</span></td>'
+      + '<td class="mono">' + (d.tle_invoice_number || '—') + '</td>'
+      + '<td class="mono">' + (d.po_number || '—') + '</td>'
+      + '<td class="mono">' + (d.payment_number || '—') + '</td>'
+      + '<td class="num-cell">' + invStr + '</td>'
+      + '<td class="num-cell' + appCls + '">' + appStr + '</td>'
+      + '<td class="num-cell ' + gapCls + '">' + gapStr + '</td>'
+      + '<td class="mono">' + dateStr + '</td>'
+      + '<td>' + srtCell + '</td>'
+      + '<td>' + prtCell + '</td>'
+      + '<td>' + actions + '</td>'
+      + '</tr>';
+
+    const expand = '<tr id="exp-' + d.id + '" class="expand-row" style="display:none"><td colspan="12"><div class="disp-expand">'
+      + '<div class="row">'
+      + '<div><div class="label">Dispute type</div><div class="val">' + (d.dispute_type || '—') + '</div></div>'
+      + '<div><div class="label">Maricel recommendation</div><div class="val">' + (d.maricel_recommendation || '—') + '</div></div>'
+      + '<div><div class="label">Comment</div><div class="val">' + (d.comment || '—') + '</div></div>'
+      + '<div><div class="label">Resolution comment</div><div class="val">' + (d.resolution_comment || '—') + '</div></div>'
+      + '<div><div class="label">Raise reason</div><div class="val">' + (d.raise_reason || '—') + '</div></div>'
+      + '<div><div class="label">Resolved at</div><div class="val">' + fmtDispDate(d.resolved_at) + '</div></div>'
+      + '</div></div></td></tr>';
+
+    return main + expand;
   }).join('');
+
+  list.innerHTML = '<div class="disp-table-wrap"><table class="disp-table">' + head + '<tbody>' + body + '</tbody></table></div>';
+}
+
+function toggleDisputeExpand(id) {
+  const row = document.getElementById('exp-' + id);
+  if (!row) return;
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function editInline(id, kind) {
+  const wrap = document.getElementById(kind + '-wrap-' + id);
+  if (!wrap) return;
+  const dispute = allDisputes.find(d => d.id === id);
+  const current = dispute ? (kind === 'srt' ? (dispute.srt_number || '') : (dispute.prt_number || '')) : '';
+  wrap.innerHTML = '<input type="text" id="' + kind + '-inp-' + id + '" value="' + current.replace(/"/g,'&quot;') + '" placeholder="' + kind.toUpperCase() + ' number" onblur="saveInline(\'' + id + '\',\'' + kind + '\')" onkeydown="if(event.key===\'Enter\'){this.blur();}" />';
+  const inp = document.getElementById(kind + '-inp-' + id);
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+async function saveInline(id, kind) {
+  const inp = document.getElementById(kind + '-inp-' + id);
+  if (!inp) return;
+  const val = (inp.value || '').trim();
+  const col = kind === 'srt' ? 'srt_number' : 'prt_number';
+  const update = {}; update[col] = val || null;
+  const { error } = await sb.from('disputes').update(update).eq('id', id);
+  if (error) { alert('Could not save ' + kind.toUpperCase() + ': ' + error.message); return; }
+
+  // Local update
+  const dispute = allDisputes.find(d => d.id === id);
+  if (dispute) dispute[col] = val || null;
+
+  // SRT-triggered return_processed linkage
+  if (kind === 'srt' && val && dispute) {
+    const refOr = [];
+    if (dispute.dispute_number) refOr.push('ref_number.eq.' + dispute.dispute_number);
+    if (dispute.tle_invoice_number) refOr.push('invoice_ref.eq.' + dispute.tle_invoice_number);
+    if (refOr.length) {
+      try {
+        await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString(), note: 'SRT raised — linked to dispute ' + (dispute.dispute_number || '') }).eq('type','return_processed').or(refOr.join(','));
+      } catch(e) { /* non-fatal */ }
+    }
+  }
+
+  // Replace edit input with display + tick
+  const wrap = document.getElementById(kind + '-wrap-' + id);
+  if (wrap) {
+    if (val) {
+      wrap.innerHTML = '<span class="display" onclick="editInline(\'' + id + '\',\'' + kind + '\')">' + val + '</span><span class="pencil">✎</span><span class="tick">✓</span>';
+    } else {
+      wrap.innerHTML = '<span class="display placeholder" onclick="editInline(\'' + id + '\',\'' + kind + '\')">Add ' + kind.toUpperCase() + '</span><span class="tick">✓</span>';
+    }
+    setTimeout(() => {
+      const t = wrap.querySelector('.tick');
+      if (t) t.remove();
+    }, 1500);
+  }
+}
+
+async function updateDisputeStatus(id) {
+  const next = prompt('Set status to (open / awaiting_amazon / amazon_approved / amazon_partial / amazon_rejected / resolved):');
+  if (!next) return;
+  const allowed = ['open','awaiting_amazon','amazon_approved','amazon_partial','amazon_rejected','resolved'];
+  if (!allowed.includes(next)) { alert('Invalid status.'); return; }
+  const { error } = await sb.from('disputes').update({ dispute_status: next }).eq('id', id);
+  if (error) { alert('Update failed: ' + error.message); return; }
+  await loadDisputes();
+}
+
+async function chaseDispute(id) {
+  const note = prompt('Chase note (optional):', 'Chased Amazon for update');
+  const stamp = new Date().toISOString();
+  const dispute = allDisputes.find(d => d.id === id);
+  const prev = dispute && dispute.comment ? dispute.comment + '\n' : '';
+  await sb.from('disputes').update({ comment: prev + '[' + stamp.split('T')[0] + '] ' + (note || 'Chased') }).eq('id', id);
+  showToast('Chase logged.');
+  await loadDisputes();
+}
+
+async function markDisputeResolved(id) {
+  if (!confirm('Mark this dispute as resolved?')) return;
+  await sb.from('disputes').update({ dispute_status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+  await loadDisputes();
 }
 
 async function saveDisputeTicket(disputeId, kind) {
@@ -1685,6 +1977,141 @@ function updateCharCount(fieldId, countId, min) {
   el.textContent = len < min ? `${min - len} more characters needed` : `${len} characters ✓`;
   el.className = 'char-count' + (len < min ? ' warn' : '');
 }
+async function importSOAData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showToast('Reading SOA file...');
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      let stats = { po: 0, invoice: 0, payment: 0, srt: 0, disputes: 0 };
+
+      // --- Sheet 1: Dispute Item ---
+      if (workbook.SheetNames.includes('Dispute Item')) {
+        const ws = workbook.Sheets['Dispute Item'];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        for (const row of rows) {
+          const po = String(row['PO#'] || '').trim();
+          const invoice = String(row['Invoice #'] || '').trim();
+          const srtRaw = String(row['Unnamed: 9'] || '').trim();
+          const disputeRaw = String(row['Unnamed: 10'] || '') + ' ' + String(row['Unnamed: 11'] || '');
+          const dsptMatch = disputeRaw.match(/DSPT\d+/);
+          if (!dsptMatch) continue;
+          const disputeNumber = dsptMatch[0];
+          const srtMatch = srtRaw.match(/SRT[\/\-]?\w+/i);
+          const srtNumber = srtMatch ? srtMatch[0] : null;
+          const updates = {};
+          if (po) updates.po_number = po;
+          if (invoice) updates.tle_invoice_number = invoice;
+          if (srtNumber) updates.srt_number = srtNumber;
+          if (Object.keys(updates).length > 0) {
+            const { data: existing } = await sb.from('disputes').select('id, po_number, tle_invoice_number, srt_number').eq('dispute_number', disputeNumber).maybeSingle();
+            if (existing) {
+              const toUpdate = {};
+              if (updates.po_number && !existing.po_number) { toUpdate.po_number = updates.po_number; stats.po++; }
+              if (updates.tle_invoice_number && !existing.tle_invoice_number) { toUpdate.tle_invoice_number = updates.tle_invoice_number; stats.invoice++; }
+              if (updates.srt_number && !existing.srt_number) { toUpdate.srt_number = updates.srt_number; stats.srt++; }
+              if (Object.keys(toUpdate).length > 0) {
+                await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
+              }
+            }
+          }
+        }
+      }
+
+      // --- Sheet 2: Shortage Claim Deduction ---
+      if (workbook.SheetNames.some(s => s.trim() === 'Shortage Claim Deduction')) {
+        const sheetName = workbook.SheetNames.find(s => s.trim() === 'Shortage Claim Deduction');
+        const ws = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        for (const row of rows) {
+          const disputeNumber = String(row['Dispute#'] || '').trim();
+          const invoice = String(row['Invoice'] || '').trim();
+          const amount = parseFloat(String(row['Amount'] || '0').replace(/[^0-9.]/g, '')) || null;
+          const approved = parseFloat(String(row['Amount Approved'] || '0').replace(/[^0-9.]/g, '')) || null;
+          if (!disputeNumber || !disputeNumber.startsWith('DSPT')) continue;
+          const { data: existing } = await sb.from('disputes').select('id, tle_invoice_number, invoice_amount_aed').eq('dispute_number', disputeNumber).maybeSingle();
+          if (existing) {
+            const toUpdate = {};
+            if (invoice && !existing.tle_invoice_number) { toUpdate.tle_invoice_number = invoice; stats.invoice++; }
+            if (amount && !existing.invoice_amount_aed) toUpdate.invoice_amount_aed = amount;
+            if (approved) toUpdate.approved_amount_aed = approved;
+            if (Object.keys(toUpdate).length > 0) await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
+          }
+        }
+      }
+
+      // --- Sheet 3: Master File (payment numbers) ---
+      if (workbook.SheetNames.includes('Master File')) {
+        const ws = workbook.Sheets['Master File'];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '', range: 1 });
+        for (const row of rows) {
+          const disputeRaw = String(row['Dispute'] || '').trim();
+          const dsptMatch = disputeRaw.match(/DSPT\d+/);
+          if (!dsptMatch) continue;
+          const disputeNumber = dsptMatch[0];
+          const paymentNumber = String(row['Payment Number'] || '').trim();
+          if (!paymentNumber || paymentNumber === '0') continue;
+          const { data: existing } = await sb.from('disputes').select('id, payment_number').eq('dispute_number', disputeNumber).maybeSingle();
+          if (existing && !existing.payment_number) {
+            await sb.from('disputes').update({ payment_number: paymentNumber }).eq('dispute_number', disputeNumber);
+            stats.payment++;
+          }
+        }
+      }
+
+      // --- Sheet 4: Dispute data 2025_2026 ---
+      if (workbook.SheetNames.includes('Dispute data 2025_2026')) {
+        const ws = workbook.Sheets['Dispute data 2025_2026'];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        for (const row of rows) {
+          const disputeNumber = String(row['Dispute ID'] || '').trim();
+          if (!disputeNumber || !disputeNumber.startsWith('DSPT')) continue;
+          const totalRaw = String(row['Total disputed amount'] || '').replace(/[^0-9.]/g, '');
+          const approvedRaw = String(row['Approved Amount'] || row['Approved Amount.1'] || '').replace(/[^0-9.]/g, '');
+          const total = parseFloat(totalRaw) || null;
+          const approved = parseFloat(approvedRaw) || null;
+          const statusRaw = String(row['Dispute status'] || '').toLowerCase();
+          let status = 'open';
+          if (statusRaw.includes('resolved')) {
+            if (approved && total && approved >= total) status = 'amazon_approved';
+            else if (approved && approved > 0) status = 'amazon_partial';
+            else status = 'amazon_rejected';
+          }
+          const { data: existing } = await sb.from('disputes').select('id').eq('dispute_number', disputeNumber).maybeSingle();
+          if (existing) {
+            const toUpdate = { dispute_status: status };
+            if (total) toUpdate.invoice_amount_aed = total;
+            if (approved !== null) toUpdate.approved_amount_aed = approved;
+            if (total && approved !== null) toUpdate.gap_aed = total - approved;
+            await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
+          } else {
+            await sb.from('disputes').insert({
+              dispute_number: disputeNumber,
+              dispute_status: status,
+              invoice_amount_aed: total,
+              approved_amount_aed: approved,
+              gap_aed: total && approved !== null ? total - approved : null,
+              created_by: currentUser.id,
+              assigned_to: currentUser.id
+            });
+            stats.disputes++;
+          }
+        }
+      }
+
+      showToast('SOA import complete — PO: ' + stats.po + ' Invoice: ' + stats.invoice + ' Payment: ' + stats.payment + ' SRT: ' + stats.srt + ' New disputes: ' + stats.disputes);
+      await loadDisputes();
+    } catch (err) {
+      alert('Error reading SOA file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
