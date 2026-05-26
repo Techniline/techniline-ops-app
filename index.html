@@ -840,7 +840,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 const SUPABASE_URL = 'https://xtvjzpmmuryaoluhynvl.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8';
 const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { lock: (name, acquireTimeout, fn) => fn() } });
 
 // ── State ──────────────────────────────────────────────
 let currentUser = null;
