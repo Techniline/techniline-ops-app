@@ -1,849 +1,1346 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Techniline Ops</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <style>
-    :root {
-      --navy: #1B3A5C;
-      --navy-hover: #254e7a;
-      --navy-soft: #E6F1FB;
-      --navy-text: #185FA5;
-      --red: #C0392B;
-      --red-soft: #FCEBEB;
-      --red-text: #A32D2D;
-      --amber: #BA7517;
-      --amber-fill: #EF9F27;
-      --amber-soft: #FAEEDA;
-      --amber-text: #854F0B;
-      --green: #0F6E56;
-      --green-fill: #1D9E75;
-      --green-soft: #E5F4EE;
-      --cream: #F8F7F3;
-      --border: #E8E6DF;
-      --text: #1B3A5C;
-      --muted: #888780;
-      --body: #5F5E5A;
-      --bg: #FBFAF7;
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: var(--text);
-      background: var(--bg);
-      font-size: 14px;
-      line-height: 1.45;
-      -webkit-font-smoothing: antialiased;
-    }
-    .hidden { display: none !important; }
-    button { font-family: inherit; cursor: pointer; }
-    input, select, textarea { font-family: inherit; font-size: 13px; color: var(--text); }
-    a { color: var(--navy); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Techniline Ops</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #0F2744;
+  --navy-mid: #1B3A5C;
+  --navy-light: #2A527A;
+  --accent: #2563EB;
+  --accent-light: #EFF6FF;
+  --teal: #0D9488;
+  --teal-light: #F0FDFA;
+  --amber: #D97706;
+  --amber-light: #FFFBEB;
+  --red: #DC2626;
+  --red-light: #FEF2F2;
+  --green: #059669;
+  --green-light: #ECFDF5;
+  --slate: #64748B;
+  --slate-light: #F8FAFC;
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --bg: #F8FAFC;
+  --white: #FFFFFF;
+  --shadow-sm: 0 1px 3px rgba(15,39,68,0.08), 0 1px 2px rgba(15,39,68,0.04);
+  --shadow-md: 0 4px 12px rgba(15,39,68,0.1), 0 2px 4px rgba(15,39,68,0.06);
+  --shadow-lg: 0 20px 40px rgba(15,39,68,0.15), 0 8px 16px rgba(15,39,68,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text-primary); min-height: 100vh; font-size: 14px; line-height: 1.6; }
 
-    /* LOGIN */
-    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); }
-    .login-card { width: 100%; max-width: 380px; background: white; border: 0.5px solid var(--border); border-radius: 16px; padding: 32px; }
-    .login-title { font-size: 18px; font-weight: 700; color: var(--navy); text-align: center; margin: 0 0 4px; }
-    .login-sub { font-size: 12px; color: var(--muted); text-align: center; margin: 0 0 24px; }
-    .field { margin-bottom: 14px; }
-    .label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
-    .input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; outline: none; }
-    .input:focus { border-color: var(--navy); }
-    .err { display: none; color: var(--red); font-size: 12px; margin: 6px 0; }
-    .err.show { display: block; }
+/* ── Login ── */
+#login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 50%, #1e4976 100%); padding: 24px; }
+.login-card { background: var(--white); border-radius: var(--radius-xl); padding: 48px 40px; width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); }
+.login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+.login-logo-icon { width: 40px; height: 40px; background: var(--navy); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.login-logo-icon svg { width: 22px; height: 22px; fill: none; stroke: white; stroke-width: 2; }
+.login-logo-text { font-size: 18px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; }
+.login-logo-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.login-title { font-size: 22px; font-weight: 600; color: var(--navy); margin-bottom: 6px; letter-spacing: -0.4px; }
+.login-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; }
+.field-group { margin-bottom: 18px; }
+.field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.field-input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; font-family: 'DM Sans', sans-serif; color: var(--text-primary); background: var(--white); transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
+.field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.btn-primary { width: 100%; padding: 13px; background: var(--navy); color: white; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.15s, transform 0.1s; letter-spacing: 0.01em; }
+.btn-primary:hover { background: var(--navy-mid); }
+.btn-primary:active { transform: scale(0.99); }
+.login-error { background: var(--red-light); color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 14px; display: none; }
 
-    /* TOP BAR */
-    .topbar { background: white; border-bottom: 1px solid var(--border); }
-    .topbar-inner { max-width: 880px; margin: 0 auto; height: 56px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
-    .brand-name { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; letter-spacing: -0.01em; }
-    .brand-sub { font-size: 12px; color: var(--muted); margin: 0; }
-    .topbar-right { display: flex; align-items: center; gap: 16px; }
-    .topbar-date { font-size: 12px; color: var(--muted); }
-    .topbar-link { font-size: 12px; color: var(--muted); background: none; border: none; padding: 0; }
-    .topbar-link:hover { color: var(--text); }
-    .view-switcher { font-size: 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: white; color: var(--text); }
+/* ── App Shell ── */
+#app-screen { display: none; height: 100vh; flex-direction: column; }
+.topbar { height: 60px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-logo { width: 32px; height: 32px; background: var(--navy); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.topbar-logo svg { width: 18px; height: 18px; fill: none; stroke: white; stroke-width: 2.2; }
+.topbar-brand { font-size: 15px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.topbar-date { font-size: 12px; color: var(--text-muted); }
+.topbar-user { display: flex; align-items: center; gap: 8px; }
+.user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--navy); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+.user-info { display: flex; flex-direction: column; line-height: 1.2; }
+.user-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.user-role { font-size: 11px; color: var(--text-muted); }
+.signout-btn { font-size: 12px; color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+.signout-btn:hover { background: var(--red-light); color: var(--red); }
 
-    /* TAB BAR */
-    .tabbar { background: white; border-bottom: 1px solid var(--border); }
-    .tabbar-inner { max-width: 880px; margin: 0 auto; padding: 0 8px; display: flex; }
-    .tab-btn { flex: 1; padding: 14px 20px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-    .tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
-    .tab-btn svg { width: 15px; height: 15px; }
-    .tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--navy); color: white; font-size: 11px; font-weight: 700; }
-    .tab-badge.hidden { display: none !important; }
+/* ── Tabs ── */
+.tab-bar { background: var(--white); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; flex-shrink: 0; }
+.tab-btn { display: flex; align-items: center; gap: 7px; padding: 14px 18px; font-size: 13px; font-weight: 400; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; transition: all 0.15s; white-space: nowrap; font-family: 'DM Sans', sans-serif; letter-spacing: 0.01em; }
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active { color: var(--navy); font-weight: 600; border-bottom-color: var(--navy); }
+.tab-btn svg { width: 16px; height: 16px; }
+.notif-count { background: var(--red); color: white; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
+.tab-content-area { flex: 1; overflow-y: auto; padding: 24px; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
 
-    /* LAYOUT */
-    .main { max-width: 880px; margin: 0 auto; padding: 20px; }
-    .empty { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
+/* ── Summary Bar ── */
+.summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.sum-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+.sum-card-val { font-size: 28px; font-weight: 600; line-height: 1; letter-spacing: -0.5px; }
+.sum-card-val.danger { color: var(--red); }
+.sum-card-val.warning { color: var(--amber); }
+.sum-card-val.success { color: var(--green); }
+.sum-card-val.navy { color: var(--navy); }
+.sum-card-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
 
-    /* SECTION HEADER */
-    .section-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
-    .section-title { font-size: 15px; font-weight: 700; color: var(--navy); margin: 0; }
-    .section-meta { font-size: 12px; color: var(--muted); }
+/* ── Notification Cards ── */
+.notif-list { display: flex; flex-direction: column; gap: 10px; }
+.notif-card { background: var(--white); border-radius: var(--radius-md); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow 0.2s; }
+.notif-card:hover { box-shadow: var(--shadow-md); }
+.notif-card.done { opacity: 0.6; }
+.notif-accent { height: 100%; width: 4px; flex-shrink: 0; border-radius: 0; }
+.notif-inner { display: flex; gap: 0; }
+.notif-accent-bar { width: 4px; flex-shrink: 0; }
+.notif-accent-bar.red { background: var(--red); }
+.notif-accent-bar.amber { background: var(--amber); }
+.notif-accent-bar.navy { background: var(--navy); }
+.notif-accent-bar.green { background: var(--green); }
+.notif-body { flex: 1; padding: 16px 18px; }
+.notif-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.type-pill { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.07em; }
+.type-pill.red { background: var(--red-light); color: var(--red); }
+.type-pill.amber { background: var(--amber-light); color: var(--amber); }
+.type-pill.navy { background: var(--accent-light); color: var(--accent); }
+.type-pill.green { background: var(--green-light); color: var(--green); }
+.notif-time { font-size: 12px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+.notif-title { font-size: 14px; font-weight: 600; color: var(--navy); margin-bottom: 3px; letter-spacing: -0.2px; }
+.notif-detail-line { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+.notif-detail-box { background: var(--slate-light); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; font-family: 'DM Mono', monospace; }
+.notif-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn-navy { background: var(--navy); color: white; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.15s; }
+.btn-navy:hover { background: var(--navy-mid); }
+.btn-outline { background: white; color: var(--navy); border: 1.5px solid var(--navy); border-radius: var(--radius-sm); padding: 7px 14px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+.btn-outline:hover { background: var(--navy); color: white; }
+.btn-ghost { background: none; color: var(--text-muted); border: none; padding: 7px 12px; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; border-radius: var(--radius-sm); transition: background 0.15s, color 0.15s; }
+.btn-ghost:hover { background: var(--slate-light); color: var(--text-secondary); }
+.sla-pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; margin-left: auto; }
+.sla-pill.urgent { background: var(--red-light); color: var(--red); }
+.sla-pill.warning { background: var(--amber-light); color: var(--amber); }
+.sla-pill.ok { background: var(--green-light); color: var(--green); }
+.done-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--green); font-weight: 500; }
+.done-row svg { width: 16px; height: 16px; }
 
-    /* SUMMARY ROW (notifications) */
-    .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
-    .sum-card { background: var(--cream); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-    .sum-num { font-size: 24px; font-weight: 700; line-height: 1.1; color: var(--navy); }
-    .sum-num.red { color: var(--red); }
-    .sum-num.green { color: var(--green); }
-    .sum-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 6px; }
+/* ── Checklist ── */
+.checklist-header { margin-bottom: 16px; }
+.checklist-title { font-size: 18px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; margin-bottom: 12px; }
+.progress-bar-wrap { display: flex; align-items: center; gap: 12px; }
+.progress-bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--amber); border-radius: 3px; transition: width 0.4s ease, background 0.3s; }
+.progress-bar-fill.complete { background: var(--green); }
+.progress-label { font-size: 13px; color: var(--text-muted); white-space: nowrap; font-family: 'DM Mono', monospace; }
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.task-card.submitted { border-color: var(--green); }
+.task-card-left { width: 4px; flex-shrink: 0; background: var(--amber); }
+.task-card-left.done { background: var(--green); }
+.task-card-inner { display: flex; }
+.task-card-body { flex: 1; padding: 14px 16px; }
+.task-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.task-name { font-size: 13px; font-weight: 600; color: var(--navy); }
+.task-hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.task-status-badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.task-status-badge.open { background: var(--amber-light); color: var(--amber); }
+.task-status-badge.done { background: var(--green-light); color: var(--green); }
+.confirm-btn { background: white; color: var(--navy); border: 1.5px solid var(--navy); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.confirm-btn:hover { background: var(--navy); color: white; }
+.task-expand-area { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--slate-light); }
+.expand-section-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px; }
+.tag-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.tag-input-row input { flex: 1; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.15s; }
+.tag-input-row input:focus { border-color: var(--accent); }
+.tag-add-btn { background: var(--navy); color: white; border: none; border-radius: var(--radius-sm); padding: 8px 14px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+.tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 10px; }
+.tag-chip { background: var(--accent-light); color: var(--accent); border: 1px solid #BFDBFE; border-radius: 20px; padding: 3px 10px 3px 12px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; }
+.tag-chip button { background: none; border: none; cursor: pointer; color: var(--accent); padding: 0; line-height: 1; font-size: 14px; }
+.expand-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.submitted-row { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #D1FAE5; background: #ECFDF5; font-size: 12px; color: var(--green); font-weight: 500; }
 
-    /* NOTIFICATION CARDS */
-    .notif-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 10px; border-left: 4px solid var(--border); }
-    .notif-card.left-red { border-left-color: var(--red); }
-    .notif-card.left-amber { border-left-color: var(--amber-fill); }
-    .notif-card.left-navy { border-left-color: var(--navy); }
-    .notif-card.left-green { border-left-color: var(--green-fill); }
-    .notif-card.done { opacity: 0.6; border-left-color: var(--border); }
-    .notif-row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .notif-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0 0 4px; }
-    .notif-detail { font-size: 13px; color: var(--body); margin: 0; }
-    .notif-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
-    .notif-detailbox { margin-top: 10px; background: var(--cream); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--body); }
-    .notif-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-    .notif-actions .spacer { flex: 1; }
+/* ── KPI ── */
+.kpi-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.kpi-title { font-size: 18px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; }
+.kpi-updated { font-size: 12px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+.kpi-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 16px; box-shadow: var(--shadow-sm); position: relative; }
+.kpi-dot { width: 8px; height: 8px; border-radius: 50%; position: absolute; top: 14px; right: 14px; }
+.kpi-dot.red { background: var(--red); box-shadow: 0 0 0 3px rgba(220,38,38,0.15); }
+.kpi-dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(217,119,6,0.15); }
+.kpi-dot.green { background: var(--green); box-shadow: 0 0 0 3px rgba(5,150,105,0.15); }
+.kpi-dot.gray { background: var(--text-muted); }
+.kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 8px; }
+.kpi-value { font-size: 32px; font-weight: 600; letter-spacing: -1px; line-height: 1; }
+.kpi-value.danger { color: var(--red); }
+.kpi-value.warning { color: var(--amber); }
+.kpi-value.success { color: var(--green); }
+.kpi-value.neutral { color: var(--navy); }
+.kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+.kpi-links { display: flex; flex-direction: column; gap: 8px; }
+.kpi-link-row { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 13px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow-sm); }
+.kpi-link-row:hover { border-color: var(--navy); box-shadow: var(--shadow-md); }
+.kpi-link-row svg { width: 16px; height: 16px; flex-shrink: 0; }
+.kpi-link-text { font-size: 13px; color: var(--text-secondary); flex: 1; }
+.kpi-link-chevron { color: var(--text-muted); }
 
-    /* TYPE PILLS */
-    .pill { display: inline-block; padding: 3px 9px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
-    .pill-red { background: var(--red-soft); color: var(--red-text); }
-    .pill-amber { background: var(--amber-soft); color: var(--amber-text); }
-    .pill-navy { background: var(--navy-soft); color: var(--navy-text); }
-    .pill-green { background: var(--green-soft); color: var(--green); }
-    .pill-grey { background: #ECEAE4; color: var(--muted); }
+/* ── Priorities ── */
+.priorities-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.priorities-title { font-size: 18px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; }
+.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.filter-chip { font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: white; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+.filter-chip.active { background: var(--navy); color: white; border-color: var(--navy); }
+.pri-list { display: flex; flex-direction: column; gap: 10px; }
+.pri-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.pri-card.overdue { border-color: var(--red); }
+.pri-card.at_risk { border-color: var(--amber); }
+.pri-card.on_track { border-color: var(--green); }
+.pri-inner { display: flex; }
+.pri-accent { width: 4px; flex-shrink: 0; }
+.pri-accent.overdue { background: var(--red); }
+.pri-accent.at_risk { background: var(--amber); }
+.pri-accent.on_track { background: var(--green); }
+.pri-body { flex: 1; padding: 14px 18px; }
+.pri-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.pri-title { font-size: 14px; font-weight: 600; color: var(--navy); letter-spacing: -0.2px; }
+.pri-badge { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.pri-badge.overdue { background: var(--red-light); color: var(--red); }
+.pri-badge.at_risk { background: var(--amber-light); color: var(--amber); }
+.pri-badge.on_track { background: var(--green-light); color: var(--green); }
+.pri-dates { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); margin-bottom: 8px; flex-wrap: wrap; }
+.pri-date-item { display: flex; align-items: center; gap: 4px; }
+.revised-tag { background: var(--slate-light); color: var(--text-muted); border: 1px solid var(--border); font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 3px; }
+.pri-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5; }
+.pri-progress-wrap { margin-bottom: 10px; }
+.pri-progress-track { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.pri-progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.pri-progress-fill.overdue { background: var(--red); }
+.pri-progress-fill.at_risk { background: var(--amber); }
+.pri-progress-fill.on_track { background: var(--green); }
+.pri-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.assigned-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.assigned-av { width: 22px; height: 22px; border-radius: 50%; background: var(--navy); color: white; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+.slider-wrap { display: flex; align-items: center; gap: 8px; }
+.slider-wrap input[type=range] { width: 100px; accent-color: var(--navy); height: 4px; cursor: pointer; }
+.slider-pct { font-size: 12px; font-weight: 600; color: var(--navy); min-width: 32px; text-align: right; font-family: 'DM Mono', monospace; }
+.export-bar { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.export-label { font-size: 12px; color: var(--text-muted); }
+.date-input-sm { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; font-family: 'DM Sans', sans-serif; color: var(--text-primary); outline: none; }
+.date-input-sm:focus { border-color: var(--accent); }
+.export-btn { display: flex; align-items: center; gap: 6px; background: white; color: var(--navy); border: 1.5px solid var(--navy); border-radius: var(--radius-sm); padding: 7px 14px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+.export-btn:hover { background: var(--navy); color: white; }
 
-    /* SLA BADGE */
-    .sla { display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
-    .sla-red { background: var(--red-soft); color: var(--red-text); }
-    .sla-amber { background: var(--amber-soft); color: var(--amber-text); }
-    .sla-green { background: var(--green-soft); color: var(--green); }
+/* ── Modal ── */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,39,68,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
+.modal-overlay.open { display: flex; }
+.modal-box { background: white; border-radius: var(--radius-xl); padding: 0; width: 100%; max-width: 520px; box-shadow: var(--shadow-lg); max-height: 90vh; overflow-y: auto; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.modal-title { font-size: 16px; font-weight: 600; color: var(--navy); letter-spacing: -0.3px; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 6px; transition: background 0.15s; }
+.modal-close:hover { background: var(--slate-light); }
+.modal-body { padding: 24px; }
+.modal-field { margin-bottom: 18px; }
+.modal-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 7px; }
+.modal-label .req { color: var(--red); margin-left: 2px; }
+.modal-input { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'DM Sans', sans-serif; color: var(--text-primary); outline: none; transition: border-color 0.15s; }
+.modal-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+.modal-textarea { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'DM Sans', sans-serif; color: var(--text-primary); outline: none; resize: vertical; min-height: 80px; transition: border-color 0.15s; }
+.modal-textarea:focus { border-color: var(--accent); }
+.char-count { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: right; }
+.char-count.warn { color: var(--red); }
+.outcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.outcome-btn { padding: 12px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; text-align: center; background: white; color: var(--text-secondary); }
+.outcome-btn:hover { border-color: var(--navy); color: var(--navy); }
+.outcome-btn.selected.green { border-color: var(--green); background: var(--green-light); color: var(--green); }
+.outcome-btn.selected.blue { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+.outcome-btn.selected.amber { border-color: var(--amber); background: var(--amber-light); color: var(--amber); }
+.outcome-btn.selected.red { border-color: var(--red); background: var(--red-light); color: var(--red); }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+.modal-submit { background: var(--navy); color: white; border: none; border-radius: var(--radius-sm); padding: 10px 24px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.15s; }
+.modal-submit:hover { background: var(--navy-mid); }
+.modal-cancel { background: white; color: var(--text-secondary); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+.dates-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.type-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.type-btn { padding: 12px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; background: white; text-align: center; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+.type-btn.selected { border-color: var(--navy); background: var(--accent-light); color: var(--navy); }
+.modal-section { background: var(--slate-light); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px; }
+.modal-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px; }
 
-    /* BUTTONS */
-    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; border: none; line-height: 1; transition: background-color 0.15s; }
-    .btn-primary { background: var(--navy); color: white; }
-    .btn-primary:hover { background: var(--navy-hover); }
-    .btn-secondary { background: white; color: var(--navy); border: 1px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy-soft); }
-    .btn-ghost { background: none; color: var(--muted); padding: 8px 8px; }
-    .btn-ghost:hover { color: var(--body); }
-    .btn-danger { background: var(--red); color: white; }
-    .btn-danger:hover { background: #a3271c; }
-    .btn-sm { padding: 6px 12px; font-size: 11px; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* ── Loading / Empty ── */
+.loading-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
+.empty-state { text-align: center; padding: 48px 24px; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+.empty-sub { font-size: 13px; color: var(--text-muted); }
+.success-toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy); color: white; padding: 12px 20px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; z-index: 2000; display: none; box-shadow: var(--shadow-lg); animation: slideUp 0.3s ease; }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-    /* DONE row */
-    .done-row { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 12px; font-weight: 600; }
-    .done-row svg { width: 14px; height: 14px; }
-
-    /* CHECKLIST */
-    .progress-wrap { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-    .progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .progress-bar { height: 6px; background: var(--border); border-radius: 9999px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--amber-fill); transition: width 0.3s, background-color 0.3s; }
-    .progress-fill.full { background: var(--green-fill); }
-    .task-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid var(--amber-fill); }
-    .task-card.done { border-left-color: var(--green-fill); background: #FBFCFB; }
-    .task-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .task-name { font-size: 13px; font-weight: 700; color: var(--navy); margin: 0; }
-    .task-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
-    .task-status { display: inline-flex; align-items: center; gap: 5px; }
-    .task-expand { margin-top: 10px; }
-    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-    .tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; background: var(--navy-soft); color: var(--navy-text); border-radius: 9999px; font-size: 11px; font-weight: 600; }
-    .tag button { background: none; border: none; color: var(--navy-text); padding: 0; line-height: 1; font-size: 14px; }
-    .tag-input-row { display: flex; gap: 6px; align-items: center; }
-    .tag-input-row .input { flex: 1; padding: 7px 10px; font-size: 12px; }
-    .tag-meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
-    .task-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-
-    /* KPI cards */
-    .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px; }
-    .kpi-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; position: relative; }
-    .kpi-dot { position: absolute; top: 14px; right: 14px; width: 6px; height: 6px; border-radius: 9999px; }
-    .kpi-dot.red { background: var(--red); }
-    .kpi-dot.amber { background: var(--amber-fill); }
-    .kpi-dot.green { background: var(--green-fill); }
-    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; padding-right: 16px; }
-    .kpi-value { font-size: 28px; font-weight: 700; color: var(--navy); line-height: 1; }
-    .kpi-value.red { color: var(--red); }
-    .kpi-value.amber { color: var(--amber); }
-    .kpi-value.green { color: var(--green); }
-    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
-    .link-list { background: var(--cream); border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden; }
-    .link-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--cream); border: none; width: 100%; text-align: left; border-bottom: 0.5px solid var(--border); }
-    .link-row:last-child { border-bottom: none; }
-    .link-row:hover { background: #f2f0e8; }
-    .link-row .icon { width: 16px; height: 16px; color: var(--navy); }
-    .link-row .text { flex: 1; font-size: 13px; color: var(--text); }
-    .link-row .chev { color: var(--muted); }
-
-    /* PRIORITIES */
-    .filter-chips { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
-    .chip { padding: 5px 14px; border-radius: 9999px; font-size: 12px; color: var(--muted); background: white; border: 0.5px solid var(--border); cursor: pointer; }
-    .chip.active { background: var(--navy); color: white; border-color: var(--navy); }
-    .prio-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
-    .prio-card.s-overdue { border-color: rgba(192, 57, 43, 0.4); }
-    .prio-card.s-at_risk { border-color: rgba(239, 159, 39, 0.4); }
-    .prio-card.s-on_track { border-color: rgba(29, 158, 117, 0.4); }
-    .prio-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-    .prio-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0; }
-    .prio-dates { font-size: 11px; color: var(--muted); margin: 4px 0 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .prio-dates svg { width: 11px; height: 11px; }
-    .prio-desc { font-size: 12px; color: var(--body); margin: 8px 0 0; }
-    .prio-progress-bar { height: 5px; background: var(--border); border-radius: 9999px; overflow: hidden; margin-top: 10px; }
-    .prio-progress-fill { height: 100%; }
-    .prio-progress-fill.green { background: var(--green-fill); }
-    .prio-progress-fill.amber { background: var(--amber-fill); }
-    .prio-progress-fill.red { background: var(--red); }
-    .prio-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 10px; }
-    .avatar { width: 24px; height: 24px; border-radius: 9999px; background: var(--navy); color: white; font-weight: 700; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
-    .prio-foot-left { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-    .prio-foot-right { display: flex; align-items: center; gap: 8px; }
-    .slider { -webkit-appearance: none; appearance: none; width: 100px; height: 4px; background: var(--border); border-radius: 9999px; outline: none; }
-    .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 9999px; background: var(--navy); cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px var(--border); }
-    .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 9999px; background: var(--navy); cursor: pointer; border: 2px solid white; }
-    .slider-pct { font-size: 11px; font-weight: 700; color: var(--navy); min-width: 32px; text-align: right; }
-    .revised-tag { display: inline-block; background: #ECEAE4; color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-
-    /* MODAL */
-    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
-    .modal { background: white; border-radius: 16px; max-width: 480px; width: 100%; padding: 24px; max-height: 90vh; overflow-y: auto; }
-    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .modal-title { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; }
-    .modal-close { background: none; border: none; font-size: 20px; line-height: 1; color: var(--muted); padding: 0; }
-    .modal-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .req { color: var(--red); }
-
-    /* EXPORT */
-    .export-bar { margin-top: 16px; padding: 14px 0 4px; border-top: 1px solid var(--border); }
-    .export-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-    .export-row .field { margin: 0; }
-    .export-row .input { width: 130px; }
-
-    @media (max-width: 720px) {
-      .summary-row { grid-template-columns: repeat(2, 1fr); }
-      .kpi-row { grid-template-columns: repeat(2, 1fr); }
-      .tab-btn { padding: 12px 8px; font-size: 12px; }
-      .topbar-date { display: none; }
-    }
-  </style>
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .tab-content-area { padding: 16px; }
+  .summary-bar { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .tab-btn { padding: 12px 12px; font-size: 12px; }
+  .topbar { padding: 0 16px; }
+  .tab-bar { padding: 0 8px; overflow-x: auto; }
+}
+@media (max-width: 480px) {
+  .summary-bar { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .outcome-grid { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
 
-  <!-- LOGIN -->
-  <div id="login-screen" class="login-wrap">
-    <div class="login-card">
-      <h1 class="login-title">Techniline Ops</h1>
-      <p class="login-sub">Sign in to continue</p>
-      <form id="login-form">
-        <div class="field">
-          <label class="label">Email</label>
-          <input id="login-email" type="email" required autocomplete="username" class="input" />
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div>
+        <div class="login-logo-text">Techniline Ops</div>
+        <div class="login-logo-sub">Operations Management</div>
+      </div>
+    </div>
+    <div class="login-title">Sign in</div>
+    <div class="login-subtitle">Access your operations dashboard</div>
+    <div class="field-group">
+      <label class="field-label">Email address</label>
+      <input class="field-input" type="email" id="login-email" placeholder="you@techniline.org" autocomplete="email" />
+    </div>
+    <div class="field-group">
+      <label class="field-label">Password</label>
+      <input class="field-input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn-primary" onclick="handleLogin()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app-screen" style="display:none; flex-direction:column; height:100vh;">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div>
+        <div class="topbar-brand">Techniline Ops</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-date" id="topbar-date"></div>
+      <div class="topbar-user">
+        <div class="user-avatar" id="user-avatar">MC</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">Maricel</div>
+          <div class="user-role" id="user-role">Staff</div>
         </div>
-        <div class="field">
-          <label class="label">Password</label>
-          <input id="login-password" type="password" required autocomplete="current-password" class="input" />
-        </div>
-        <p id="login-error" class="err"></p>
-        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px; justify-content:center; margin-top:6px;">Sign in</button>
-      </form>
+      </div>
+      <button class="signout-btn" onclick="handleSignOut()">Sign out</button>
     </div>
   </div>
 
-  <!-- APP -->
-  <div id="app-screen" class="hidden">
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div>
-          <p class="brand-name">Techniline Ops</p>
-          <p id="header-user" class="brand-sub"></p>
-        </div>
-        <div class="topbar-right">
-          <select id="view-switcher" class="view-switcher hidden"></select>
-          <span id="topbar-date" class="topbar-date"></span>
-          <button id="signout-btn" class="topbar-link">Sign out</button>
-        </div>
-      </div>
-    </header>
-    <nav class="tabbar">
-      <div class="tabbar-inner">
-        <button data-tab="notifications" class="tab-btn active">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg>
-          <span>Notifications</span>
-          <span id="notif-badge" class="tab-badge hidden">0</span>
-        </button>
-        <button data-tab="checklist" class="tab-btn">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          <span>Checklist</span>
-        </button>
-        <button data-tab="kpis" class="tab-btn">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          <span>KPIs</span>
-        </button>
-        <button data-tab="priorities" class="tab-btn">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 3l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-          <span>Priorities</span>
-        </button>
-      </div>
-    </nav>
-    <main class="main">
-      <section id="tab-notifications" class="tab-pane"></section>
-      <section id="tab-checklist" class="tab-pane hidden"></section>
-      <section id="tab-kpis" class="tab-pane hidden"></section>
-      <section id="tab-priorities" class="tab-pane hidden"></section>
-    </main>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('notifications', this)" id="tab-notif-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications <span class="notif-count" id="notif-count" style="display:none">0</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('checklist', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Checklist
+    </button>
+    <button class="tab-btn" onclick="switchTab('kpi', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      KPIs
+    </button>
+    <button class="tab-btn" onclick="switchTab('priorities', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
+      Priorities
+    </button>
   </div>
 
-  <!-- Priority Modal -->
-  <div id="priority-modal" class="modal-bg hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 class="modal-title" id="pm-title">Add priority</h2>
-        <button id="pm-close" class="modal-close">&times;</button>
+  <div class="tab-content-area">
+
+    <!-- Notifications Tab -->
+    <div class="tab-pane active" id="pane-notifications">
+      <div class="summary-bar" id="notif-summary">
+        <div class="sum-card"><div class="sum-card-val danger" id="sum-pos">—</div><div class="sum-card-label">POs to confirm</div></div>
+        <div class="sum-card"><div class="sum-card-val danger" id="sum-claims">—</div><div class="sum-card-label">AED at risk</div></div>
+        <div class="sum-card"><div class="sum-card-val warning" id="sum-cancels">—</div><div class="sum-card-label">Cancellations</div></div>
+        <div class="sum-card"><div class="sum-card-val success" id="sum-done">—</div><div class="sum-card-label">Done today</div></div>
       </div>
-      <form id="pm-form">
-        <input id="pm-id" type="hidden" />
-        <div class="field"><label class="label">Title <span class="req">*</span></label><input id="pm-name" required class="input" /></div>
-        <div class="field"><label class="label">Description</label><textarea id="pm-desc" rows="2" class="input"></textarea></div>
-        <div id="pm-assigned-wrap" class="field hidden"><label class="label">Assigned to</label><select id="pm-assigned" class="input"><option value="">-- choose --</option></select></div>
-        <div class="field"><label class="label">Status</label><select id="pm-status" class="input"><option value="on_track">On track</option><option value="at_risk">At risk</option><option value="overdue">Overdue</option><option value="complete">Complete</option></select></div>
-        <div class="modal-grid-2">
-          <div class="field"><label class="label">Start <span class="req">*</span></label><input id="pm-start" type="date" required class="input" /></div>
-          <div class="field"><label class="label">Due <span class="req">*</span></label><input id="pm-due" type="date" required class="input" /></div>
+      <div class="notif-list" id="notif-list"><div class="loading-state">Loading notifications…</div></div>
+    </div>
+
+    <!-- Checklist Tab -->
+    <div class="tab-pane" id="pane-checklist">
+      <div class="checklist-header">
+        <div class="checklist-title">Today's checklist</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+          <div class="progress-label" id="progress-label">0 of 0</div>
         </div>
-        <div class="field"><label class="label">Date revised</label><input id="pm-revised" type="date" class="input" /></div>
-        <div class="field"><label class="label">Progress: <span id="pm-pct-label">0%</span></label><input id="pm-pct" type="range" min="0" max="100" value="0" class="slider" style="width:100%;" /></div>
-        <p id="pm-error" class="err"></p>
-        <div style="display:flex; gap:10px; margin-top:8px;">
-          <button type="button" id="pm-cancel" class="btn btn-secondary" style="flex:1; justify-content:center;">Cancel</button>
-          <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Save</button>
+      </div>
+      <div class="task-list" id="task-list"><div class="loading-state">Loading tasks…</div></div>
+    </div>
+
+    <!-- KPI Tab -->
+    <div class="tab-pane" id="pane-kpi">
+      <div class="kpi-header">
+        <div class="kpi-title">Live KPIs</div>
+        <div class="kpi-updated" id="kpi-updated">—</div>
+      </div>
+      <div class="kpi-grid" id="kpi-grid"><div class="loading-state">Loading KPIs…</div></div>
+      <div class="kpi-links" id="kpi-links"></div>
+    </div>
+
+    <!-- Priorities Tab -->
+    <div class="tab-pane" id="pane-priorities">
+      <div class="priorities-header">
+        <div class="priorities-title">Priorities</div>
+        <button class="btn-navy" onclick="openPriorityModal()">+ Add priority</button>
+      </div>
+      <div class="filter-chips" id="pri-filters">
+        <div class="filter-chip active" onclick="filterPriorities('all', this)">All</div>
+        <div class="filter-chip" onclick="filterPriorities('overdue', this)">Overdue</div>
+        <div class="filter-chip" onclick="filterPriorities('at_risk', this)">At risk</div>
+        <div class="filter-chip" onclick="filterPriorities('on_track', this)">On track</div>
+        <div class="filter-chip" onclick="filterPriorities('assigned', this)">Assigned by Vihan</div>
+      </div>
+      <div class="pri-list" id="pri-list"><div class="loading-state">Loading priorities…</div></div>
+      <div class="export-bar">
+        <div class="export-label">Export:</div>
+        <input type="date" class="date-input-sm" id="export-from" />
+        <span style="font-size:12px;color:var(--text-muted)">to</span>
+        <input type="date" class="date-input-sm" id="export-to" />
+        <button class="export-btn" onclick="exportPrioritiesPDF()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+          Download PDF
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- PO Action Modal -->
+<div class="modal-overlay" id="po-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">Action PO — <span id="po-modal-number"></span></div>
+      <button class="modal-close" onclick="closeModal('po-modal')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <div class="modal-label">PO outcome <span class="req">*</span></div>
+        <div class="outcome-grid">
+          <button class="outcome-btn" onclick="selectOutcome(this, 'fully_accepted', 'green')">✓ Fully accepted</button>
+          <button class="outcome-btn" onclick="selectOutcome(this, 'partially_accepted', 'blue')">~ Partially accepted</button>
+          <button class="outcome-btn" onclick="selectOutcome(this, 'partially_cancelled', 'amber')">~ Partially cancelled</button>
+          <button class="outcome-btn" onclick="selectOutcome(this, 'fully_cancelled', 'red')">✗ Fully cancelled</button>
         </div>
-      </form>
+      </div>
+      <div class="modal-field" id="qty-field" style="display:none">
+        <label class="modal-label">Accepted quantity <span class="req">*</span></label>
+        <input class="modal-input" type="number" id="po-qty" placeholder="e.g. 4" min="0" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Mandatory comment <span class="req">*</span></label>
+        <textarea class="modal-textarea" id="po-comment" placeholder="e.g. All 5 items confirmed and booked for delivery 02 June. OR: 3 items rejected — insufficient stock on B0002KYXTM." oninput="updateCharCount('po-comment', 'po-char-count', 20)"></textarea>
+        <div class="char-count" id="po-char-count">Minimum 20 characters required</div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Vendor Central reference <span style="color:var(--text-muted);font-weight:400;text-transform:none;font-size:10px">(optional)</span></label>
+        <input class="modal-input" type="text" id="po-vc-ref" placeholder="Paste confirmation ref from Vendor Central" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('po-modal')">Cancel</button>
+      <button class="modal-submit" onclick="submitPOAction()">Save action</button>
     </div>
   </div>
+</div>
 
-  <script>
-    const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<!-- Dispute Modal -->
+<div class="modal-overlay" id="dispute-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">Raise dispute</div>
+      <button class="modal-close" onclick="closeModal('dispute-modal')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dates-row">
+        <div class="modal-field">
+          <label class="modal-label">Dispute number <span class="req">*</span></label>
+          <input class="modal-input" type="text" id="disp-number" placeholder="DSPT..." />
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">TLE invoice number <span class="req">*</span></label>
+          <input class="modal-input" type="text" id="disp-invoice" placeholder="WS..." />
+        </div>
+      </div>
+      <div class="dates-row">
+        <div class="modal-field">
+          <label class="modal-label">PO number <span class="req">*</span></label>
+          <input class="modal-input" type="text" id="disp-po" placeholder="e.g. 61BWOQ6Z" />
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Invoice date <span class="req">*</span></label>
+          <input class="modal-input" type="date" id="disp-date" />
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Invoice amount (AED) <span class="req">*</span></label>
+        <input class="modal-input" type="number" id="disp-amount" placeholder="0.00" step="0.01" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Recommendation <span class="req">*</span></label>
+        <select class="modal-input" id="disp-rec">
+          <option value="">Select recommendation</option>
+          <option value="dispute">Dispute — Amazon claim is incorrect</option>
+          <option value="accept">Accept — deduction is valid</option>
+          <option value="escalate">Escalate to Vihan — needs manager decision</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Comment <span class="req">*</span></label>
+        <textarea class="modal-textarea" id="disp-comment" placeholder="Explain why this dispute is being raised. Include any supporting details." oninput="updateCharCount('disp-comment', 'disp-char-count', 20)"></textarea>
+        <div class="char-count" id="disp-char-count">Minimum 20 characters required</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('dispute-modal')">Cancel</button>
+      <button class="modal-submit" onclick="submitDispute()">Submit for Vihan's approval</button>
+    </div>
+  </div>
+</div>
 
-    const $ = (id) => document.getElementById(id);
-    const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])));
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-    const fmtAED = (n) => n == null ? "—" : new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED", maximumFractionDigits: 2 }).format(n);
-    const fmtTimeUAE = (d) => { if(!d) return "—"; const opts={timeZone:"Asia/Dubai",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",hour12:false}; const parts=new Intl.DateTimeFormat("en-GB",opts).formatToParts(new Date(d)); const get=(t)=>parts.find(p=>p.type===t)?.value||""; return get("day")+" "+get("month")+" · "+get("hour")+":"+get("minute"); };
-    const todayISO = () => new Date().toISOString().slice(0, 10);
-    const isFallbackRef = (s) => !!s && (s.includes("==") || s.startsWith("CLAIM-"));
-    const isCancelledSubject = (s) => !!s && /cancelled/i.test(s);
-    const validAed = (n) => n != null && Number(n) >= 100;
+<!-- Return Modal -->
+<div class="modal-overlay" id="return-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">Log return details</div>
+      <button class="modal-close" onclick="closeModal('return-modal')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <div class="modal-label">Return type <span class="req">*</span></div>
+        <div class="type-selector">
+          <button class="type-btn" onclick="selectReturnType(this, 'type_a')">Type A — Money only<br><small style="font-weight:400;color:var(--text-muted)">No product returned</small></button>
+          <button class="type-btn" onclick="selectReturnType(this, 'type_b')">Type B — Product returned<br><small style="font-weight:400;color:var(--text-muted)">Dispute raised</small></button>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">Required for all return types</div>
+        <div class="dates-row">
+          <div class="modal-field">
+            <label class="modal-label">Return ID <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-id" placeholder="From Amazon email" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">TLE Invoice <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-invoice" placeholder="WS..." />
+          </div>
+        </div>
+        <div class="dates-row">
+          <div class="modal-field">
+            <label class="modal-label">PO number <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-po" placeholder="e.g. 61BWOQ6Z" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">SRT number <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-srt" placeholder="SRT/..." />
+          </div>
+        </div>
+      </div>
+      <div class="modal-section" id="type-b-section" style="display:none">
+        <div class="modal-section-title">Additional — Type B only</div>
+        <div class="dates-row">
+          <div class="modal-field">
+            <label class="modal-label">PRT number <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-prt" placeholder="PRT/..." />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Dispute number <span class="req">*</span></label>
+            <input class="modal-input" type="text" id="ret-dispute" placeholder="DSPT..." />
+          </div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Dispute comment <span class="req">*</span></label>
+          <textarea class="modal-textarea" id="ret-dispute-comment" placeholder="Why was this dispute raised? What is being claimed?"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('return-modal')">Cancel</button>
+      <button class="modal-submit" onclick="submitReturn()">Save return</button>
+    </div>
+  </div>
+</div>
 
-    let SESSION = null, ME = null, USERS = [], VIEW_AS = null, CURRENT_TAB = "notifications";
+<!-- Priority Modal -->
+<div class="modal-overlay" id="priority-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">Add priority</div>
+      <button class="modal-close" onclick="closeModal('priority-modal')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label class="modal-label">Title <span class="req">*</span></label>
+        <input class="modal-input" type="text" id="pri-title-input" placeholder="What needs to be done?" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Description</label>
+        <textarea class="modal-textarea" id="pri-desc-input" placeholder="Context, dependencies, what done looks like…" style="min-height:64px"></textarea>
+      </div>
+      <div class="modal-field" id="pri-assign-field" style="display:none">
+        <label class="modal-label">Assign to <span class="req">*</span></label>
+        <select class="modal-input" id="pri-assignee">
+          <option value="maricel">Maricel</option>
+          <option value="aaron">Aaron</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Status <span class="req">*</span></label>
+        <select class="modal-input" id="pri-status-input">
+          <option value="on_track">On track</option>
+          <option value="at_risk">At risk</option>
+          <option value="overdue">Overdue</option>
+        </select>
+      </div>
+      <div class="dates-row">
+        <div class="modal-field">
+          <label class="modal-label">Start date <span class="req">*</span></label>
+          <input class="modal-input" type="date" id="pri-start" />
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Due date <span class="req">*</span></label>
+          <input class="modal-input" type="date" id="pri-due" />
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Date revised <span style="color:var(--text-muted);font-weight:400;text-transform:none;font-size:10px">(optional)</span></label>
+        <input class="modal-input" type="date" id="pri-revised" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Progress — <span id="pri-progress-display">0%</span></label>
+        <input type="range" min="0" max="100" value="0" id="pri-progress-input" style="width:100%;accent-color:var(--navy)" oninput="document.getElementById('pri-progress-display').textContent=this.value+'%'" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeModal('priority-modal')">Cancel</button>
+      <button class="modal-submit" onclick="submitPriority()">Add priority</button>
+    </div>
+  </div>
+</div>
 
-    $("login-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const err = $("login-error"); err.classList.remove("show");
-      const email = $("login-email").value.trim();
-      const password = $("login-password").value;
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) { err.textContent = error.message; err.classList.add("show"); return; }
-      await bootstrap(data.session);
-    });
-    $("signout-btn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+<div class="success-toast" id="toast"></div>
 
-    async function bootstrap(session) {
-      SESSION = session;
-      const { data: users } = await sb.from("users").select("id, email, full_name, role, avatar_initials");
-      USERS = users || [];
-      ME = USERS.find((u) => u.id === session.user.id) || { id: session.user.id, email: session.user.email, full_name: session.user.email, role: "staff" };
-      VIEW_AS = ME.id;
-      $("login-screen").classList.add("hidden");
-      $("app-screen").classList.remove("hidden");
-      $("header-user").textContent = ME.full_name + " · " + (ME.role === "manager" ? "Manager" : "Staff");
-      $("topbar-date").textContent = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-      if (ME.role === "manager") {
-        const sw = $("view-switcher");
-        sw.classList.remove("hidden");
-        sw.innerHTML = '<option value="' + ME.id + '">My view (' + esc(ME.full_name) + ')</option>' +
-          USERS.filter((u) => u.id !== ME.id).map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + ' view</option>').join("");
-        sw.addEventListener("change", (e) => { VIEW_AS = e.target.value; renderCurrent(); });
-      }
-      setupTabs(); setupPriorityModal(); renderCurrent();
-    }
-    sb.auth.getSession().then(({ data }) => { if (data.session) bootstrap(data.session); });
+<script>
+// ── Supabase init ──────────────────────────────────────
+const SUPABASE_URL = 'REPLACE_WITH_SUPABASE_URL';
+const SUPABASE_ANON = 'REPLACE_WITH_SUPABASE_ANON_KEY';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
-    function setupTabs() { document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab))); }
-    function switchTab(name) {
-      CURRENT_TAB = name;
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-      document.querySelectorAll(".tab-pane").forEach((p) => p.classList.add("hidden"));
-      $("tab-" + name).classList.remove("hidden");
-      renderCurrent();
-    }
-    function renderCurrent() {
-      if (CURRENT_TAB === "notifications") renderNotifications();
-      else if (CURRENT_TAB === "checklist") renderChecklist();
-      else if (CURRENT_TAB === "kpis") renderKPIs();
-      else if (CURRENT_TAB === "priorities") renderPriorities();
-      updateBadge();
-    }
-    async function updateBadge() {
-      const { count } = await sb.from("expected_actions").select("id", { count: "exact", head: true })
-        .eq("assigned_to", VIEW_AS).eq("status", "open");
-      const b = $("notif-badge");
-      if (count && count > 0) { b.textContent = count; b.classList.remove("hidden"); }
-      else b.classList.add("hidden");
-    }
+// ── State ──────────────────────────────────────────────
+let currentUser = null;
+let currentUserProfile = null;
+let allPriorities = [];
+let allNotifications = [];
+let currentPOActionId = null;
+let currentDisputeActionId = null;
+let currentReturnActionId = null;
+let selectedOutcome = null;
+let selectedReturnType = null;
 
-    // ---------- NOTIFICATIONS ----------
-    const URGENCY = { shortage_claim: 1, po_cancellation: 1, dispute_update: 2, vendor_po: 3, remittance: 4, return_processed: 4 };
-    const TYPE_LABEL = { shortage_claim: "Shortage claim", po_cancellation: "PO cancelled", vendor_po: "Vendor PO", dispute_update: "Dispute", remittance: "Remittance", return_processed: "Return" };
-    const TYPE_PILL = { shortage_claim: "pill-red", po_cancellation: "pill-amber", vendor_po: "pill-amber", dispute_update: "pill-red", remittance: "pill-navy", return_processed: "pill-navy" };
-    const TYPE_LEFT = { shortage_claim: "left-red", po_cancellation: "left-amber", vendor_po: "left-amber", dispute_update: "left-red", remittance: "left-navy", return_processed: "left-navy" };
+// ── Auth ───────────────────────────────────────────────
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if (!email || !password) { errEl.textContent = 'Please enter your email and password.'; errEl.style.display = 'block'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  await initApp(data.user);
+}
 
-    async function renderNotifications() {
-      const pane = $("tab-notifications");
-      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
-      const { data, error } = await sb.from("expected_actions").select("*").eq("assigned_to", VIEW_AS).order("email_received_at", { ascending: false }).limit(200);
-      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
-      const rows = data || [];
-      // Auto-action cancelled shortage claims
-      const toAutoAction = rows.filter((r) => r.status === "open" && r.type === "shortage_claim" && isCancelledSubject(r.email_subject));
-      if (toAutoAction.length) {
-        await sb.from("expected_actions").update({ status: "actioned", actioned_at: new Date().toISOString() }).in("id", toAutoAction.map((r) => r.id));
-        toAutoAction.forEach((r) => { r.status = "actioned"; r.actioned_at = new Date().toISOString(); });
-      }
-      const open = rows.filter((r) => r.status === "open");
-      const done = rows.filter((r) => r.status !== "open");
-      open.sort((a, b) => (URGENCY[a.type] || 9) - (URGENCY[b.type] || 9));
+async function initApp(user) {
+  currentUser = user;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'flex';
+  const { data: profile } = await sb.from('users').select('*').eq('id', user.id).single();
+  currentUserProfile = profile;
+  if (profile) {
+    document.getElementById('user-name').textContent = profile.full_name || user.email;
+    document.getElementById('user-role').textContent = profile.role === 'manager' ? 'Manager' : 'Staff';
+    document.getElementById('user-avatar').textContent = (profile.avatar_initials || profile.full_name?.slice(0,2) || 'U').toUpperCase();
+    if (profile.role === 'manager') document.getElementById('pri-assign-field').style.display = 'block';
+  }
+  const now = new Date();
+  document.getElementById('topbar-date').textContent = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const today = new Date(); today.setFullYear(today.getFullYear() + 1); // export default
+  document.getElementById('export-to').value = new Date().toISOString().split('T')[0];
+  document.getElementById('export-from').value = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+  await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities()]);
+}
 
-      // Summary 4 cards: urgent | needs action | informational | done today
-      const urgent = open.filter((r) => r.type === "shortage_claim" || r.type === "dispute_update" || r.type === "po_cancellation").length;
-      const needs = open.filter((r) => r.type === "vendor_po").length;
-      const info = open.filter((r) => r.type === "remittance" || r.type === "return_processed").length;
-      const todayStr = new Date().toDateString();
-      const doneToday = done.filter((r) => r.actioned_at && new Date(r.actioned_at).toDateString() === todayStr).length;
-      const sumCard = (n, label, tone) => '<div class="sum-card"><div class="sum-num ' + tone + '">' + n + '</div><div class="sum-label">' + label + '</div></div>';
-      const summary = '<div class="summary-row">' +
-        sumCard(urgent, "Urgent", urgent > 0 ? "red" : "green") +
-        sumCard(needs, "Needs action", needs > 0 ? "" : "green") +
-        sumCard(info, "Informational", "") +
-        sumCard(doneToday, "Done today", "green") +
-      '</div>';
+async function handleSignOut() {
+  await sb.auth.signOut();
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  currentUser = null;
+}
 
-      const emptyMsg = open.length === 0 ? '<div class="empty">Nothing needs action right now.</div>' : "";
-      let html = summary + emptyMsg + '<div>' + open.map(renderNotifCard).join("") + '</div>';
-      if (done.length) {
-        html += '<h3 style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin:22px 0 10px">Done</h3>' +
-          '<div>' + done.slice(0, 15).map(renderDoneCard).join("") + '</div>';
-      }
-      pane.innerHTML = html;
-      attachNotifHandlers();
-    }
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session?.user && !currentUser) await initApp(session.user);
+});
+sb.auth.getSession().then(({ data: { session } }) => { if (session?.user) initApp(session.user); });
 
-    function buildNotifContent(r) {
-      const type = r.type;
-      const subject = r.email_subject || "";
-      const refDisp = isFallbackRef(r.ref_number) ? null : r.ref_number;
-      const refFallback = isFallbackRef(r.ref_number) ? r.ref_number : null;
-      const aedOk = validAed(r.aed_amount);
-      let title = subject || TYPE_LABEL[type] || type;
-      let detail = "";
-      let detailBox = "";
-      if (type === "vendor_po") {
-        const po = r.po_number || refDisp || r.ref_number || "—";
-        title = "New PO: " + po;
-        detail = "Vendor Central · Confirm within 2 days";
-      } else if (type === "shortage_claim") {
-        const cancelled = isCancelledSubject(subject);
-        if (cancelled) {
-          title = "Shortage claim cancelled — no action needed";
-          detail = "Cancellation acknowledged · No further steps";
-        } else {
-          title = "Shortage deduction — " + (refDisp || "see Vendor Central");
-          const parts = [];
-          parts.push(aedOk ? fmtAED(r.aed_amount) : "Amount: check Vendor Central");
-          parts.push("Deducted from next payment");
-          if (r.invoice_ref) parts.push("Invoice: " + r.invoice_ref);
-          detail = parts.join(" · ");
-          if (refFallback) {
-            detailBox = 'Ref: <code style="font-family:monospace">' + esc(refFallback) + '</code> — full details in Vendor Central';
-          }
-        }
-      } else if (type === "po_cancellation") {
-        const po = r.po_number || refDisp || r.ref_number || "—";
-        title = "PO cancellation — " + po;
-        detail = "Do not ship · Acknowledge receipt";
-      } else if (type === "remittance") {
-        title = "Payment received — " + (refDisp || r.ref_number || "—");
-        detail = "Payment# " + (refDisp || r.ref_number || "—") + " · Reconcile against SOA";
-      } else if (type === "return_processed") {
-        title = "Return processed — " + (refDisp || r.ref_number || "—");
-        detail = (aedOk ? fmtAED(r.aed_amount) + " refund" : "Refund posted") + " · Log SRT/PRT reference";
-      } else if (type === "dispute_update") {
-        title = "Dispute update — " + (refDisp || r.ref_number || "—");
-        detail = "Vendor Central · Update status";
-      }
-      return { title, detail, detailBox };
-    }
+// ── Tab switching ──────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pane-' + name).classList.add('active');
+  btn.classList.add('active');
+}
 
-    function renderNotifCard(r) {
-      const leftCls = TYPE_LEFT[r.type] || "";
-      const pillCls = TYPE_PILL[r.type] || "pill-grey";
-      const label = TYPE_LABEL[r.type] || r.type;
-      const { title, detail, detailBox } = buildNotifContent(r);
-      const cancelled = r.type === "shortage_claim" && isCancelledSubject(r.email_subject);
+// ── Notifications ──────────────────────────────────────
+async function loadNotifications() {
+  const { data, error } = await sb.from('expected_actions')
+    .select('*').eq('assigned_to', currentUser.id)
+    .order('email_received_at', { ascending: false }).limit(50);
+  if (error || !data) { document.getElementById('notif-list').innerHTML = '<div class="loading-state">Could not load notifications.</div>'; return; }
+  allNotifications = data;
+  renderNotifications(data);
+}
 
-      let sla = "";
-      if (r.type === "shortage_claim" && !cancelled) sla = '<span class="sla sla-red">Act within 7 days</span>';
-      else if (r.type === "vendor_po") sla = '<span class="sla sla-amber">2 days to confirm</span>';
-      else if (r.type === "po_cancellation") sla = '<span class="sla sla-amber">Acknowledge ASAP</span>';
-      else if (r.type === "remittance" || r.type === "return_processed") sla = '<span class="sla sla-green">No urgent action</span>';
-      else if (r.type === "dispute_update") sla = '<span class="sla sla-red">Review today</span>';
+function renderNotifications(data) {
+  const open = data.filter(n => n.status === 'open');
+  const done = data.filter(n => n.status === 'actioned');
+  const count = document.getElementById('notif-count');
+  count.textContent = open.length;
+  count.style.display = open.length > 0 ? 'inline-flex' : 'none';
+  document.getElementById('sum-pos').textContent = open.filter(n => n.type === 'vendor_po').length;
+  const claimAed = open.filter(n => n.type === 'shortage_claim').reduce((s, n) => s + (parseFloat(n.aed_amount) || 0), 0);
+  document.getElementById('sum-claims').textContent = claimAed > 0 ? claimAed.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}) : open.filter(n=>n.type==='shortage_claim').length;
+  document.getElementById('sum-cancels').textContent = open.filter(n => n.type === 'po_cancellation').length;
+  document.getElementById('sum-done').textContent = done.length;
+  const sorted = [...open.filter(n=>n.type==='shortage_claim'||n.type==='dispute_update'),
+    ...open.filter(n=>n.type==='po_cancellation'||n.type==='vendor_po'),
+    ...open.filter(n=>n.type==='remittance'||n.type==='return_processed'),
+    ...done];
+  if (sorted.length === 0) { document.getElementById('notif-list').innerHTML = '<div class="empty-state"><div class="empty-title">All clear</div><div class="empty-sub">No notifications at the moment</div></div>'; return; }
+  document.getElementById('notif-list').innerHTML = sorted.map(n => buildNotifCard(n)).join('');
+}
 
-      let actions = "";
-      const aid = esc(r.id);
-      if (cancelled) {
-        actions = '<span class="sla sla-green">Cancelled — no action needed</span>';
-      } else if (r.type === "vendor_po") {
-        const po = r.po_number || r.ref_number || "PO";
-        actions = '<button data-act="ack" data-id="' + aid + '" class="btn btn-primary btn-sm">Action PO ' + esc(po) + '</button>';
-      } else if (r.type === "shortage_claim") {
-        actions = '<button data-act="dispute" data-id="' + aid + '" class="btn btn-danger btn-sm">Raise dispute</button>' +
-                  '<button data-act="accept" data-id="' + aid + '" class="btn btn-secondary btn-sm">Accept</button>';
-      } else if (r.type === "po_cancellation") {
-        actions = '<button data-act="confirm-cancel" data-id="' + aid + '" class="btn btn-primary btn-sm">Confirmed will not ship</button>' +
-                  '<button data-act="escalate" data-id="' + aid + '" class="btn btn-danger btn-sm">Already shipped, escalate</button>';
-      } else if (r.type === "remittance") {
-        actions = '<button data-act="reconcile" data-id="' + aid + '" class="btn btn-primary btn-sm">Mark reconciled</button>';
-      } else {
-        actions = '<button data-act="ack" data-id="' + aid + '" class="btn btn-secondary btn-sm">Mark done</button>';
-      }
+function buildNotifCard(n) {
+  const isDone = n.status === 'actioned';
+  const isCancelled = (n.email_subject || '').toLowerCase().includes('cancelled') && n.type === 'shortage_claim';
+  const typeColors = { shortage_claim:'red', dispute_update:'red', vendor_po:'amber', po_cancellation:'amber', remittance:'navy', return_processed:'navy' };
+  const color = isDone ? 'green' : (typeColors[n.type] || 'navy');
+  const typeLabels = { shortage_claim: isCancelled ? 'Claim cancelled' : 'Shortage claim', dispute_update:'Dispute', vendor_po:'Vendor PO', po_cancellation:'PO cancelled', remittance:'Remittance', return_processed:'Return' };
+  const time = n.email_received_at ? new Date(n.email_received_at).toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}) : '—';
+  const aedValid = n.aed_amount && parseFloat(n.aed_amount) > 50;
+  const aedDisplay = aedValid ? `AED ${parseFloat(n.aed_amount).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : 'Check Vendor Central for amount';
+  let title = '';
+  let detailLine = '';
+  let detailBox = '';
+  if (n.type === 'vendor_po') {
+    title = `New PO: ${n.ref_number || '—'}`;
+    detailLine = 'Confirm within 2 days on Vendor Central';
+    detailBox = n.email_subject || '';
+  } else if (n.type === 'shortage_claim') {
+    title = isCancelled ? `Shortage claim cancelled — no action needed` : `Shortage deduction — ${n.ref_number || '—'}`;
+    detailLine = isCancelled ? 'This claim has been cancelled by Amazon' : `${aedDisplay}${n.invoice_ref ? ` · Invoice: ${n.invoice_ref}` : ''} · Deducted from next payment`;
+    detailBox = n.email_subject || '';
+  } else if (n.type === 'po_cancellation') {
+    title = `PO cancellation — ${n.po_number || n.ref_number || '—'}`;
+    detailLine = `Do not ship${n.asin ? ` · ASIN: ${n.asin}` : ''}${n.qty_cancelled ? ` · Qty cancelled: ${n.qty_cancelled}` : ''}`;
+    detailBox = n.email_subject || '';
+  } else if (n.type === 'remittance') {
+    title = `Payment received — ${n.ref_number || '—'}`;
+    detailLine = `Reconcile against SOA${aedValid ? ` · ${aedDisplay}` : ''}`;
+    detailBox = n.email_subject || '';
+  } else if (n.type === 'return_processed') {
+    title = `Return processed — ${n.ref_number || '—'}`;
+    detailLine = `${aedValid ? aedDisplay + ' refund · ' : ''}Log SRT/PRT reference`;
+    detailBox = n.email_subject || '';
+  } else if (n.type === 'dispute_update') {
+    title = `Dispute update — ${n.ref_number || '—'}`;
+    detailLine = 'Update dispute status in system';
+    detailBox = n.email_subject || '';
+  }
+  let actions = '';
+  if (isDone) {
+    const actTime = n.actioned_at ? new Date(n.actioned_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
+    actions = `<div class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Actioned${actTime ? ' at '+actTime : ''}</div>`;
+  } else if (isCancelled) {
+    actions = `<div class="done-row" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Cancelled by Amazon — no action needed</div>`;
+    setTimeout(() => autoActionCancelled(n.id), 1000);
+  } else if (n.type === 'vendor_po') {
+    actions = `<button class="btn-navy" onclick="openPOModal('${n.id}','${n.ref_number}')">Action PO ${n.ref_number}</button><span class="sla-pill warning">2 days to confirm</span>`;
+  } else if (n.type === 'shortage_claim') {
+    actions = `<button class="btn-navy" onclick="openDisputeModal('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="acceptDeduction('${n.id}')">Accept</button><span class="sla-pill urgent">Act within 2 days</span>`;
+  } else if (n.type === 'po_cancellation') {
+    actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Confirmed — will not ship')">Confirmed — will not ship</button><button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif('${n.id}','Already shipped — escalating')">Already shipped — escalate</button>`;
+  } else if (n.type === 'remittance') {
+    actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Reconciled')">Mark reconciled</button><span class="sla-pill ok">No urgent action</span>`;
+  } else if (n.type === 'return_processed') {
+    actions = `<button class="btn-navy" onclick="openReturnModal('${n.id}','${n.ref_number||''}')">Log return details</button><span class="sla-pill warning">Action today</span>`;
+  } else if (n.type === 'dispute_update') {
+    actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Status updated')">Update status</button>`;
+  }
+  const truncSubject = detailBox.length > 100 ? detailBox.slice(0, 100) + '…' : detailBox;
+  return `<div class="notif-card${isDone?' done':''}">
+    <div class="notif-inner">
+      <div class="notif-accent-bar ${color}"></div>
+      <div class="notif-body">
+        <div class="notif-top-row">
+          <span class="type-pill ${isDone?'green':color}">${typeLabels[n.type]||n.type}</span>
+          <span class="notif-time">${time}</span>
+        </div>
+        <div class="notif-title">${title}</div>
+        <div class="notif-detail-line">${detailLine}</div>
+        ${truncSubject && !isDone ? `<div class="notif-detail-box">${truncSubject}</div>` : ''}
+        <div class="notif-actions">${actions}</div>
+      </div>
+    </div>
+  </div>`;
+}
 
-      const detailBoxHtml = detailBox ? '<div class="notif-detailbox">' + detailBox + '</div>' : '';
+async function autoActionCancelled(id) {
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
+}
 
-      return '<div class="notif-card ' + leftCls + '">' +
-        '<div class="notif-row1"><span class="pill ' + pillCls + '">' + label + '</span><span class="notif-time">' + fmtTimeUAE(r.email_received_at) + '</span></div>' +
-        '<p class="notif-title">' + esc(title) + '</p>' +
-        '<p class="notif-detail">' + esc(detail) + '</p>' +
-        detailBoxHtml +
-        '<div class="notif-actions">' + actions + '<span class="spacer"></span>' + sla + '</div>' +
-      '</div>';
-    }
+async function actionNotif(id, note) {
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
+  showToast(note + ' — saved');
+  await loadNotifications();
+}
 
-    function renderDoneCard(r) {
-      const label = TYPE_LABEL[r.type] || r.type;
-      const ref = (r.po_number || (isFallbackRef(r.ref_number) ? "—" : r.ref_number) || "—");
-      return '<div class="notif-card done">' +
-        '<div class="notif-row1"><span class="pill pill-grey">' + label + '</span><span class="notif-time">' + fmtTimeUAE(r.actioned_at || r.email_received_at) + '</span></div>' +
-        '<p class="notif-title" style="color:var(--muted);text-decoration:line-through">' + esc(label + " · " + ref) + '</p>' +
-        '<span class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Actioned at ' + fmtTimeUAE(r.actioned_at) + '</span>' +
-      '</div>';
-    }
+async function acceptDeduction(id) {
+  const reason = prompt('Confirm acceptance reason (required):');
+  if (!reason) return;
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
+  showToast('Deduction accepted — recorded');
+  await loadNotifications();
+}
 
-    function attachNotifHandlers() {
-      document.querySelectorAll('#tab-notifications [data-act]').forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.dataset.id; btn.disabled = true; btn.textContent = "…";
-          await sb.from("expected_actions").update({ status: "actioned", actioned_at: new Date().toISOString() }).eq("id", id);
-          renderCurrent();
-        });
-      });
-    }
+// ── PO Modal ───────────────────────────────────────────
+function openPOModal(id, poNum) {
+  currentPOActionId = id;
+  selectedOutcome = null;
+  document.getElementById('po-modal-number').textContent = poNum || '';
+  document.getElementById('po-comment').value = '';
+  document.getElementById('po-qty').value = '';
+  document.getElementById('po-vc-ref').value = '';
+  document.getElementById('qty-field').style.display = 'none';
+  document.querySelectorAll('.outcome-btn').forEach(b => { b.className = 'outcome-btn'; });
+  document.getElementById('po-char-count').textContent = 'Minimum 20 characters required';
+  document.getElementById('po-modal').classList.add('open');
+}
 
-    // ---------- CHECKLIST ----------
-    const MULTI_TAG_TITLES = ["SRT / PRT backlog clearance", "Vendor invoicing", "Appointment booking"];
-    async function renderChecklist() {
-      const pane = $("tab-checklist");
-      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
-      const today = todayISO();
-      const { data: tasks, error } = await sb.from("daily_tasks")
-        .select("id, task_def_id, status, task_date, source, task_definitions(title, evidence_type, evidence_hint, eod_time)")
-        .eq("assigned_to", VIEW_AS).eq("task_date", today).order("created_at");
-      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
-      const rows = tasks || [];
-      const total = rows.length;
-      const done = rows.filter((t) => t.status === "submitted" || t.status === "verified").length;
-      const pct = total ? Math.round((done / total) * 100) : 0;
-      const header = '<div class="progress-wrap">' +
-        '<div class="progress-head"><h2 class="section-title">Today\'s checklist</h2><span class="section-meta">' + done + ' of ' + total + ' complete</span></div>' +
-        '<div class="progress-bar"><div class="progress-fill ' + (pct === 100 ? 'full' : '') + '" style="width:' + pct + '%"></div></div>' +
-      '</div>';
-      if (!rows.length) { pane.innerHTML = header + '<div class="empty">No tasks for today.</div>'; return; }
-      pane.innerHTML = header + '<div id="checklist-list">' + rows.map(renderTaskCard).join("") + '</div>';
-      rows.forEach((t) => attachTaskHandlers(t));
-    }
-    function getMode(task) {
-      const def = task.task_definitions || {};
-      if (task.status === "submitted" || task.status === "verified") return "done";
-      if (MULTI_TAG_TITLES.includes(def.title)) return "multi_tag";
-      if (def.evidence_type === "one_tap") return "one_tap";
-      return "text";
-    }
-    function renderTaskCard(t) {
-      const def = t.task_definitions || {};
-      const title = def.title || "Task";
-      const mode = getMode(t);
-      if (mode === "done") {
-        return '<div class="task-card done"><div class="task-head"><p class="task-name" style="text-decoration:line-through;color:var(--muted)">' + esc(title) + '</p><span class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Done</span></div></div>';
-      }
-      if (mode === "one_tap") {
-        return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><button data-act="confirm" class="btn btn-secondary btn-sm">Confirm</button></div></div>';
-      }
-      if (mode === "multi_tag") {
-        return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><span class="pill pill-amber">Open</span></div>' +
-          '<div class="task-expand">' +
-            '<label class="label" style="margin-top:4px">Add references</label>' +
-            '<div class="tag-row" data-role="tags"></div>' +
-            '<div class="tag-input-row"><input data-role="tag-input" placeholder="Enter ID, press Enter" class="input" /><button type="button" data-act="add-tag" class="btn btn-secondary btn-sm">Add</button></div>' +
-            '<p class="tag-meta" data-role="count">0 added</p>' +
-            '<div class="task-actions"><button data-act="none-today" class="btn btn-ghost">Nothing to action today</button><div style="flex:1"></div><button data-act="submit-tags" disabled class="btn btn-primary btn-sm">Submit</button></div>' +
-          '</div></div>';
-      }
-      return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><span class="pill pill-amber">Open</span></div>' +
-        '<div class="task-expand"><button data-act="expand" class="btn btn-ghost" style="padding-left:0">Add note</button><div data-role="input-wrap" class="hidden"><textarea rows="2" class="input"></textarea><div class="task-actions"><div style="flex:1"></div><button data-act="submit-text" disabled class="btn btn-primary btn-sm">Submit</button></div></div></div></div>';
-    }
-    function attachTaskHandlers(t) {
-      const card = $("task-" + t.id); if (!card) return;
-      const mode = getMode(t);
-      if (mode === "one_tap") {
-        card.querySelector('[data-act="confirm"]').addEventListener("click", () => submitTask(t.id));
-      } else if (mode === "text") {
-        const exp = card.querySelector('[data-act="expand"]');
-        const wrap = card.querySelector('[data-role="input-wrap"]');
-        const ta = card.querySelector("textarea");
-        const sub = card.querySelector('[data-act="submit-text"]');
-        exp.addEventListener("click", () => { exp.classList.add("hidden"); wrap.classList.remove("hidden"); ta.focus(); });
-        ta.addEventListener("input", () => { sub.disabled = !ta.value.trim(); });
-        sub.addEventListener("click", () => submitTask(t.id));
-      } else if (mode === "multi_tag") {
-        const tagsWrap = card.querySelector('[data-role="tags"]');
-        const input = card.querySelector('[data-role="tag-input"]');
-        const sub = card.querySelector('[data-act="submit-tags"]');
-        const addBtn = card.querySelector('[data-act="add-tag"]');
-        const noneBtn = card.querySelector('[data-act="none-today"]');
-        const countEl = card.querySelector('[data-role="count"]');
-        const tags = [];
-        const render = () => {
-          tagsWrap.innerHTML = tags.map((tg, i) => '<span class="tag">' + esc(tg) + '<button data-i="' + i + '">&times;</button></span>').join("");
-          tagsWrap.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { tags.splice(+b.dataset.i, 1); render(); }));
-          countEl.textContent = tags.length + " added";
-          sub.disabled = !tags.length;
-          sub.textContent = tags.length ? ("Submit " + tags.length + " ref" + (tags.length === 1 ? "" : "s")) : "Submit";
-        };
-        const addTag = () => { const v = input.value.trim().replace(/,$/, ""); if (v) { tags.push(v); input.value = ""; render(); } };
-        input.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } });
-        addBtn.addEventListener("click", addTag);
-        noneBtn.addEventListener("click", () => submitTask(t.id));
-        sub.addEventListener("click", () => submitTask(t.id));
-      }
-    }
-    async function submitTask(id) {
-      await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", id);
-      renderCurrent();
-    }
+function selectOutcome(btn, val, color) {
+  selectedOutcome = val;
+  document.querySelectorAll('.outcome-btn').forEach(b => { b.className = 'outcome-btn'; });
+  btn.className = `outcome-btn selected ${color}`;
+  document.getElementById('qty-field').style.display = (val === 'partially_accepted' || val === 'partially_cancelled') ? 'block' : 'none';
+}
 
-    // ---------- KPIs ----------
-    async function renderKPIs() {
-      const pane = $("tab-kpis");
-      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
-      const userId = VIEW_AS;
-      const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
-      const [posR, shortR, retR, dispR] = await Promise.all([
-        sb.from("expected_actions").select("id", { count: "exact", head: true }).eq("assigned_to", userId).eq("status", "open").eq("type", "vendor_po"),
-        sb.from("expected_actions").select("aed_amount").eq("assigned_to", userId).eq("status", "open").eq("type", "shortage_claim"),
-        sb.from("expected_actions").select("id", { count: "exact", head: true }).eq("assigned_to", userId).eq("status", "open").eq("type", "return_processed"),
-        sb.from("disputes").select("id", { count: "exact", head: true }).neq("dispute_status", "resolved").lt("created_at", threeDaysAgo),
-      ]);
-      const posPending = posR.count || 0;
-      const aedAtRisk = (shortR.data || []).reduce((s, r) => s + (validAed(r.aed_amount) ? Number(r.aed_amount) : 0), 0);
-      const returnsBacklog = retR.count || 0;
-      const disputesOld = dispR.count || 0;
-      const reconciliationGaps = 0;
+async function submitPOAction() {
+  if (!selectedOutcome) { alert('Please select an outcome.'); return; }
+  const comment = document.getElementById('po-comment').value.trim();
+  if (comment.length < 20) { alert('Comment must be at least 20 characters.'); return; }
+  const { error } = await sb.from('purchase_orders').insert({
+    expected_action_id: currentPOActionId,
+    po_number: document.getElementById('po-modal-number').textContent,
+    outcome: selectedOutcome,
+    accepted_qty: document.getElementById('po-qty').value || null,
+    mandatory_comment: comment,
+    vendor_central_ref: document.getElementById('po-vc-ref').value || null,
+    actioned_by: currentUser.id,
+    actioned_at: new Date().toISOString()
+  });
+  if (error) { alert('Error saving: ' + error.message); return; }
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentPOActionId);
+  closeModal('po-modal');
+  showToast('PO actioned successfully');
+  await loadNotifications();
+}
 
-      const card = (label, value, color, sub) => '<div class="kpi-card"><span class="kpi-dot ' + color + '"></span><div class="kpi-label">' + label + '</div><div class="kpi-value ' + color + '">' + value + '</div>' + (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
+// ── Dispute Modal ──────────────────────────────────────
+function openDisputeModal(id) {
+  currentDisputeActionId = id;
+  document.getElementById('dispute-modal').classList.add('open');
+}
 
-      const updatedAt = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Dubai" });
-      pane.innerHTML =
-        '<div class="section-h"><h2 class="section-title">Live KPIs</h2><span class="section-meta">Updated ' + updatedAt + '</span></div>' +
-        '<div class="kpi-row">' +
-          card("POs pending", posPending, posPending > 0 ? "amber" : "green") +
-          card("AED at risk", fmtAED(aedAtRisk), aedAtRisk > 0 ? "red" : "green") +
-          card("Returns backlog", returnsBacklog, returnsBacklog > 0 ? "amber" : "green") +
-          card("Disputes > 3 days", disputesOld, disputesOld > 0 ? "red" : "green") +
-          card("Reconciliation gaps", reconciliationGaps, "green", "Coming soon") +
-        '</div>' +
-        '<div class="link-list">' +
-          '<button data-link="notifications" class="link-row"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg><span class="text">' + (posPending + returnsBacklog) + ' notifications need action</span><span class="chev">&rsaquo;</span></button>' +
-          '<button data-link="checklist" class="link-row"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg><span class="text">View today\'s checklist</span><span class="chev">&rsaquo;</span></button>' +
-        '</div>';
-      pane.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.link)));
-    }
+async function submitDispute() {
+  const fields = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-rec','disp-comment'];
+  for (const f of fields) { if (!document.getElementById(f).value.trim()) { alert('Please fill all required fields.'); return; } }
+  const comment = document.getElementById('disp-comment').value.trim();
+  if (comment.length < 20) { alert('Comment must be at least 20 characters.'); return; }
+  const { error } = await sb.from('disputes').insert({
+    expected_action_id: currentDisputeActionId,
+    dispute_number: document.getElementById('disp-number').value,
+    tle_invoice_number: document.getElementById('disp-invoice').value,
+    invoice_date: document.getElementById('disp-date').value,
+    invoice_amount_aed: parseFloat(document.getElementById('disp-amount').value),
+    maricel_recommendation: document.getElementById('disp-rec').value,
+    maricel_comment: comment,
+    submitted_for_approval_at: new Date().toISOString(),
+    approval_status: 'pending',
+    dispute_status: 'open'
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentDisputeActionId);
+  closeModal('dispute-modal');
+  showToast('Submitted for Vihan\'s approval');
+  await loadNotifications();
+}
 
-    // ---------- PRIORITIES ----------
-    const STATUS_LABEL = { on_track: "On track", at_risk: "At risk", overdue: "Overdue", complete: "Complete" };
-    const STATUS_PILL = { on_track: "pill-green", at_risk: "pill-amber", overdue: "pill-red", complete: "pill-grey" };
-    const STATUS_RANK = { overdue: 0, at_risk: 1, on_track: 2, complete: 3 };
-    const STATUS_BAR = { overdue: "red", at_risk: "amber", on_track: "green", complete: "green" };
-    let PRIO_FILTER = "all";
+// ── Return Modal ───────────────────────────────────────
+function openReturnModal(id, refNum) {
+  currentReturnActionId = id;
+  selectedReturnType = null;
+  document.getElementById('ret-id').value = refNum || '';
+  document.getElementById('type-b-section').style.display = 'none';
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('return-modal').classList.add('open');
+}
 
-    async function renderPriorities() {
-      const pane = $("tab-priorities");
-      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
-      const userId = VIEW_AS;
-      const { data, error } = await sb.from("priorities").select("*").or('assigned_to.eq.' + userId + ',assigned_to_both.eq.true').neq("status", "complete").order("due_date");
-      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
-      let rows = (data || []).sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
-      if (PRIO_FILTER !== "all") rows = rows.filter((r) => r.status === PRIO_FILTER);
+function selectReturnType(btn, type) {
+  selectedReturnType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('type-b-section').style.display = type === 'type_b' ? 'block' : 'none';
+}
 
-      const chip = (val, label) => '<button class="chip ' + (PRIO_FILTER === val ? "active" : "") + '" data-filter="' + val + '">' + label + '</button>';
-      const header = '<div class="section-h"><h2 class="section-title">Priorities</h2><button id="add-priority-btn" class="btn btn-primary btn-sm">+ Add priority</button></div>' +
-        '<div class="filter-chips">' + chip("all", "All") + chip("overdue", "Overdue") + chip("at_risk", "At risk") + chip("on_track", "On track") + '</div>';
+async function submitReturn() {
+  if (!selectedReturnType) { alert('Please select a return type.'); return; }
+  const required = ['ret-id','ret-invoice','ret-po','ret-srt'];
+  for (const f of required) { if (!document.getElementById(f).value.trim()) { alert('Please fill all required fields.'); return; } }
+  if (selectedReturnType === 'type_b') {
+    if (!document.getElementById('ret-prt').value || !document.getElementById('ret-dispute').value) { alert('PRT and Dispute number required for Type B.'); return; }
+  }
+  const { error } = await sb.from('returns').insert({
+    expected_action_id: currentReturnActionId,
+    return_type: selectedReturnType,
+    return_id: document.getElementById('ret-id').value,
+    tle_invoice_number: document.getElementById('ret-invoice').value,
+    srt_number: document.getElementById('ret-srt').value,
+    prt_number: selectedReturnType === 'type_b' ? document.getElementById('ret-prt').value : null,
+    logged_by: currentUser.id,
+    status: 'open'
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentReturnActionId);
+  closeModal('return-modal');
+  showToast('Return logged successfully');
+  await loadNotifications();
+}
 
-      const cards = rows.length === 0 ? '<div class="empty">No priorities matching this filter.</div>' : rows.map(renderPriorityCard).join("");
+// ── Checklist ──────────────────────────────────────────
+async function loadChecklist() {
+  const today = new Date().toISOString().split('T')[0];
+  const { data: tasks, error } = await sb.from('daily_tasks')
+    .select('*, task_definitions(title, evidence_type, evidence_hint)')
+    .eq('task_date', today).eq('assigned_to', currentUser.id);
+  if (error || !tasks || tasks.length === 0) {
+    document.getElementById('task-list').innerHTML = '<div class="loading-state">No tasks found for today. Contact your administrator.</div>';
+    return;
+  }
+  const done = tasks.filter(t => t.status === 'submitted').length;
+  const total = tasks.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const fill = document.getElementById('progress-fill');
+  fill.style.width = pct + '%';
+  if (pct === 100) fill.classList.add('complete'); else fill.classList.remove('complete');
+  document.getElementById('progress-label').textContent = `${done} of ${total}`;
+  document.getElementById('task-list').innerHTML = tasks.map(t => buildTaskCard(t)).join('');
+}
 
-      const exportBar = '<div class="export-bar">' +
-        '<div class="section-h" style="margin-bottom:8px"><h3 class="section-title" style="font-size:13px">Export for appraisal</h3></div>' +
-        '<div class="export-row">' +
-          '<div class="field"><label class="label">From</label><input id="exp-from" type="date" class="input" /></div>' +
-          '<div class="field"><label class="label">To</label><input id="exp-to" type="date" class="input" /></div>' +
-          '<button id="exp-pdf" class="btn btn-secondary">📄 Download PDF</button>' +
-        '</div></div>';
+function buildTaskCard(t) {
+  const def = t.task_definitions;
+  const isSubmitted = t.status === 'submitted';
+  const evType = def?.evidence_type || 'text';
+  const hint = def?.evidence_hint || '';
+  const name = def?.title || 'Task';
+  if (isSubmitted) {
+    return `<div class="task-card submitted">
+      <div class="task-card-inner">
+        <div class="task-card-left done"></div>
+        <div class="task-card-body">
+          <div class="task-row"><span class="task-name">${name}</span><span class="task-status-badge done">✓ Done</span></div>
+        </div>
+      </div>
+      <div class="submitted-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Submitted successfully</div>
+    </div>`;
+  }
+  if (evType === 'one_tap') {
+    return `<div class="task-card" id="task-${t.id}">
+      <div class="task-card-inner">
+        <div class="task-card-left"></div>
+        <div class="task-card-body">
+          <div class="task-row">
+            <div><div class="task-name">${name}</div><div class="task-hint">${hint}</div></div>
+            <button class="confirm-btn" onclick="submitOneTap('${t.id}','${hint.replace(/'/g,"\\'")}')">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  const isIDList = evType === 'id_list';
+  const sections = getTaskSections(name);
+  return `<div class="task-card" id="task-${t.id}">
+    <div class="task-card-inner">
+      <div class="task-card-left"></div>
+      <div class="task-card-body">
+        <div class="task-row" onclick="toggleTaskExpand('${t.id}')" style="cursor:pointer">
+          <span class="task-name">${name}</span>
+          <span class="task-status-badge open">Tap to add</span>
+        </div>
+      </div>
+    </div>
+    <div class="task-expand-area" id="expand-${t.id}" style="display:none">
+      ${sections.map(s => buildSection(t.id, s)).join('')}
+      <div class="expand-actions">
+        <button class="btn-navy" onclick="submitTagTask('${t.id}')">Submit</button>
+        <button class="btn-ghost" onclick="submitOneTap('${t.id}','Nothing to action today — confirmed')">Nothing to action today</button>
+      </div>
+    </div>
+  </div>`;
+}
 
-      pane.innerHTML = header + '<div>' + cards + '</div>' + exportBar;
-      $("add-priority-btn").addEventListener("click", () => openPriorityModal());
-      $("exp-pdf").addEventListener("click", exportPrioritiesPDF);
-      pane.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { PRIO_FILTER = b.dataset.filter; renderPriorities(); }));
-      pane.querySelectorAll('[data-prio-slider]').forEach((s) => {
-        s.addEventListener("input", (e) => {
-          const lbl = pane.querySelector('[data-pct="' + s.dataset.prioSlider + '"]');
-          if (lbl) lbl.textContent = e.target.value + "%";
-        });
-        s.addEventListener("change", async (e) => {
-          await sb.from("priorities").update({ progress_pct: +e.target.value }).eq("id", s.dataset.prioSlider);
-        });
-      });
-      pane.querySelectorAll('[data-prio-edit]').forEach((b) => {
-        b.addEventListener("click", () => { const r = rows.find((x) => x.id === b.dataset.prioEdit); if (r) openPriorityModal(r); });
-      });
-      pane.querySelectorAll('[data-prio-complete]').forEach((b) => {
-        b.addEventListener("click", async () => {
-          const note = prompt("Completion note (optional):", "") || null;
-          await sb.from("priorities").update({ status: "complete", completed_at: new Date().toISOString(), completion_note: note, progress_pct: 100 }).eq("id", b.dataset.prioComplete);
-          renderCurrent();
-        });
-      });
-    }
-    function renderPriorityCard(r) {
-      const assignee = USERS.find((u) => u.id === r.created_by);
-      const initials = assignee ? (assignee.avatar_initials || (assignee.full_name || "??").split(" ").map((s) => s[0]).join("").slice(0, 2)) : "??";
-      const fullName = assignee ? assignee.full_name : "Unknown";
-      const pct = r.progress_pct ?? 0;
-      const due = r.due_date_revised || r.due_date;
-      const barCls = STATUS_BAR[r.status] || "green";
-      return '<div class="prio-card s-' + (r.status || "on_track") + '">' +
-        '<div class="prio-head"><div style="flex:1"><p class="prio-title">' + esc(r.title) + '</p>' +
-          '<div class="prio-dates">' +
-            '<span>📅 Start ' + fmtDate(r.start_date) + '</span>' +
-            '<span>⏳ Due ' + fmtDate(due) + '</span>' +
-            (r.due_date_revised ? '<span class="revised-tag">revised</span>' : '') +
-          '</div></div>' +
-          '<span class="pill ' + (STATUS_PILL[r.status] || 'pill-grey') + '">' + (STATUS_LABEL[r.status] || r.status) + '</span>' +
-        '</div>' +
-        (r.description ? '<p class="prio-desc">' + esc(r.description) + '</p>' : '') +
-        '<div class="prio-progress-bar"><div class="prio-progress-fill ' + barCls + '" style="width:' + pct + '%"></div></div>' +
-        '<div class="prio-foot">' +
-          '<div class="prio-foot-left"><span class="avatar">' + esc(initials) + '</span><span>Assigned by ' + esc(fullName) + '</span></div>' +
-          '<div class="prio-foot-right">' +
-            '<input data-prio-slider="' + esc(r.id) + '" type="range" min="0" max="100" value="' + pct + '" class="slider" />' +
-            '<span class="slider-pct" data-pct="' + esc(r.id) + '">' + pct + '%</span>' +
-            '<button data-prio-edit="' + esc(r.id) + '" class="btn btn-ghost btn-sm">Edit</button>' +
-            '<button data-prio-complete="' + esc(r.id) + '" class="btn btn-secondary btn-sm">Complete</button>' +
-          '</div>' +
-        '</div></div>';
-    }
-    function setupPriorityModal() {
-      $("pm-close").addEventListener("click", closePriorityModal);
-      $("pm-cancel").addEventListener("click", closePriorityModal);
-      $("pm-pct").addEventListener("input", (e) => { $("pm-pct-label").textContent = e.target.value + "%"; });
-      $("pm-form").addEventListener("submit", savePriorityModal);
-    }
-    function openPriorityModal(r) {
-      $("pm-title").textContent = r ? "Edit priority" : "Add priority";
-      $("pm-id").value = r ? r.id : "";
-      $("pm-name").value = r ? r.title : "";
-      $("pm-desc").value = r ? (r.description || "") : "";
-      $("pm-status").value = r ? r.status : "on_track";
-      $("pm-start").value = r ? r.start_date : todayISO();
-      $("pm-due").value = r ? r.due_date : "";
-      $("pm-revised").value = r ? (r.due_date_revised || "") : "";
-      const pct = r ? (r.progress_pct || 0) : 0;
-      $("pm-pct").value = pct; $("pm-pct-label").textContent = pct + "%";
-      $("pm-error").classList.remove("show");
-      const wrap = $("pm-assigned-wrap");
-      if (ME && ME.role === "manager") {
-        wrap.classList.remove("hidden");
-        const sel = $("pm-assigned");
-        sel.innerHTML = '<option value="">-- choose --</option>' +
-          USERS.filter((u) => u.role === "staff").map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join("") +
-          '<option value="both">Both</option>';
-        if (r) sel.value = r.assigned_to_both ? "both" : (r.assigned_to || "");
-      } else { wrap.classList.add("hidden"); }
-      $("priority-modal").classList.remove("hidden");
-    }
-    function closePriorityModal() { $("priority-modal").classList.add("hidden"); }
-    async function savePriorityModal(e) {
-      e.preventDefault();
-      const err = $("pm-error"); err.classList.remove("show");
-      const id = $("pm-id").value;
-      const payload = {
-        title: $("pm-name").value.trim(),
-        description: $("pm-desc").value.trim() || null,
-        status: $("pm-status").value,
-        start_date: $("pm-start").value,
-        due_date: $("pm-due").value,
-        due_date_revised: $("pm-revised").value || null,
-        progress_pct: +$("pm-pct").value,
-      };
-      if (ME && ME.role === "manager") {
-        const a = $("pm-assigned").value;
-        if (a === "both") { payload.assigned_to_both = true; payload.assigned_to = null; }
-        else if (a) { payload.assigned_to = a; payload.assigned_to_both = false; }
-      } else {
-        if (!id) { payload.assigned_to = ME.id; payload.assigned_to_both = false; }
-      }
-      let res;
-      if (id) { res = await sb.from("priorities").update(payload).eq("id", id); }
-      else { payload.created_by = ME.id; if (!payload.assigned_to && !payload.assigned_to_both) payload.assigned_to = ME.id; res = await sb.from("priorities").insert(payload); }
-      if (res.error) { err.textContent = res.error.message; err.classList.add("show"); return; }
-      closePriorityModal(); renderCurrent();
-    }
-    async function exportPrioritiesPDF() {
-      const from = $("exp-from").value || null; const to = $("exp-to").value || null;
-      let q = sb.from("priorities").select("*").or('assigned_to.eq.' + VIEW_AS + ',assigned_to_both.eq.true').order("due_date");
-      if (from) q = q.gte("due_date", from);
-      if (to) q = q.lte("due_date", to);
-      const { data } = await q;
-      const rows = data || [];
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      let y = 14;
-      doc.setFontSize(14); doc.text("Priorities report", 14, y); y += 6;
-      doc.setFontSize(9); doc.text((from ? fmtDate(from) : "All") + " to " + (to ? fmtDate(to) : "All") + " · " + rows.length + " items", 14, y); y += 8;
-      rows.forEach((r) => {
-        if (y > 270) { doc.addPage(); y = 14; }
-        doc.setFontSize(11); doc.text(r.title || "Untitled", 14, y); y += 5;
-        doc.setFontSize(8);
-        doc.text("Start: " + fmtDate(r.start_date) + "  Due: " + fmtDate(r.due_date_revised || r.due_date) + "  Status: " + (STATUS_LABEL[r.status] || r.status) + "  Progress: " + (r.progress_pct || 0) + "%", 14, y); y += 4;
-        if (r.completion_note) { doc.text("Note: " + r.completion_note.slice(0, 100), 14, y); y += 4; }
-        const a = USERS.find((u) => u.id === r.created_by);
-        doc.text("Assigned by: " + (a ? a.full_name : "—"), 14, y); y += 6;
-      });
-      doc.save("priorities-" + todayISO() + ".pdf");
-    }
-  </script>
+function getTaskSections(name) {
+  const n = name.toLowerCase();
+  if (n.includes('srt') || n.includes('prt')) return [{id:'srt',label:'SRT numbers'},{id:'prt',label:'PRT numbers'}];
+  if (n.includes('invoic')) return [{id:'inv',label:'Invoice numbers'}];
+  if (n.includes('appointment')) return [{id:'apt',label:'Appointment IDs'}];
+  return [{id:'main',label:'Reference numbers'}];
+}
+
+function buildSection(taskId, section) {
+  return `<div style="margin-bottom:12px">
+    <div class="expand-section-label">${section.label}</div>
+    <div class="tag-input-row">
+      <input type="text" id="input-${taskId}-${section.id}" placeholder="Enter ${section.label.toLowerCase().replace(' numbers','').replace(' ids','').trim()} number…" onkeydown="if(event.key==='Enter'){addTag('${taskId}','${section.id}');}" />
+      <button class="tag-add-btn" onclick="addTag('${taskId}','${section.id}')">Add</button>
+    </div>
+    <div class="tags-wrap" id="tags-${taskId}-${section.id}"></div>
+  </div>`;
+}
+
+function toggleTaskExpand(id) {
+  const el = document.getElementById('expand-' + id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+const taskTags = {};
+function addTag(taskId, sectionId) {
+  const key = taskId + '-' + sectionId;
+  const input = document.getElementById('input-' + key);
+  const val = input.value.trim();
+  if (!val) return;
+  if (!taskTags[key]) taskTags[key] = [];
+  taskTags[key].push(val);
+  input.value = '';
+  renderTags(taskId, sectionId);
+}
+
+function removeTag(taskId, sectionId, idx) {
+  const key = taskId + '-' + sectionId;
+  taskTags[key].splice(idx, 1);
+  renderTags(taskId, sectionId);
+}
+
+function renderTags(taskId, sectionId) {
+  const key = taskId + '-' + sectionId;
+  const wrap = document.getElementById('tags-' + key);
+  if (!wrap) return;
+  wrap.innerHTML = (taskTags[key] || []).map((t, i) =>
+    `<div class="tag-chip">${t}<button onclick="removeTag('${taskId}','${sectionId}',${i})">×</button></div>`).join('');
+}
+
+async function submitOneTap(taskId, note) {
+  const { error } = await sb.from('submissions').insert({
+    daily_task_id: taskId, submitted_by: currentUser.id,
+    submitted_at: new Date().toISOString(),
+    is_nothing_to_action: true, nothing_to_action_note: note
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  showToast('Confirmed');
+  await loadChecklist();
+}
+
+async function submitTagTask(taskId) {
+  const card = document.getElementById('task-' + taskId);
+  const sections = card.querySelectorAll('.tags-wrap');
+  let allTags = [];
+  sections.forEach(s => {
+    const chips = s.querySelectorAll('.tag-chip');
+    chips.forEach(c => allTags.push(c.textContent.replace('×','').trim()));
+  });
+  const evidenceText = allTags.join(', ');
+  const { error } = await sb.from('submissions').insert({
+    daily_task_id: taskId, submitted_by: currentUser.id,
+    submitted_at: new Date().toISOString(),
+    evidence_text: evidenceText, evidence_count: allTags.length,
+    is_nothing_to_action: allTags.length === 0
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  showToast('Submitted — ' + allTags.length + ' items logged');
+  await loadChecklist();
+}
+
+// ── KPIs ───────────────────────────────────────────────
+async function loadKPIs() {
+  const uid = currentUser.id;
+  const [posRes, claimsRes, retRes, dispRes] = await Promise.all([
+    sb.from('expected_actions').select('id', {count:'exact'}).eq('type','vendor_po').eq('status','open').eq('assigned_to', uid),
+    sb.from('expected_actions').select('aed_amount').eq('type','shortage_claim').eq('status','open').eq('assigned_to', uid),
+    sb.from('expected_actions').select('id', {count:'exact'}).eq('type','return_processed').eq('status','open').eq('assigned_to', uid),
+    sb.from('disputes').select('id', {count:'exact'}).neq('dispute_status','resolved').lt('created_at', new Date(Date.now() - 3*86400000).toISOString())
+  ]);
+  const posPending = posRes.count || 0;
+  const claimAed = (claimsRes.data || []).reduce((s, r) => s + (parseFloat(r.aed_amount)||0), 0);
+  const retBacklog = retRes.count || 0;
+  const dispOver = dispRes.count || 0;
+  document.getElementById('kpi-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+  const metrics = [
+    { label:'POs pending', value: posPending, sub:'Target: 0 by EOD', dot: posPending>0?'red':'green', cls: posPending>0?'danger':'success' },
+    { label:'AED at risk', value: claimAed > 0 ? claimAed.toLocaleString('en-AE',{minimumFractionDigits:0,maximumFractionDigits:0}) : '0', sub:'Open shortage claims', dot: claimAed>0?'red':'green', cls: claimAed>0?'danger':'success' },
+    { label:'Returns backlog', value: retBacklog, sub:'Target: 0', dot: retBacklog>0?'red':'green', cls: retBacklog>0?'danger':'success' },
+    { label:'Disputes >3 days', value: dispOver, sub:'Action needed', dot: dispOver>0?(dispOver>2?'red':'amber'):'green', cls: dispOver>0?'warning':'success' },
+    { label:'Recon gaps (AED)', value: '—', sub:'Coming soon', dot: 'gray', cls: 'neutral' }
+  ];
+  document.getElementById('kpi-grid').innerHTML = metrics.map(m =>
+    `<div class="kpi-card"><div class="kpi-dot ${m.dot}"></div><div class="kpi-label">${m.label}</div><div class="kpi-value ${m.cls}">${m.value}</div><div class="kpi-sub">${m.sub}</div></div>`
+  ).join('');
+  const today = new Date().toISOString().split('T')[0];
+  const tasksRes = await sb.from('daily_tasks').select('id,status').eq('task_date', today).eq('assigned_to', uid);
+  const tasks = tasksRes.data || [];
+  const done = tasks.filter(t=>t.status==='submitted').length;
+  const openNotifs = allNotifications.filter(n=>n.status==='open').length;
+  document.getElementById('kpi-links').innerHTML = `
+    <div class="kpi-link-row" onclick="switchTab('checklist', document.querySelectorAll('.tab-btn')[1])">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--slate)" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span class="kpi-link-text">${done} of ${tasks.length} checklist tasks completed today</span>
+      <svg class="kpi-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+    <div class="kpi-link-row" onclick="switchTab('notifications', document.querySelectorAll('.tab-btn')[0])">
+      <svg viewBox="0 0 24 24" fill="none" stroke="${openNotifs>0?'var(--red)':'var(--slate)'}" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="kpi-link-text" style="color:${openNotifs>0?'var(--red)':'inherit'}">${openNotifs} notification${openNotifs!==1?'s':''} need${openNotifs===1?'s':''} action</span>
+      <svg class="kpi-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`;
+}
+
+// ── Priorities ─────────────────────────────────────────
+async function loadPriorities() {
+  const { data, error } = await sb.from('priorities')
+    .select('*').neq('status','complete')
+    .or(`assigned_to.eq.${currentUser.id},assigned_to_both.eq.true`)
+    .order('created_at', { ascending: false });
+  if (error) { document.getElementById('pri-list').innerHTML = '<div class="loading-state">Could not load priorities.</div>'; return; }
+  allPriorities = data || [];
+  renderPriorities(allPriorities);
+}
+
+function renderPriorities(data) {
+  const sorted = [...data.filter(p=>p.status==='overdue'), ...data.filter(p=>p.status==='at_risk'), ...data.filter(p=>p.status==='on_track')];
+  if (sorted.length === 0) { document.getElementById('pri-list').innerHTML = '<div class="empty-state"><div class="empty-title">No priorities yet</div><div class="empty-sub">Add a priority to track your projects and goals</div></div>'; return; }
+  document.getElementById('pri-list').innerHTML = sorted.map(p => buildPriorityCard(p)).join('');
+}
+
+function buildPriorityCard(p) {
+  const statusLabels = { overdue:'Overdue', at_risk:'At risk', on_track:'On track' };
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+  const pct = p.progress_pct || 0;
+  const isVihan = p.created_by !== currentUser.id;
+  return `<div class="pri-card ${p.status}">
+    <div class="pri-inner">
+      <div class="pri-accent ${p.status}"></div>
+      <div class="pri-body">
+        <div class="pri-top">
+          <div class="pri-title">${p.title}</div>
+          <span class="pri-badge ${p.status}">${statusLabels[p.status]||p.status}</span>
+        </div>
+        <div class="pri-dates">
+          <div class="pri-date-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Start: ${fmtDate(p.start_date)}</div>
+          <div class="pri-date-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Due: ${fmtDate(p.due_date)}</div>
+          ${p.due_date_revised ? `<div class="pri-date-item" style="color:var(--amber)">Revised: ${fmtDate(p.due_date_revised)}<span class="revised-tag">revised</span></div>` : ''}
+        </div>
+        ${p.description ? `<div class="pri-desc">${p.description}</div>` : ''}
+        <div class="pri-progress-wrap">
+          <div class="pri-progress-track"><div class="pri-progress-fill ${p.status}" style="width:${pct}%"></div></div>
+        </div>
+        <div class="pri-bottom-row">
+          <div class="assigned-chip">
+            <div class="assigned-av">${isVihan?'VH':'MC'}</div>
+            <span>${isVihan ? 'Assigned by Vihan' : 'Self-assigned'}</span>
+          </div>
+          <div class="slider-wrap">
+            <input type="range" min="0" max="100" value="${pct}" oninput="updatePriProgress('${p.id}',this.value,this)" />
+            <span class="slider-pct" id="pct-${p.id}">${pct}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+const sliderDebounce = {};
+function updatePriProgress(id, val, input) {
+  document.getElementById('pct-' + id).textContent = val + '%';
+  clearTimeout(sliderDebounce[id]);
+  sliderDebounce[id] = setTimeout(async () => {
+    await sb.from('priorities').update({ progress_pct: parseInt(val) }).eq('id', id);
+    showToast('Progress updated to ' + val + '%');
+  }, 500);
+}
+
+function filterPriorities(filter, btn) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  if (filter === 'all') { renderPriorities(allPriorities); return; }
+  if (filter === 'assigned') { renderPriorities(allPriorities.filter(p => p.created_by !== currentUser.id)); return; }
+  renderPriorities(allPriorities.filter(p => p.status === filter));
+}
+
+function openPriorityModal() {
+  document.getElementById('pri-title-input').value = '';
+  document.getElementById('pri-desc-input').value = '';
+  document.getElementById('pri-status-input').value = 'on_track';
+  document.getElementById('pri-start').value = new Date().toISOString().split('T')[0];
+  document.getElementById('pri-due').value = '';
+  document.getElementById('pri-revised').value = '';
+  document.getElementById('pri-progress-input').value = 0;
+  document.getElementById('pri-progress-display').textContent = '0%';
+  document.getElementById('priority-modal').classList.add('open');
+}
+
+async function submitPriority() {
+  const title = document.getElementById('pri-title-input').value.trim();
+  const start = document.getElementById('pri-start').value;
+  const due = document.getElementById('pri-due').value;
+  if (!title) { alert('Title is required.'); return; }
+  if (!start) { alert('Start date is required.'); return; }
+  if (!due) { alert('Due date is required.'); return; }
+  let assignedTo = currentUser.id;
+  let assignedBoth = false;
+  if (currentUserProfile?.role === 'manager') {
+    const sel = document.getElementById('pri-assignee').value;
+    if (sel === 'both') { assignedBoth = true; }
+  }
+  const { error } = await sb.from('priorities').insert({
+    title, description: document.getElementById('pri-desc-input').value || null,
+    assigned_to: assignedTo, assigned_to_both: assignedBoth,
+    created_by: currentUser.id,
+    status: document.getElementById('pri-status-input').value,
+    progress_pct: parseInt(document.getElementById('pri-progress-input').value),
+    start_date: start, due_date: due,
+    due_date_revised: document.getElementById('pri-revised').value || null
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal('priority-modal');
+  showToast('Priority added');
+  await loadPriorities();
+}
+
+// ── PDF Export ─────────────────────────────────────────
+async function exportPrioritiesPDF() {
+  const from = document.getElementById('export-from').value;
+  const to = document.getElementById('export-to').value;
+  const { data } = await sb.from('priorities').select('*')
+    .gte('start_date', from).lte('start_date', to)
+    .or(`assigned_to.eq.${currentUser.id},assigned_to_both.eq.true`)
+    .order('status').order('due_date');
+  if (!data || data.length === 0) { alert('No priorities found in this date range.'); return; }
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+  const html = `<html><head><style>
+    body{font-family:'DM Sans',sans-serif;color:#0F172A;padding:40px;max-width:900px;margin:0 auto}
+    h1{color:#0F2744;font-size:22px;margin-bottom:4px}
+    .meta{color:#64748B;font-size:13px;margin-bottom:30px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#0F2744;color:white;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em}
+    td{padding:10px 12px;border-bottom:1px solid #E2E8F0;vertical-align:top}
+    tr:nth-child(even) td{background:#F8FAFC}
+    .badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+    .overdue{background:#FEF2F2;color:#DC2626}
+    .at_risk{background:#FFFBEB;color:#D97706}
+    .on_track{background:#ECFDF5;color:#059669}
+    .complete{background:#EFF6FF;color:#2563EB}
+    footer{margin-top:40px;padding-top:20px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;text-align:center}
+  </style></head><body>
+    <h1>Techniline Operations — Priorities Report</h1>
+    <div class="meta">Date range: ${fmtDate(from)} to ${fmtDate(to)} &nbsp;·&nbsp; Generated by ${currentUserProfile?.full_name || currentUser.email} &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-GB')}</div>
+    <table>
+      <thead><tr><th>Title</th><th>Status</th><th>Progress</th><th>Start date</th><th>Due date</th><th>Description</th></tr></thead>
+      <tbody>${data.map(p=>`<tr>
+        <td><strong>${p.title}</strong></td>
+        <td><span class="badge ${p.status}">${p.status.replace('_',' ')}</span></td>
+        <td>${p.progress_pct||0}%</td>
+        <td>${fmtDate(p.start_date)}</td>
+        <td>${fmtDate(p.due_date)}${p.due_date_revised?'<br><small style="color:#D97706">Revised: '+fmtDate(p.due_date_revised)+'</small>':''}</td>
+        <td style="color:#475569">${p.description||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <footer>Confidential — Techniline Electronics LLC</footer>
+  </body></html>`;
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
+
+// ── Helpers ────────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function updateCharCount(fieldId, countId, min) {
+  const len = document.getElementById(fieldId).value.length;
+  const el = document.getElementById(countId);
+  el.textContent = len < min ? `${min - len} more characters needed` : `${len} characters ✓`;
+  el.className = 'char-count' + (len < min ? ' warn' : '');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 2800);
+}
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open')); });
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+</script>
 </body>
 </html>
