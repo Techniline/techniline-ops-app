@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Techniline Ops</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@sb/supabase-js@2"></script>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
@@ -79,7 +79,7 @@
     const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ============ ELEMENTS ============
     const loginScreen = document.getElementById("login-screen");
@@ -139,7 +139,7 @@
       loginBtn.textContent = "Signing in…";
       const email = document.getElementById("login-email").value.trim();
       const password = document.getElementById("login-password").value;
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
       loginBtn.disabled = false;
       loginBtn.textContent = "Sign in";
       if (error) {
@@ -150,7 +150,7 @@
     });
 
     logoutBtn.addEventListener("click", async () => {
-      await supabase.auth.signOut();
+      await sb.auth.signOut();
       showLogin();
     });
 
@@ -162,7 +162,7 @@
     async function loadDailyTasks(user) {
       dailyList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
       const today = todayISO();
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from("daily_tasks")
         .select("id, status, task_date, task_definitions(title, evidence_hint)")
         .eq("assigned_to", user.id)
@@ -203,7 +203,7 @@
           const id = btn.dataset.id;
           btn.disabled = true;
           btn.textContent = "Saving…";
-          const { error } = await supabase
+          const { error } = await sb
             .from("daily_tasks")
             .update({ status: "submitted" })
             .eq("id", id);
@@ -220,7 +220,7 @@
 
     async function loadExpectedActions(user) {
       actionsList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from("expected_actions")
         .select("id, type, ref_number, aed_amount, email_received_at, status")
         .eq("assigned_to", user.id)
@@ -263,7 +263,7 @@
           const id = btn.dataset.id;
           btn.disabled = true;
           btn.textContent = "Saving…";
-          const { error } = await supabase
+          const { error } = await sb
             .from("expected_actions")
             .update({ status: "actioned" })
             .eq("id", id);
@@ -289,7 +289,7 @@
 
     // ============ INIT ============
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await sb.auth.getSession();
       if (session && session.user) {
         showChecklist(session.user);
       } else {
@@ -297,7 +297,7 @@
       }
     })();
 
-    supabase.auth.onAuthStateChange((event, session) => {
+    sb.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") showLogin();
     });
   </script>
