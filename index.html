@@ -87,7 +87,22 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .tab-btn svg { width: 16px; height: 16px; }
 .notif-count { background: var(--red); color: white; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
 .tab-content-area { flex: 1; overflow-y: auto; padding: 24px; }
-.tab-pane { display: none; }
+.autofill-banner { display: flex; gap: 10px; align-items: flex-start; background: #FEF3C7; border: 1px solid #FBBF24; color: #92400E; padding: 10px 14px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; margin-bottom: 16px; }
+    .autofill-banner svg { flex-shrink: 0; margin-top: 2px; }
+    .modal-input.needs-attention { border-color: #FBBF24; background: #FFFBEB; }
+    .modal-input.needs-attention:focus { border-color: #F59E0B; box-shadow: 0 0 0 3px rgba(251,191,36,0.15); }
+    .dispute-row { background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .dispute-row-main { flex: 1; min-width: 220px; }
+    .dispute-row-title { font-weight: 600; color: var(--navy); font-size: 14px; margin-bottom: 4px; }
+    .dispute-row-sub { font-size: 12px; color: var(--text-muted); }
+    .dispute-pill { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+    .dispute-pill.open { background: #FEF3C7; color: #92400E; }
+    .dispute-pill.approved { background: #D1FAE5; color: #065F46; }
+    .dispute-pill.partial { background: #FED7AA; color: #9A3412; }
+    .dispute-pill.rejected { background: #FEE2E2; color: #991B1B; }
+    .dispute-pill.resolved { background: #E0E7FF; color: #3730A3; }
+    .dispute-amount { font-size: 14px; font-weight: 600; color: var(--navy); }
+    .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
 /* ── Summary Bar ── */
@@ -373,6 +388,10 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
       Priorities
     </button>
+    <button class="tab-btn" onclick="switchTab('disputes', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      Disputes <span class="notif-count" id="disp-count" style="display:none;background:var(--amber)">0</span>
+    </button>
   </div>
 
   <div class="tab-content-area">
@@ -436,6 +455,31 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       </div>
     </div>
 
+    <!-- Disputes Tab -->
+    <div class="tab-pane" id="pane-disputes">
+      <div class="priorities-header">
+        <div class="priorities-title">Disputes</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="date" class="date-input-sm" id="disp-export-from" />
+          <span style="color:var(--text-muted);font-size:12px">to</span>
+          <input type="date" class="date-input-sm" id="disp-export-to" />
+          <button class="export-btn" onclick="exportDisputesPDF()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download disputes PDF
+          </button>
+        </div>
+      </div>
+      <div class="filter-chips" id="disp-filters">
+        <div class="filter-chip active" onclick="filterDisputes('all', this)">All</div>
+        <div class="filter-chip" onclick="filterDisputes('open', this)">Open</div>
+        <div class="filter-chip" onclick="filterDisputes('approved', this)">Approved</div>
+        <div class="filter-chip" onclick="filterDisputes('partial', this)">Partially approved</div>
+        <div class="filter-chip" onclick="filterDisputes('rejected', this)">Rejected by Amazon</div>
+        <div class="filter-chip" onclick="filterDisputes('resolved', this)">Resolved</div>
+      </div>
+      <div class="pri-list" id="disp-list"><div class="loading-state">Loading disputes…</div></div>
+    </div>
+
   </div>
 </div>
 
@@ -489,6 +533,10 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       </button>
     </div>
     <div class="modal-body">
+      <div id="disp-autofill-banner" class="autofill-banner" style="display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>Some fields need your attention — pre-filled where possible from Amazon data. Please verify and complete the highlighted fields.</span>
+      </div>
       <div class="dates-row">
         <div class="modal-field">
           <label class="modal-label">Dispute number <span class="req">*</span></label>
@@ -509,9 +557,15 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
           <input class="modal-input" type="date" id="disp-date" />
         </div>
       </div>
-      <div class="modal-field">
-        <label class="modal-label">Invoice amount (AED) <span class="req">*</span></label>
-        <input class="modal-input" type="number" id="disp-amount" placeholder="0.00" step="0.01" />
+      <div class="dates-row">
+        <div class="modal-field">
+          <label class="modal-label">Invoice amount (AED) <span class="req">*</span></label>
+          <input class="modal-input" type="number" id="disp-amount" placeholder="0.00" step="0.01" />
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Payment number <span class="req">*</span></label>
+          <input class="modal-input" type="text" id="disp-payment" placeholder="e.g. 363840608 — from remittance email or SOA" />
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">Recommendation <span class="req">*</span></label>
@@ -709,7 +763,11 @@ async function initApp(user) {
   const today = new Date(); today.setFullYear(today.getFullYear() + 1); // export default
   document.getElementById('export-to').value = new Date().toISOString().split('T')[0];
   document.getElementById('export-from').value = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
-  await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities()]);
+  const dispTo = document.getElementById('disp-export-to');
+  const dispFrom = document.getElementById('disp-export-from');
+  if (dispTo) dispTo.value = new Date().toISOString().split('T')[0];
+  if (dispFrom) dispFrom.value = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+  await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes()]);
 }
 
 async function handleSignOut() {
@@ -899,20 +957,80 @@ async function submitPOAction() {
 // ── Dispute Modal ──────────────────────────────────────
 function openDisputeModal(id) {
   currentDisputeActionId = id;
+  // Find the notification in the loaded list to auto-populate
+  const n = (window.allNotifications || []).find(x => x.id === id) || {};
+  // Reset all inputs first
+  ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el) return;
+    el.value = '';
+    el.classList.remove('needs-attention');
+  });
+  // Auto-fill dispute number if ref_number is a DSPT
+  if (n.ref_number && /^DSPT/i.test(n.ref_number)) {
+    document.getElementById('disp-number').value = n.ref_number;
+  }
+  // Auto-fill TLE invoice from invoice_ref (if it looks like a WS number)
+  if (n.invoice_ref && /WS/i.test(n.invoice_ref)) {
+    document.getElementById('disp-invoice').value = n.invoice_ref;
+  }
+  // Auto-fill PO number
+  if (n.po_number) {
+    document.getElementById('disp-po').value = n.po_number;
+  }
+  // Auto-fill amount if > 50 (avoid garbage values)
+  if (n.aed_amount && Number(n.aed_amount) > 50) {
+    document.getElementById('disp-amount').value = Number(n.aed_amount).toFixed(2);
+  }
+  // Mark empty required fields with amber + show banner if any are empty
+  const requiredIds = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'];
+  let anyEmpty = false;
+  requiredIds.forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el) return;
+    if (!el.value || !String(el.value).trim()) { el.classList.add('needs-attention'); anyEmpty = true; }
+  });
+  document.getElementById('disp-autofill-banner').style.display = anyEmpty ? 'flex' : 'none';
+  // Live-clear amber as user fills each input
+  requiredIds.forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el || el.dataset._wired) return;
+    el.dataset._wired = '1';
+    const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(evt, () => {
+      if (el.value && String(el.value).trim()) el.classList.remove('needs-attention');
+      else el.classList.add('needs-attention');
+      const stillEmpty = requiredIds.some(id2 => {
+        const e2 = document.getElementById(id2);
+        return e2 && (!e2.value || !String(e2.value).trim());
+      });
+      document.getElementById('disp-autofill-banner').style.display = stillEmpty ? 'flex' : 'none';
+    });
+  });
   document.getElementById('dispute-modal').classList.add('open');
 }
 
 async function submitDispute() {
-  const fields = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-rec','disp-comment'];
-  for (const f of fields) { if (!document.getElementById(f).value.trim()) { alert('Please fill all required fields.'); return; } }
+  const fields = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'];
+  for (const f of fields) {
+    const el = document.getElementById(f);
+    if (!el.value || !String(el.value).trim()) {
+      el.classList.add('needs-attention');
+      document.getElementById('disp-autofill-banner').style.display = 'flex';
+      alert('Please fill all required fields.');
+      return;
+    }
+  }
   const comment = document.getElementById('disp-comment').value.trim();
   if (comment.length < 20) { alert('Comment must be at least 20 characters.'); return; }
   const { error } = await sb.from('disputes').insert({
     expected_action_id: currentDisputeActionId,
     dispute_number: document.getElementById('disp-number').value,
     tle_invoice_number: document.getElementById('disp-invoice').value,
+    po_number: document.getElementById('disp-po').value,
     invoice_date: document.getElementById('disp-date').value,
     invoice_amount_aed: parseFloat(document.getElementById('disp-amount').value),
+    payment_number: document.getElementById('disp-payment').value,
     maricel_recommendation: document.getElementById('disp-rec').value,
     maricel_comment: comment,
     submitted_for_approval_at: new Date().toISOString(),
@@ -1315,6 +1433,134 @@ async function exportPrioritiesPDF() {
       </tr>`).join('')}</tbody>
     </table>
     <footer>Confidential — Techniline Electronics LLC</footer>
+  </body></html>`;
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
+
+// ── Disputes ───────────────────────────────────────────
+let allDisputes = [];
+let currentDisputeFilter = 'all';
+
+async function loadDisputes() {
+  const { data, error } = await sb.from('disputes').select('*').order('submitted_for_approval_at', { ascending: false }).limit(500);
+  if (error) { document.getElementById('disp-list').innerHTML = '<div class="loading-state">Could not load disputes.</div>'; return; }
+  allDisputes = data || [];
+  // Update count badge with open disputes
+  const openCount = allDisputes.filter(d => d.dispute_status === 'open').length;
+  const badge = document.getElementById('disp-count');
+  if (badge) {
+    badge.textContent = openCount;
+    badge.style.display = openCount > 0 ? 'inline-flex' : 'none';
+  }
+  renderDisputes(allDisputes);
+}
+
+function disputeStatusKey(d) {
+  const s = (d.dispute_status || '').toLowerCase();
+  if (s === 'resolved') return 'resolved';
+  if (s === 'amazon_approved' || s === 'approved') return 'approved';
+  if (s === 'amazon_partial' || s === 'partial' || s === 'partially_approved') return 'partial';
+  if (s === 'amazon_rejected' || s === 'rejected') return 'rejected';
+  return 'open';
+}
+
+function disputeStatusLabel(key) {
+  return ({open:'Open', approved:'Approved', partial:'Partially approved', rejected:'Rejected by Amazon', resolved:'Resolved'})[key] || 'Open';
+}
+
+function renderDisputes(rows) {
+  const list = document.getElementById('disp-list');
+  if (!rows || rows.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-title">No disputes yet</div><div class="empty-sub">Raise a dispute from a shortage claim notification to see it here.</div></div>';
+    return;
+  }
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+  const fmtAed = a => (a !== null && a !== undefined && !isNaN(Number(a))) ? Number(a).toFixed(2) : '—';
+  list.innerHTML = rows.map(d => {
+    const k = disputeStatusKey(d);
+    const gap = (d.invoice_amount_aed !== null && d.approved_amount_aed !== null && !isNaN(Number(d.invoice_amount_aed)) && !isNaN(Number(d.approved_amount_aed)))
+      ? (Number(d.invoice_amount_aed) - Number(d.approved_amount_aed)).toFixed(2) : '—';
+    return `<div class="dispute-row">
+      <div class="dispute-row-main">
+        <div class="dispute-row-title">${d.dispute_number || '(no DSPT)'} · ${d.tle_invoice_number || '—'}</div>
+        <div class="dispute-row-sub">PO: ${d.po_number || '—'} · Payment: ${d.payment_number || '—'} · Raised: ${fmtDate(d.submitted_for_approval_at)}</div>
+      </div>
+      <div class="dispute-amount">AED ${fmtAed(d.invoice_amount_aed)}</div>
+      <span class="dispute-pill ${k}">${disputeStatusLabel(k)}</span>
+    </div>`;
+  }).join('');
+}
+
+function filterDisputes(key, btn) {
+  currentDisputeFilter = key;
+  document.querySelectorAll('#disp-filters .filter-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (key === 'all') { renderDisputes(allDisputes); return; }
+  renderDisputes(allDisputes.filter(d => disputeStatusKey(d) === key));
+}
+
+async function exportDisputesPDF() {
+  const from = document.getElementById('disp-export-from').value;
+  const to = document.getElementById('disp-export-to').value;
+  let rows = allDisputes.slice();
+  if (from) rows = rows.filter(d => d.submitted_for_approval_at && d.submitted_for_approval_at >= from);
+  if (to) rows = rows.filter(d => d.submitted_for_approval_at && d.submitted_for_approval_at <= to + 'T23:59:59');
+  if (currentDisputeFilter !== 'all') rows = rows.filter(d => disputeStatusKey(d) === currentDisputeFilter);
+  if (rows.length === 0) { alert('No disputes match the current filter and date range.'); return; }
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+  const fmtAed = a => (a !== null && a !== undefined && !isNaN(Number(a))) ? Number(a).toFixed(2) : '—';
+  const bodyRows = rows.map(d => {
+    const k = disputeStatusKey(d);
+    const inv = (d.invoice_amount_aed !== null && d.invoice_amount_aed !== undefined && !isNaN(Number(d.invoice_amount_aed))) ? Number(d.invoice_amount_aed) : null;
+    const apr = (d.approved_amount_aed !== null && d.approved_amount_aed !== undefined && !isNaN(Number(d.approved_amount_aed))) ? Number(d.approved_amount_aed) : null;
+    const gap = (inv !== null && apr !== null) ? (inv - apr).toFixed(2) : '—';
+    return `<tr>
+      <td>${d.dispute_number || '—'}</td>
+      <td>${d.payment_number || '—'}</td>
+      <td>${d.tle_invoice_number || '—'}</td>
+      <td>${d.po_number || '—'}</td>
+      <td>${fmtDate(d.invoice_date)}</td>
+      <td class="num">${fmtAed(d.invoice_amount_aed)}</td>
+      <td class="num">${fmtAed(d.approved_amount_aed)}</td>
+      <td class="num">${gap}</td>
+      <td>${disputeStatusLabel(k)}</td>
+      <td>${fmtDate(d.submitted_for_approval_at)}</td>
+      <td>${fmtDate(d.resolved_at)}</td>
+      <td>${(d.maricel_comment || '').replace(/</g,'&lt;')}</td>
+    </tr>`;
+  }).join('');
+  const totalInv = rows.reduce((s, d) => s + (Number(d.invoice_amount_aed) || 0), 0);
+  const totalApr = rows.reduce((s, d) => s + (Number(d.approved_amount_aed) || 0), 0);
+  const totalGap = totalInv - totalApr;
+  const html = `<html><head><style>
+    body{font-family:'DM Sans',sans-serif;color:#0F172A;padding:30px;max-width:1100px;margin:0 auto}
+    h1{color:#0F2744;font-size:22px;margin-bottom:4px}
+    .meta{color:#64748B;font-size:12px;margin-bottom:24px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #E2E8F0;vertical-align:top}
+    th{background:#F1F5F9;color:#0F2744;font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:0.3px}
+    td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .totals{margin-top:14px;padding:12px;background:#F8FAFC;border-radius:6px;font-size:12px}
+    .totals strong{color:#0F2744}
+    .footer{margin-top:30px;padding-top:14px;border-top:1px solid #E2E8F0;color:#64748B;font-size:11px;font-style:italic}
+  </style></head><body>
+    <h1>Disputes report</h1>
+    <div class="meta">Filter: ${disputeStatusLabel(currentDisputeFilter) === 'Open' && currentDisputeFilter === 'all' ? 'All disputes' : (currentDisputeFilter === 'all' ? 'All disputes' : disputeStatusLabel(currentDisputeFilter))} · Range: ${from || 'earliest'} to ${to || 'today'} · ${rows.length} dispute(s) · Generated ${new Date().toLocaleString('en-GB')}</div>
+    <table>
+      <thead><tr>
+        <th>Dispute ID</th><th>Payment number</th><th>TLE Invoice number</th><th>PO number</th>
+        <th>Invoice date</th><th>Invoice amount AED</th><th>Approved amount AED</th><th>Gap AED</th>
+        <th>Status</th><th>Date raised</th><th>Resolution date</th><th>Comment</th>
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+    <div class="totals">
+      <strong>Totals:</strong> Invoice AED ${totalInv.toFixed(2)} · Approved AED ${totalApr.toFixed(2)} · Gap AED ${totalGap.toFixed(2)}
+    </div>
+    <div class="footer">For reconciliation — Techniline Electronics LLC accounts team.</div>
   </body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
