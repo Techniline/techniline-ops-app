@@ -14,7 +14,6 @@
     <div class="w-full max-w-sm bg-white rounded-2xl shadow-md p-8">
       <h1 class="text-2xl font-bold text-center mb-1">Techniline Ops</h1>
       <p class="text-sm text-slate-500 text-center mb-6">Sign in to see your tasks</p>
-
       <form id="login-form" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
@@ -36,255 +35,358 @@
   </div>
 
   <!-- ========== CHECKLIST SCREEN ========== -->
-  <div id="checklist-screen" class="hidden min-h-screen">
-    <header class="bg-white border-b border-slate-200">
-      <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div>
-          <h1 class="text-xl font-bold">Today's Checklist</h1>
-          <p id="today-date" class="text-sm text-slate-500"></p>
-        </div>
-        <div class="flex items-center gap-3">
-          <span id="user-email" class="text-sm text-slate-600 hidden sm:block"></span>
-          <button id="logout-btn"
-            class="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg px-3 py-1">
-            Sign out
-          </button>
-        </div>
+  <div id="checklist-screen" class="hidden max-w-3xl mx-auto px-4 py-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-2xl font-bold">Today's Checklist</h1>
+        <p id="today-date" class="text-sm text-slate-500"></p>
       </div>
-    </header>
+      <div class="flex items-center gap-3">
+        <span id="user-email" class="text-sm text-slate-600 hidden sm:inline"></span>
+        <button id="signout-btn"
+          class="text-sm px-3 py-1 border border-slate-300 rounded-lg hover:bg-slate-100">Sign out</button>
+      </div>
+    </div>
 
-    <main class="max-w-3xl mx-auto px-4 py-6 space-y-8">
+    <!-- Progress -->
+    <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-slate-700">Daily progress</span>
+        <span id="progress-text" class="text-sm text-slate-500">0 of 0 done</span>
+      </div>
+      <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+        <div id="progress-bar" class="bg-green-500 h-2 rounded-full transition-all" style="width:0%"></div>
+      </div>
+    </div>
 
-      <!-- Daily tasks -->
-      <section>
-        <h2 class="text-lg font-semibold mb-3">Daily tasks</h2>
-        <div id="daily-list" class="bg-white rounded-xl shadow-sm divide-y divide-slate-200">
-          <div class="p-4 text-sm text-slate-500">Loading…</div>
-        </div>
-      </section>
+    <!-- Daily tasks -->
+    <h2 class="text-lg font-semibold mt-2 mb-2">Daily tasks</h2>
+    <div id="daily-tasks" class="space-y-3"></div>
 
-      <!-- Expected actions (email-triggered) -->
-      <section>
-        <h2 class="text-lg font-semibold mb-3">Email-triggered actions</h2>
-        <div id="actions-list" class="bg-white rounded-xl shadow-sm divide-y divide-slate-200">
-          <div class="p-4 text-sm text-slate-500">Loading…</div>
-        </div>
-      </section>
+    <!-- Expected actions -->
+    <h2 class="text-lg font-semibold mt-6 mb-2">Email-triggered actions</h2>
+    <div id="expected-actions" class="space-y-3"></div>
 
-    </main>
   </div>
 
   <script>
     // ============ CONFIG ============
     const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
-
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ============ ELEMENTS ============
+    // ============ DOM ============
     const loginScreen = document.getElementById("login-screen");
     const checklistScreen = document.getElementById("checklist-screen");
     const loginForm = document.getElementById("login-form");
     const loginError = document.getElementById("login-error");
-    const loginBtn = document.getElementById("login-btn");
     const userEmailEl = document.getElementById("user-email");
     const todayDateEl = document.getElementById("today-date");
-    const dailyList = document.getElementById("daily-list");
-    const actionsList = document.getElementById("actions-list");
-    const logoutBtn = document.getElementById("logout-btn");
+    const dailyTasksEl = document.getElementById("daily-tasks");
+    const expectedActionsEl = document.getElementById("expected-actions");
+    const progressTextEl = document.getElementById("progress-text");
+    const progressBarEl = document.getElementById("progress-bar");
+    const signoutBtn = document.getElementById("signout-btn");
 
     // ============ HELPERS ============
     function todayISO() {
       const d = new Date();
-      const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
+      return d.getFullYear() + "-" + m + "-" + day;
     }
-
     function prettyDate() {
       return new Date().toLocaleDateString(undefined, {
-        weekday: "long", year: "numeric", month: "long", day: "numeric"
+        weekday: "long", day: "numeric", month: "long", year: "numeric",
       });
     }
-
-    function showLogin() {
-      loginScreen.classList.remove("hidden");
-      checklistScreen.classList.add("hidden");
+    function prettyTime(iso) {
+      const d = iso ? new Date(iso) : new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return hh + ":" + mm;
     }
-
-    function showChecklist(user) {
-      loginScreen.classList.add("hidden");
-      checklistScreen.classList.remove("hidden");
-      userEmailEl.textContent = user.email || "";
-      todayDateEl.textContent = prettyDate();
-      loadAll(user);
-    }
-
-    function setLoginError(msg) {
-      loginError.textContent = msg;
-      loginError.classList.remove("hidden");
-    }
-
-    function clearLoginError() {
-      loginError.textContent = "";
-      loginError.classList.add("hidden");
-    }
-
-    // ============ LOGIN ============
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      clearLoginError();
-      loginBtn.disabled = true;
-      loginBtn.textContent = "Signing in…";
-      const email = document.getElementById("login-email").value.trim();
-      const password = document.getElementById("login-password").value;
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      loginBtn.disabled = false;
-      loginBtn.textContent = "Sign in";
-      if (error) {
-        setLoginError(error.message || "Sign-in failed");
-        return;
-      }
-      showChecklist(data.user);
-    });
-
-    logoutBtn.addEventListener("click", async () => {
-      await sb.auth.signOut();
-      showLogin();
-    });
-
-    // ============ LOAD CHECKLIST ============
-    async function loadAll(user) {
-      await Promise.all([loadDailyTasks(user), loadExpectedActions(user)]);
-    }
-
-    async function loadDailyTasks(user) {
-      dailyList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
-      const today = todayISO();
-      const { data, error } = await sb
-        .from("daily_tasks")
-        .select("id, status, task_date, task_definitions(title, evidence_hint)")
-        .eq("assigned_to", user.id)
-        .eq("task_date", today)
-        .order("id", { ascending: true });
-
-      if (error) {
-        dailyList.innerHTML = `<div class="p-4 text-sm text-red-600">Error loading daily tasks: ${error.message}</div>`;
-        return;
-      }
-      if (!data || data.length === 0) {
-        dailyList.innerHTML = '<div class="p-4 text-sm text-slate-500">No daily tasks for today.</div>';
-        return;
-      }
-      dailyList.innerHTML = "";
-      data.forEach((row) => {
-        const title = row.task_definitions?.title || "(Untitled task)";
-        const hint = row.task_definitions?.evidence_hint || "";
-        const done = row.status !== "open";
-        const item = document.createElement("div");
-        item.className = "p-4 flex items-start gap-3";
-        item.innerHTML = `
-          <div class="flex-1">
-            <p class="font-medium ${done ? "line-through text-slate-400" : ""}">${escapeHtml(title)}</p>
-            ${hint ? `<p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>` : ""}
-            <p class="text-xs mt-1 ${done ? "text-emerald-600" : "text-slate-400"}">Status: ${row.status}</p>
-          </div>
-          <button data-id="${row.id}" ${done ? "disabled" : ""}
-            class="mark-daily px-3 py-1 rounded-lg text-sm font-medium ${done ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"}">
-            ${done ? "Done" : "Mark done"}
-          </button>
-        `;
-        dailyList.appendChild(item);
-      });
-
-      dailyList.querySelectorAll(".mark-daily").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.dataset.id;
-          btn.disabled = true;
-          btn.textContent = "Saving…";
-          const { error } = await sb
-            .from("daily_tasks")
-            .update({ status: "submitted" })
-            .eq("id", id);
-          if (error) {
-            alert("Could not update: " + error.message);
-            btn.disabled = false;
-            btn.textContent = "Mark done";
-            return;
-          }
-          loadDailyTasks(user);
-        });
-      });
-    }
-
-    async function loadExpectedActions(user) {
-      actionsList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
-      const { data, error } = await sb
-        .from("expected_actions")
-        .select("id, type, ref_number, aed_amount, email_received_at, status")
-        .eq("assigned_to", user.id)
-        .eq("status", "open")
-        .order("email_received_at", { ascending: true });
-
-      if (error) {
-        actionsList.innerHTML = `<div class="p-4 text-sm text-red-600">Error loading actions: ${error.message}</div>`;
-        return;
-      }
-      if (!data || data.length === 0) {
-        actionsList.innerHTML = '<div class="p-4 text-sm text-slate-500">No open email-triggered actions. 🎉</div>';
-        return;
-      }
-      actionsList.innerHTML = "";
-      data.forEach((row) => {
-        const item = document.createElement("div");
-        item.className = "p-4 flex items-start gap-3";
-        const dateStr = row.email_received_at
-          ? new Date(row.email_received_at).toLocaleDateString()
-          : "";
-        const amount = row.aed_amount != null
-          ? `AED ${Number(row.aed_amount).toFixed(2)}`
-          : "";
-        item.innerHTML = `
-          <div class="flex-1">
-            <p class="font-medium">${escapeHtml(row.type || "(no type)")} — ${escapeHtml(row.ref_number || "")}</p>
-            <p class="text-xs text-slate-500 mt-1">${dateStr}${amount ? " · " + amount : ""}</p>
-          </div>
-          <button data-id="${row.id}"
-            class="mark-action px-3 py-1 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
-            Mark actioned
-          </button>
-        `;
-        actionsList.appendChild(item);
-      });
-
-      actionsList.querySelectorAll(".mark-action").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.dataset.id;
-          btn.disabled = true;
-          btn.textContent = "Saving…";
-          const { error } = await sb
-            .from("expected_actions")
-            .update({ status: "actioned" })
-            .eq("id", id);
-          if (error) {
-            alert("Could not update: " + error.message);
-            btn.disabled = false;
-            btn.textContent = "Mark actioned";
-            return;
-          }
-          loadExpectedActions(user);
-        });
-      });
-    }
-
     function escapeHtml(str) {
-      return String(str)
+      return String(str ?? "")
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+    }
+
+    // ============ SCREENS ============
+    function showLogin() {
+      checklistScreen.classList.add("hidden");
+      loginScreen.classList.remove("hidden");
+    }
+    function showChecklist(user) {
+      loginScreen.classList.add("hidden");
+      checklistScreen.classList.remove("hidden");
+      userEmailEl.textContent = user.email || "";
+      todayDateEl.textContent = prettyDate();
+      loadDailyTasks(user);
+      loadExpectedActions(user);
+    }
+
+    // ============ LOGIN ============
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      loginError.classList.add("hidden");
+      const email = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        loginError.textContent = error.message;
+        loginError.classList.remove("hidden");
+        return;
+      }
+      showChecklist(data.user);
+    });
+
+    // ============ SIGN OUT ============
+    signoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      showLogin();
+    });
+
+    // ============ PROGRESS ============
+    function updateProgress(tasks) {
+      const total = tasks.length;
+      const done = tasks.filter(t => t.status === "submitted" || t.status === "verified").length;
+      progressTextEl.textContent = done + " of " + total + " done";
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      progressBarEl.style.width = pct + "%";
+    }
+
+    // ============ DAILY TASKS ============
+    let dailyTasksCache = [];
+
+    async function loadDailyTasks(user) {
+      dailyTasksEl.innerHTML = '<p class="text-sm text-slate-500">Loading...</p>';
+      const { data, error } = await sb
+        .from("daily_tasks")
+        .select("id, status, task_date, task_def_id, task_definitions(title, evidence_hint, evidence_type)")
+        .eq("assigned_to", user.id)
+        .eq("task_date", todayISO())
+        .order("id");
+      if (error) {
+        dailyTasksEl.innerHTML = '<p class="text-sm text-red-600">Failed to load: ' + escapeHtml(error.message) + '</p>';
+        return;
+      }
+      dailyTasksCache = data || [];
+      renderDailyTasks();
+    }
+
+    function renderDailyTasks() {
+      updateProgress(dailyTasksCache);
+      if (dailyTasksCache.length === 0) {
+        dailyTasksEl.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-4 text-sm text-slate-500">No daily tasks for today.</div>';
+        return;
+      }
+      dailyTasksEl.innerHTML = dailyTasksCache.map(renderDailyCard).join("");
+      // Attach handlers
+      dailyTasksCache.forEach(task => {
+        const cardEl = document.getElementById("task-" + task.id);
+        if (!cardEl) return;
+        const isDone = task.status === "submitted" || task.status === "verified";
+        if (isDone) return;
+        const evType = (task.task_definitions && task.task_definitions.evidence_type) || "text";
+        if (evType === "one_tap") {
+          const btn = cardEl.querySelector("[data-action='confirm']");
+          if (btn) btn.addEventListener("click", () => handleOneTap(task, btn));
+        } else {
+          const expandBtn = cardEl.querySelector("[data-action='expand']");
+          const submitBtn = cardEl.querySelector("[data-action='submit']");
+          const textarea = cardEl.querySelector("textarea");
+          const inputWrap = cardEl.querySelector("[data-role='input-wrap']");
+          if (expandBtn) {
+            expandBtn.addEventListener("click", () => {
+              expandBtn.classList.add("hidden");
+              inputWrap.classList.remove("hidden");
+              textarea.focus();
+            });
+          }
+          if (textarea && submitBtn) {
+            textarea.addEventListener("input", () => {
+              submitBtn.disabled = textarea.value.trim().length < 10;
+            });
+            submitBtn.addEventListener("click", () => handleTextSubmit(task, textarea.value.trim(), submitBtn));
+          }
+        }
+      });
+    }
+
+    function renderDailyCard(task) {
+      const def = task.task_definitions || {};
+      const title = def.title || "(no title)";
+      const hint = def.evidence_hint || "";
+      const evType = def.evidence_type || "text";
+      const isDone = task.status === "submitted" || task.status === "verified";
+
+      if (isDone) {
+        const submittedAt = task.submitted_at_local || prettyTime();
+        return `
+        <div id="task-${task.id}" class="bg-green-50 border border-green-200 rounded-xl shadow-sm p-4">
+          <div class="flex items-start gap-3">
+            <div class="text-green-600 text-xl leading-none">&#10003;</div>
+            <div class="flex-1">
+              <p class="font-medium text-green-800 line-through">${escapeHtml(title)}</p>
+              <p class="text-xs text-green-700 mt-1">Submitted at ${escapeHtml(submittedAt)}</p>
+            </div>
+          </div>
+        </div>`;
+      }
+
+      if (evType === "one_tap") {
+        return `
+        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <p class="font-medium">${escapeHtml(title)}</p>
+              <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
+            </div>
+            <button data-action="confirm"
+              class="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+              Confirm
+            </button>
+          </div>
+        </div>`;
+      }
+
+      // text or id_list
+      return `
+        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <p class="font-medium">${escapeHtml(title)}</p>
+              <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
+            </div>
+            <button data-action="expand"
+              class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+              Add evidence
+            </button>
+          </div>
+          <div data-role="input-wrap" class="hidden mt-3">
+            <textarea rows="3" placeholder="Type your evidence (min 10 characters)..."
+              class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
+            <div class="flex justify-end mt-2">
+              <button data-action="submit" disabled
+                class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function handleOneTap(task, btn) {
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Saving...";
+      const { data: { user } } = await sb.auth.getUser();
+      const hint = (task.task_definitions && task.task_definitions.evidence_hint) || "";
+      const { error: insErr } = await sb.from("submissions").insert({
+        daily_task_id: task.id,
+        submitted_by: user.id,
+        is_nothing_to_action: true,
+        nothing_to_action_note: hint,
+      });
+      if (insErr) {
+        alert("Could not save submission: " + insErr.message);
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
+      if (updErr) {
+        alert("Submission saved but status update failed: " + updErr.message);
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+      task.status = "submitted";
+      task.submitted_at_local = prettyTime();
+      renderDailyTasks();
+    }
+
+    async function handleTextSubmit(task, text, btn) {
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Saving...";
+      const { data: { user } } = await sb.auth.getUser();
+      const { error: insErr } = await sb.from("submissions").insert({
+        daily_task_id: task.id,
+        submitted_by: user.id,
+        evidence_text: text,
+      });
+      if (insErr) {
+        alert("Could not save submission: " + insErr.message);
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
+      if (updErr) {
+        alert("Submission saved but status update failed: " + updErr.message);
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+      task.status = "submitted";
+      task.submitted_at_local = prettyTime();
+      renderDailyTasks();
+    }
+
+    // ============ EXPECTED ACTIONS ============
+    async function loadExpectedActions(user) {
+      expectedActionsEl.innerHTML = '<p class="text-sm text-slate-500">Loading...</p>';
+      const { data, error } = await sb
+        .from("expected_actions")
+        .select("id, type, ref_number, aed_amount, email_received_at, status")
+        .eq("assigned_to", user.id)
+        .eq("status", "open")
+        .order("email_received_at");
+      if (error) {
+        expectedActionsEl.innerHTML = '<p class="text-sm text-red-600">Failed to load: ' + escapeHtml(error.message) + '</p>';
+        return;
+      }
+      if (!data || data.length === 0) {
+        expectedActionsEl.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-4 text-sm text-slate-500">No open email-triggered actions. 🎉</div>';
+        return;
+      }
+      expectedActionsEl.innerHTML = data.map(a => {
+        const label = (a.type || "") + (a.ref_number ? " #" + a.ref_number : "");
+        const aed = a.aed_amount ? "AED " + a.aed_amount : "";
+        return `
+          <div id="ea-${a.id}" class="bg-white rounded-xl shadow-sm p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1">
+                <p class="font-medium">${escapeHtml(label)}</p>
+                <p class="text-xs text-slate-500 mt-1">${escapeHtml(aed)}</p>
+              </div>
+              <button data-id="${a.id}" data-action="action"
+                class="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+                Mark actioned
+              </button>
+            </div>
+          </div>`;
+      }).join("");
+      expectedActionsEl.querySelectorAll("[data-action='action']").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          const id = btn.getAttribute("data-id");
+          const { error } = await sb.from("expected_actions").update({ status: "actioned" }).eq("id", id);
+          if (error) {
+            alert("Could not update: " + error.message);
+            btn.disabled = false;
+            return;
+          }
+          loadExpectedActions(user);
+        });
+      });
     }
 
     // ============ INIT ============
