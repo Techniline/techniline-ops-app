@@ -6,560 +6,585 @@
   <title>Techniline Ops</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    .tab-active { color: #1e293b; border-color: #f97316; }
+    .tab-inactive { color: #64748b; border-color: transparent; }
+    .slider { -webkit-appearance: none; appearance: none; height: 6px; background: #e2e8f0; border-radius: 9999px; outline: none; }
+    .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 9999px; background: #f97316; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 9999px; background: #f97316; cursor: pointer; border: 2px solid white; }
+  </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
-  <!-- ========== LOGIN SCREEN ========== -->
+  <!-- LOGIN -->
   <div id="login-screen" class="min-h-screen flex items-center justify-center px-4">
     <div class="w-full max-w-sm bg-white rounded-2xl shadow-md p-8">
       <h1 class="text-2xl font-bold text-center mb-1">Techniline Ops</h1>
-      <p class="text-sm text-slate-500 text-center mb-6">Sign in to see your tasks</p>
+      <p class="text-sm text-slate-500 text-center mb-6">Sign in to continue</p>
       <form id="login-form" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
           <input id="login-email" type="email" required autocomplete="username"
-            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
           <input id="login-password" type="password" required autocomplete="current-password"
-            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:outline-none" />
         </div>
-        <button type="submit" id="login-btn"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition">
-          Sign in
-        </button>
-        <p id="login-error" class="text-sm text-red-600 hidden"></p>
+        <p id="login-error" class="hidden text-sm text-red-600"></p>
+        <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 rounded-lg">Sign in</button>
       </form>
     </div>
   </div>
 
-  <!-- ========== CHECKLIST SCREEN ========== -->
-  <div id="checklist-screen" class="hidden max-w-3xl mx-auto px-4 py-6">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h1 class="text-2xl font-bold">Today's Checklist</h1>
-        <p id="today-date" class="text-sm text-slate-500"></p>
+  <!-- APP -->
+  <div id="app-screen" class="hidden">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div>
+          <h1 class="font-semibold text-lg">Techniline Ops</h1>
+          <p id="header-user" class="text-xs text-slate-500"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="view-switcher" class="hidden text-sm border border-slate-300 rounded-lg px-2 py-1 bg-white">
+            <option value="self">My view (Manager)</option>
+            <option value="maricel">Maricel view</option>
+            <option value="aaron">Aaron view</option>
+          </select>
+          <button id="signout-btn" class="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
+        </div>
       </div>
-      <div class="flex items-center gap-3">
-        <span id="user-email" class="text-sm text-slate-600 hidden sm:inline"></span>
-        <button id="signout-btn"
-          class="text-sm px-3 py-1 border border-slate-300 rounded-lg hover:bg-slate-100">Sign out</button>
+      <nav class="max-w-3xl mx-auto px-2 flex">
+        <button data-tab="notifications" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-active relative">
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg>
+            <span>Notifications</span>
+            <span id="notif-badge" class="hidden ml-1 bg-red-500 text-white text-xs font-semibold px-1.5 py-0.5 rounded-full">0</span>
+          </span>
+        </button>
+        <button data-tab="checklist" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            <span>Checklist</span>
+          </span>
+        </button>
+        <button data-tab="kpis" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            <span>KPIs</span>
+          </span>
+        </button>
+        <button data-tab="priorities" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+            <span>Priorities</span>
+          </span>
+        </button>
+      </nav>
+    </header>
+    <main class="max-w-3xl mx-auto px-4 py-4">
+      <section id="tab-notifications" class="tab-pane"></section>
+      <section id="tab-checklist" class="tab-pane hidden"></section>
+      <section id="tab-kpis" class="tab-pane hidden"></section>
+      <section id="tab-priorities" class="tab-pane hidden"></section>
+    </main>
+  </div>
+
+  <!-- Priority Modal -->
+  <div id="priority-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center px-2">
+    <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-lg" id="pm-title">Add priority</h2>
+        <button id="pm-close" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
       </div>
+      <form id="pm-form" class="space-y-3 text-sm">
+        <input id="pm-id" type="hidden" />
+        <div>
+          <label class="block font-medium mb-1">Title *</label>
+          <input id="pm-name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block font-medium mb-1">Description</label>
+          <textarea id="pm-desc" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+        </div>
+        <div id="pm-assigned-wrap" class="hidden">
+          <label class="block font-medium mb-1">Assigned to</label>
+          <select id="pm-assigned" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+            <option value="">-- choose --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">Status</label>
+          <select id="pm-status" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+            <option value="on_track">On track</option>
+            <option value="at_risk">At risk</option>
+            <option value="overdue">Overdue</option>
+            <option value="complete">Complete</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-medium mb-1">Start *</label>
+            <input id="pm-start" type="date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Due *</label>
+            <input id="pm-due" type="date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">Date revised</label>
+          <input id="pm-revised" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block font-medium mb-1">Progress: <span id="pm-pct-label">0%</span></label>
+          <input id="pm-pct" type="range" min="0" max="100" value="0" class="slider w-full" />
+        </div>
+        <p id="pm-error" class="hidden text-sm text-red-600"></p>
+        <div class="flex gap-2 pt-2">
+          <button type="button" id="pm-cancel" class="flex-1 py-2 border border-slate-300 rounded-lg font-medium">Cancel</button>
+          <button type="submit" class="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium">Save</button>
+        </div>
+      </form>
     </div>
-
-    <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-slate-700">Daily progress</span>
-        <span id="progress-text" class="text-sm text-slate-500">0 of 0 done</span>
-      </div>
-      <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-        <div id="progress-bar" class="bg-green-500 h-2 rounded-full transition-all" style="width:0%"></div>
-      </div>
-    </div>
-
-    <h2 class="text-lg font-semibold mt-2 mb-2">Daily tasks</h2>
-    <div id="daily-tasks" class="space-y-3"></div>
-
-    <h2 class="text-lg font-semibold mt-6 mb-2">Email-triggered actions</h2>
-    <div id="expected-actions" class="space-y-3"></div>
   </div>
 
   <script>
-    // ============ CONFIG ============
     const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Titles that use the multi-tag input pattern
-    const MULTI_TAG_VENDOR_INVOICING = "Vendor invoicing";
-    const MULTI_TAG_APPOINTMENT = "Appointment booking";
-    const MULTI_TAG_SRTPRT = "SRT / PRT backlog clearance";
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])));
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    const fmtAED = (n) => n == null ? "—" : new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED", maximumFractionDigits: 0 }).format(n);
+    const fmtTime = (d) => d ? new Date(d).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : "—";
+    const todayISO = () => new Date().toISOString().slice(0, 10);
 
-    // ============ DOM ============
-    const loginScreen = document.getElementById("login-screen");
-    const checklistScreen = document.getElementById("checklist-screen");
-    const loginForm = document.getElementById("login-form");
-    const loginError = document.getElementById("login-error");
-    const userEmailEl = document.getElementById("user-email");
-    const todayDateEl = document.getElementById("today-date");
-    const dailyTasksEl = document.getElementById("daily-tasks");
-    const expectedActionsEl = document.getElementById("expected-actions");
-    const progressTextEl = document.getElementById("progress-text");
-    const progressBarEl = document.getElementById("progress-bar");
-    const signoutBtn = document.getElementById("signout-btn");
+    let SESSION = null;
+    let ME = null;
+    let USERS = [];
+    let VIEW_AS = null;
+    let CURRENT_TAB = "notifications";
 
-    // ============ HELPERS ============
-    function todayISO() {
-      const d = new Date();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return d.getFullYear() + "-" + m + "-" + day;
-    }
-    function prettyDate() {
-      return new Date().toLocaleDateString(undefined, {
-        weekday: "long", day: "numeric", month: "long", year: "numeric",
-      });
-    }
-    function prettyTime(iso) {
-      const d = iso ? new Date(iso) : new Date();
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return hh + ":" + mm;
-    }
-    function escapeHtml(str) {
-      return String(str ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
-    }
-
-    // ============ SCREENS ============
-    function showLogin() {
-      checklistScreen.classList.add("hidden");
-      loginScreen.classList.remove("hidden");
-    }
-    function showChecklist(user) {
-      loginScreen.classList.add("hidden");
-      checklistScreen.classList.remove("hidden");
-      userEmailEl.textContent = user.email || "";
-      todayDateEl.textContent = prettyDate();
-      loadDailyTasks(user);
-      loadExpectedActions(user);
-    }
-
-    // ============ LOGIN ============
-    loginForm.addEventListener("submit", async (e) => {
+    // ---------- AUTH ----------
+    $("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      loginError.classList.add("hidden");
-      const email = document.getElementById("login-email").value.trim();
-      const password = document.getElementById("login-password").value;
+      const err = $("login-error");
+      err.classList.add("hidden");
+      const email = $("login-email").value.trim();
+      const password = $("login-password").value;
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) {
-        loginError.textContent = error.message;
-        loginError.classList.remove("hidden");
-        return;
-      }
-      showChecklist(data.user);
+      if (error) { err.textContent = error.message; err.classList.remove("hidden"); return; }
+      await bootstrap(data.session);
     });
+    $("signout-btn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
 
-    signoutBtn.addEventListener("click", async () => {
-      await sb.auth.signOut();
-      showLogin();
-    });
-
-    // ============ PROGRESS ============
-    function updateProgress(tasks) {
-      const total = tasks.length;
-      const done = tasks.filter(t => t.status === "submitted" || t.status === "verified").length;
-      progressTextEl.textContent = done + " of " + total + " done";
-      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-      progressBarEl.style.width = pct + "%";
-    }
-
-    // ============ DAILY TASKS ============
-    let dailyTasksCache = [];
-
-    async function loadDailyTasks(user) {
-      dailyTasksEl.innerHTML = '<p class="text-sm text-slate-500">Loading...</p>';
-      const { data, error } = await sb
-        .from("daily_tasks")
-        .select("id, status, task_date, task_def_id, task_definitions(title, evidence_hint, evidence_type)")
-        .eq("assigned_to", user.id)
-        .eq("task_date", todayISO())
-        .order("id");
-      if (error) {
-        dailyTasksEl.innerHTML = '<p class="text-sm text-red-600">Failed to load: ' + escapeHtml(error.message) + '</p>';
-        return;
+    async function bootstrap(session) {
+      SESSION = session;
+      const { data: users } = await sb.from("users").select("id, email, full_name, role, avatar_initials");
+      USERS = users || [];
+      ME = USERS.find((u) => u.id === session.user.id) || { id: session.user.id, email: session.user.email, full_name: session.user.email, role: "staff" };
+      VIEW_AS = ME.id;
+      $("login-screen").classList.add("hidden");
+      $("app-screen").classList.remove("hidden");
+      $("header-user").textContent = ME.full_name + " · " + (ME.role === "manager" ? "Manager" : "Staff");
+      if (ME.role === "manager") {
+        const sw = $("view-switcher");
+        sw.classList.remove("hidden");
+        sw.innerHTML = '<option value="' + ME.id + '">My view (' + esc(ME.full_name) + ')</option>' +
+          USERS.filter((u) => u.id !== ME.id).map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + ' view</option>').join("");
+        sw.addEventListener("change", (e) => { VIEW_AS = e.target.value; renderCurrent(); });
       }
-      dailyTasksCache = data || [];
-      renderDailyTasks();
+      setupTabs();
+      setupPriorityModal();
+      renderCurrent();
     }
 
-    function getRenderMode(task) {
-      const def = task.task_definitions || {};
-      if (def.title === MULTI_TAG_VENDOR_INVOICING) return "tag_single_invoice";
-      if (def.title === MULTI_TAG_APPOINTMENT) return "tag_single_appointment";
-      if (def.title === MULTI_TAG_SRTPRT) return "tag_double_srt_prt";
-      if (def.evidence_type === "one_tap") return "one_tap";
-      return "text"; // catch-all for text and id_list
-    }
+    sb.auth.getSession().then(({ data }) => { if (data.session) bootstrap(data.session); });
 
-    function renderDailyTasks() {
-      updateProgress(dailyTasksCache);
-      if (dailyTasksCache.length === 0) {
-        dailyTasksEl.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-4 text-sm text-slate-500">No daily tasks for today.</div>';
-        return;
-      }
-      dailyTasksEl.innerHTML = dailyTasksCache.map(renderDailyCard).join("");
-      dailyTasksCache.forEach(task => {
-        const cardEl = document.getElementById("task-" + task.id);
-        if (!cardEl) return;
-        const isDone = task.status === "submitted" || task.status === "verified";
-        if (isDone) return;
-        attachCardHandlers(task, cardEl);
+    function setupTabs() {
+      document.querySelectorAll(".tab-btn").forEach((b) => {
+        b.addEventListener("click", () => switchTab(b.dataset.tab));
       });
     }
-
-    function renderDailyCard(task) {
-      const def = task.task_definitions || {};
-      const title = def.title || "(no title)";
-      const hint = def.evidence_hint || "";
-      const isDone = task.status === "submitted" || task.status === "verified";
-      const mode = getRenderMode(task);
-
-      if (isDone) {
-        const submittedAt = task.submitted_at_local || prettyTime();
-        return `
-        <div id="task-${task.id}" class="bg-green-50 border border-green-200 rounded-xl shadow-sm p-4">
-          <div class="flex items-start gap-3">
-            <div class="text-green-600 text-xl leading-none">&#10003;</div>
-            <div class="flex-1">
-              <p class="font-medium text-green-800 line-through">${escapeHtml(title)}</p>
-              <p class="text-xs text-green-700 mt-1">Submitted at ${escapeHtml(submittedAt)}</p>
-            </div>
-          </div>
-        </div>`;
-      }
-
-      if (mode === "one_tap") {
-        return `
-        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex-1">
-              <p class="font-medium">${escapeHtml(title)}</p>
-              <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
-            </div>
-            <button data-action="confirm"
-              class="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-              Confirm
-            </button>
-          </div>
-        </div>`;
-      }
-
-      if (mode === "tag_single_invoice") {
-        return tagSingleCard(task, title, hint, "Invoice numbers", "Add invoice number", "e.g. WS/2601519", "No invoices to raise today");
-      }
-      if (mode === "tag_single_appointment") {
-        return tagSingleCard(task, title, hint, "Appointment IDs", "Add appointment ID", "e.g. APT-2461", "No appointments to book today");
-      }
-      if (mode === "tag_double_srt_prt") {
-        return tagDoubleCard(task, title, hint);
-      }
-
-      // fallback: text/id_list
-      return `
-        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex-1">
-              <p class="font-medium">${escapeHtml(title)}</p>
-              <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
-            </div>
-            <button data-action="expand"
-              class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-              Add details
-            </button>
-          </div>
-          <div data-role="input-wrap" class="hidden mt-3">
-            <textarea rows="3" placeholder="Type your notes (min 10 characters)..."
-              class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
-            <div class="flex justify-end mt-2">
-              <button data-action="submit-text" disabled
-                class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>`;
+    function switchTab(name) {
+      CURRENT_TAB = name;
+      document.querySelectorAll(".tab-btn").forEach((b) => {
+        const on = b.dataset.tab === name;
+        b.classList.toggle("tab-active", on);
+        b.classList.toggle("tab-inactive", !on);
+      });
+      document.querySelectorAll(".tab-pane").forEach((p) => p.classList.add("hidden"));
+      $("tab-" + name).classList.remove("hidden");
+      renderCurrent();
+    }
+    function renderCurrent() {
+      if (CURRENT_TAB === "notifications") renderNotifications();
+      else if (CURRENT_TAB === "checklist") renderChecklist();
+      else if (CURRENT_TAB === "kpis") renderKPIs();
+      else if (CURRENT_TAB === "priorities") renderPriorities();
+      updateBadge();
+    }
+    async function updateBadge() {
+      const { count } = await sb.from("expected_actions").select("id", { count: "exact", head: true })
+        .eq("assigned_to", VIEW_AS).eq("status", "open");
+      const badge = $("notif-badge");
+      if (count && count > 0) { badge.textContent = count; badge.classList.remove("hidden"); }
+      else { badge.classList.add("hidden"); }
     }
 
-    function tagSingleCard(task, title, hint, fieldLabel, addBtnLabel, placeholder, nothingLabel) {
-      return `
-        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
-          <div class="mb-3">
-            <p class="font-medium">${escapeHtml(title)}</p>
-            <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
-          </div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">${escapeHtml(fieldLabel)}</label>
-          <div class="flex gap-2 mb-2">
-            <input type="text" data-role="tag-input" placeholder="${escapeHtml(placeholder)}"
-              class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
-            <button data-action="add-tag"
-              class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
-          </div>
-          <div data-role="tag-list" class="flex flex-wrap gap-2 mb-3"></div>
-          <p data-role="count-text" class="text-xs text-slate-500 mb-3">0 added</p>
-          <div class="flex justify-between items-center">
-            <button data-action="nothing" data-note="${escapeHtml(nothingLabel)}"
-              class="text-sm text-slate-600 underline hover:text-slate-800">${escapeHtml(nothingLabel)}</button>
-            <button data-action="submit-tags" disabled
-              class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-              Submit
-            </button>
-          </div>
-        </div>`;
+    // ---------- NOTIFICATIONS ----------
+    const URGENCY = { shortage_claim: 1, po_cancellation: 1, dispute_update: 2, vendor_po: 3, remittance: 4, return_processed: 4 };
+    const TYPE_LABEL = { shortage_claim: "Shortage claim", po_cancellation: "PO cancelled", vendor_po: "Vendor PO", dispute_update: "Dispute update", remittance: "Remittance advice", return_processed: "Return processed" };
+    const TYPE_BORDER = { shortage_claim: "border-red-400", po_cancellation: "border-red-400", dispute_update: "border-amber-400", vendor_po: "border-amber-400", remittance: "border-blue-400", return_processed: "border-blue-400" };
+    const TYPE_BADGE = { shortage_claim: "bg-red-100 text-red-700", po_cancellation: "bg-red-100 text-red-700", dispute_update: "bg-amber-100 text-amber-700", vendor_po: "bg-amber-100 text-amber-700", remittance: "bg-blue-100 text-blue-700", return_processed: "bg-blue-100 text-blue-700" };
+
+    async function renderNotifications() {
+      const pane = $("tab-notifications");
+      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      const { data, error } = await sb.from("expected_actions").select("*")
+        .eq("assigned_to", VIEW_AS).order("email_received_at", { ascending: false }).limit(200);
+      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
+      const rows = data || [];
+      const open = rows.filter((r) => r.status === "open");
+      const done = rows.filter((r) => r.status !== "open");
+      open.sort((a, b) => (URGENCY[a.type] || 9) - (URGENCY[b.type] || 9));
+      const counts = {};
+      for (const r of open) counts[r.type] = (counts[r.type] || 0) + 1;
+      const sumBar = '<div class="flex flex-wrap gap-2 mb-3">' +
+        Object.keys(TYPE_LABEL).map((t) => {
+          const c = counts[t] || 0;
+          if (!c) return "";
+          return '<span class="text-xs px-2 py-1 rounded-full ' + TYPE_BADGE[t] + '">' + TYPE_LABEL[t] + ': ' + c + '</span>';
+        }).join("") + '</div>';
+      const emptyMsg = open.length === 0 ? '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">Nothing needs action right now.</div>' : "";
+      pane.innerHTML = sumBar + emptyMsg +
+        '<div class="space-y-3">' + open.map(renderNotifCard).join("") + '</div>' +
+        (done.length ? '<h3 class="text-xs uppercase tracking-wide text-slate-400 mt-6 mb-2">Done</h3><div class="space-y-2">' + done.slice(0, 15).map(renderDoneCard).join("") + '</div>' : "");
+      attachNotifHandlers();
     }
-
-    function tagDoubleCard(task, title, hint) {
-      return `
-        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
-          <div class="mb-3">
-            <p class="font-medium">${escapeHtml(title)}</p>
-            <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
-          </div>
-
-          <div class="mb-3" data-group="srt">
-            <label class="block text-sm font-medium text-slate-700 mb-1">SRT ticket numbers</label>
-            <div class="flex gap-2 mb-2">
-              <input type="text" data-role="tag-input" placeholder="e.g. SRT-0041"
-                class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
-              <button data-action="add-tag"
-                class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
-            </div>
-            <div data-role="tag-list" class="flex flex-wrap gap-2"></div>
-          </div>
-
-          <div class="mb-3" data-group="prt">
-            <label class="block text-sm font-medium text-slate-700 mb-1">PRT ticket numbers</label>
-            <div class="flex gap-2 mb-2">
-              <input type="text" data-role="tag-input" placeholder="e.g. PRT-0017"
-                class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
-              <button data-action="add-tag"
-                class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
-            </div>
-            <div data-role="tag-list" class="flex flex-wrap gap-2"></div>
-          </div>
-
-          <p data-role="count-text" class="text-xs text-slate-500 mb-3">0 added</p>
-
-          <div class="flex justify-between items-center">
-            <button data-action="nothing" data-note="Backlog is clear"
-              class="text-sm text-slate-600 underline hover:text-slate-800">Backlog is clear</button>
-            <button data-action="submit-tags" disabled
-              class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-              Submit
-            </button>
-          </div>
-        </div>`;
-    }
-
-    function attachCardHandlers(task, cardEl) {
-      const mode = getRenderMode(task);
-      if (mode === "one_tap") {
-        const btn = cardEl.querySelector("[data-action='confirm']");
-        if (btn) btn.addEventListener("click", () => handleOneTap(task, btn));
-        return;
+    function renderNotifCard(r) {
+      const border = TYPE_BORDER[r.type] || "border-slate-300";
+      const badge = TYPE_BADGE[r.type] || "bg-slate-100 text-slate-700";
+      const label = TYPE_LABEL[r.type] || r.type;
+      let body = '';
+      if (r.type === "vendor_po") {
+        body = '<p class="text-sm text-slate-600">PO ' + esc(r.po_number || r.ref_number || "—") + (r.asin ? ' · ASIN ' + esc(r.asin) : '') + '</p>';
+      } else if (r.type === "po_cancellation") {
+        body = '<p class="text-sm text-slate-600">PO ' + esc(r.po_number || r.ref_number || "—") + (r.asin ? ' · ASIN ' + esc(r.asin) : '') +
+          (r.qty_confirmed != null ? ' · Confirmed ' + r.qty_confirmed : '') +
+          (r.qty_cancelled != null ? ' · Cancelled ' + r.qty_cancelled : '') + '</p>';
+      } else if (r.type === "shortage_claim") {
+        body = '<p class="text-sm text-slate-600">Doc ' + esc(r.ref_number || "—") + (r.invoice_ref ? ' · Invoice ' + esc(r.invoice_ref) : '') +
+          (r.aed_amount ? ' · ' + fmtAED(r.aed_amount) : '') + '</p>';
+      } else if (r.type === "remittance") {
+        body = '<p class="text-sm text-slate-600">Payment# ' + esc(r.ref_number || "—") + (r.payment_date ? ' · ' + fmtDate(r.payment_date) : '') + '</p>';
+      } else if (r.type === "dispute_update") {
+        body = '<p class="text-sm text-slate-600">Dispute ' + esc(r.ref_number || "—") + '</p>';
+      } else if (r.type === "return_processed") {
+        body = '<p class="text-sm text-slate-600">Ref ' + esc(r.ref_number || "—") + '</p>';
       }
-      if (mode === "text") {
-        const expandBtn = cardEl.querySelector("[data-action='expand']");
-        const submitBtn = cardEl.querySelector("[data-action='submit-text']");
-        const textarea = cardEl.querySelector("textarea");
-        const inputWrap = cardEl.querySelector("[data-role='input-wrap']");
-        if (expandBtn) {
-          expandBtn.addEventListener("click", () => {
-            expandBtn.classList.add("hidden");
-            inputWrap.classList.remove("hidden");
-            textarea.focus();
-          });
-        }
-        if (textarea && submitBtn) {
-          textarea.addEventListener("input", () => {
-            submitBtn.disabled = textarea.value.trim().length < 10;
-          });
-          submitBtn.addEventListener("click", () => handleTextSubmit(task, textarea.value.trim(), submitBtn));
-        }
-        return;
-      }
-      // tag modes
-      const groups = cardEl.querySelectorAll("[data-group]");
-      if (groups.length > 0) {
-        // double (SRT/PRT)
-        groups.forEach(g => wireTagGroup(g, cardEl));
+      let actions = '';
+      const aid = esc(r.id);
+      if (r.type === "vendor_po") {
+        actions = '<button data-act="ack" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg">Action PO ' + esc(r.po_number || "—") + '</button>';
+      } else if (r.type === "shortage_claim") {
+        actions = '<button data-act="dispute" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-red-500 text-white rounded-lg">Raise dispute</button>' +
+          '<button data-act="accept" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg">Accept</button>';
+      } else if (r.type === "po_cancellation") {
+        actions = '<button data-act="confirm-cancel" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg">Confirmed will not ship</button>' +
+          '<button data-act="escalate" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-red-500 text-white rounded-lg">Already shipped, escalate</button>';
+      } else if (r.type === "remittance") {
+        actions = '<button data-act="reconcile" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-blue-500 text-white rounded-lg">Mark reconciled</button>';
       } else {
-        // single
-        wireTagGroup(cardEl, cardEl);
+        actions = '<button data-act="ack" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg">Mark done</button>';
       }
-      const submitBtn = cardEl.querySelector("[data-action='submit-tags']");
-      const nothingBtn = cardEl.querySelector("[data-action='nothing']");
-      if (submitBtn) {
-        submitBtn.addEventListener("click", () => handleTagSubmit(task, cardEl, submitBtn));
-      }
-      if (nothingBtn) {
-        nothingBtn.addEventListener("click", () => handleNothingTodo(task, nothingBtn.getAttribute("data-note"), nothingBtn));
-      }
+      return '<div class="bg-white rounded-xl shadow-sm border-l-4 ' + border + ' p-3">' +
+        '<div class="flex items-start justify-between gap-2 mb-1">' +
+          '<span class="text-xs font-medium px-2 py-0.5 rounded-full ' + badge + '">' + label + '</span>' +
+          '<span class="text-xs text-slate-400">' + fmtTime(r.email_received_at) + '</span>' +
+        '</div>' +
+        '<p class="font-medium text-sm">' + esc(r.email_subject || "(no subject)") + '</p>' +
+        body +
+        '<div class="flex flex-wrap gap-2 mt-2">' + actions + '</div>' +
+      '</div>';
     }
-
-    function wireTagGroup(scope, cardEl) {
-      const input = scope.querySelector("[data-role='tag-input']");
-      const addBtn = scope.querySelector("[data-action='add-tag']");
-      const list = scope.querySelector("[data-role='tag-list']");
-      if (!input || !addBtn || !list) return;
-      function addTag() {
-        const val = input.value.trim();
-        if (!val) return;
-        const tag = document.createElement("span");
-        tag.className = "inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full";
-        tag.dataset.value = val;
-        tag.innerHTML = escapeHtml(val) + ' <button type="button" class="text-blue-600 hover:text-blue-900" data-action="remove-tag" aria-label="Remove">&times;</button>';
-        list.appendChild(tag);
-        input.value = "";
-        input.focus();
-        updateTagState(cardEl);
-      }
-      addBtn.addEventListener("click", addTag);
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); addTag(); }
-      });
-      list.addEventListener("click", (e) => {
-        if (e.target.matches("[data-action='remove-tag']")) {
-          e.target.closest("[data-value]").remove();
-          updateTagState(cardEl);
-        }
-      });
+    function renderDoneCard(r) {
+      return '<div class="bg-slate-50 border border-slate-200 rounded-lg p-2 opacity-70">' +
+        '<div class="flex items-center justify-between gap-2 text-xs">' +
+          '<span class="line-through text-slate-500">' + esc(TYPE_LABEL[r.type] || r.type) + ' · ' + esc(r.ref_number || r.po_number || "—") + '</span>' +
+          '<span class="text-slate-400">' + fmtTime(r.actioned_at || r.email_received_at) + '</span>' +
+        '</div></div>';
     }
-
-    function collectTags(cardEl) {
-      // Returns array of all tag values across all tag-lists in the card, in order
-      const tags = cardEl.querySelectorAll("[data-role='tag-list'] [data-value]");
-      return Array.from(tags).map(el => el.dataset.value);
-    }
-
-    function updateTagState(cardEl) {
-      const count = collectTags(cardEl).length;
-      const countEl = cardEl.querySelector("[data-role='count-text']");
-      if (countEl) countEl.textContent = count + (count === 1 ? " added" : " added");
-      const submitBtn = cardEl.querySelector("[data-action='submit-tags']");
-      if (submitBtn) submitBtn.disabled = count < 1;
-    }
-
-    // ============ SUBMIT HANDLERS ============
-    async function handleOneTap(task, btn) {
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.textContent = "Saving...";
-      const { data: { user } } = await sb.auth.getUser();
-      const hint = (task.task_definitions && task.task_definitions.evidence_hint) || "";
-      const { error: insErr } = await sb.from("submissions").insert({
-        daily_task_id: task.id,
-        submitted_by: user.id,
-        is_nothing_to_action: true,
-        nothing_to_action_note: hint,
-      });
-      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
-      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
-      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
-    }
-
-    async function handleTextSubmit(task, text, btn) {
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.textContent = "Saving...";
-      const { data: { user } } = await sb.auth.getUser();
-      const { error: insErr } = await sb.from("submissions").insert({
-        daily_task_id: task.id,
-        submitted_by: user.id,
-        evidence_text: text,
-      });
-      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
-      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
-      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
-    }
-
-    async function handleTagSubmit(task, cardEl, btn) {
-      const tags = collectTags(cardEl);
-      if (tags.length < 1) return;
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.textContent = "Saving...";
-      const { data: { user } } = await sb.auth.getUser();
-      const { error: insErr } = await sb.from("submissions").insert({
-        daily_task_id: task.id,
-        submitted_by: user.id,
-        evidence_text: tags.join(", "),
-        evidence_count: tags.length,
-      });
-      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
-      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
-      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
-    }
-
-    async function handleNothingTodo(task, note, btn) {
-      btn.disabled = true;
-      const { data: { user } } = await sb.auth.getUser();
-      const { error: insErr } = await sb.from("submissions").insert({
-        daily_task_id: task.id,
-        submitted_by: user.id,
-        is_nothing_to_action: true,
-        nothing_to_action_note: note,
-        evidence_count: 0,
-      });
-      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; return; }
-      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; return; }
-      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
-    }
-
-    // ============ EXPECTED ACTIONS ============
-    async function loadExpectedActions(user) {
-      expectedActionsEl.innerHTML = '<p class="text-sm text-slate-500">Loading...</p>';
-      const { data, error } = await sb
-        .from("expected_actions")
-        .select("id, type, ref_number, aed_amount, email_received_at, status")
-        .eq("assigned_to", user.id)
-        .eq("status", "open")
-        .order("email_received_at");
-      if (error) {
-        expectedActionsEl.innerHTML = '<p class="text-sm text-red-600">Failed to load: ' + escapeHtml(error.message) + '</p>';
-        return;
-      }
-      if (!data || data.length === 0) {
-        expectedActionsEl.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-4 text-sm text-slate-500">No open email-triggered actions. 🎉</div>';
-        return;
-      }
-      expectedActionsEl.innerHTML = data.map(a => {
-        const label = (a.type || "") + (a.ref_number ? " #" + a.ref_number : "");
-        const aed = a.aed_amount ? "AED " + a.aed_amount : "";
-        return `
-          <div id="ea-${a.id}" class="bg-white rounded-xl shadow-sm p-4">
-            <div class="flex items-start justify-between gap-4">
-              <div class="flex-1">
-                <p class="font-medium">${escapeHtml(label)}</p>
-                <p class="text-xs text-slate-500 mt-1">${escapeHtml(aed)}</p>
-              </div>
-              <button data-id="${a.id}" data-action="action"
-                class="shrink-0 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-                Mark actioned
-              </button>
-            </div>
-          </div>`;
-      }).join("");
-      expectedActionsEl.querySelectorAll("[data-action='action']").forEach(btn => {
+    function attachNotifHandlers() {
+      document.querySelectorAll('#tab-notifications [data-act]').forEach((btn) => {
         btn.addEventListener("click", async () => {
-          btn.disabled = true;
-          const id = btn.getAttribute("data-id");
-          const { error } = await sb.from("expected_actions").update({ status: "actioned" }).eq("id", id);
-          if (error) { alert("Could not update: " + error.message); btn.disabled=false; return; }
-          loadExpectedActions(user);
+          const id = btn.dataset.id; const act = btn.dataset.act;
+          btn.disabled = true; btn.textContent = "…";
+          await sb.from("expected_actions").update({ status: "actioned", actioned_at: new Date().toISOString() }).eq("id", id);
+          renderCurrent();
         });
       });
     }
 
-    // ============ INIT ============
-    (async () => {
-      const { data: { session } } = await sb.auth.getSession();
-      if (session && session.user) showChecklist(session.user);
-      else showLogin();
-    })();
+    // ---------- CHECKLIST ----------
+    const MULTI_TAG_TITLES = ["SRT / PRT backlog clearance", "Vendor invoicing", "Appointment booking"];
+    async function renderChecklist() {
+      const pane = $("tab-checklist");
+      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      const today = todayISO();
+      const { data: tasks, error } = await sb.from("daily_tasks")
+        .select("id, task_def_id, status, task_date, source, task_definitions(title, evidence_type, evidence_hint, eod_time)")
+        .eq("assigned_to", VIEW_AS).eq("task_date", today).order("created_at");
+      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
+      const rows = tasks || [];
+      const total = rows.length;
+      const done = rows.filter((t) => t.status === "submitted" || t.status === "verified").length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      const header = '<div class="mb-3">' +
+        '<div class="flex items-center justify-between mb-1"><p class="text-sm font-medium">Today, ' + fmtDate(today) + '</p>' +
+        '<p class="text-xs text-slate-500">' + done + ' / ' + total + ' done</p></div>' +
+        '<div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden"><div class="h-full bg-orange-500" style="width:' + pct + '%"></div></div>' +
+        '</div>';
+      if (!rows.length) { pane.innerHTML = header + '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">No tasks for today.</div>'; return; }
+      pane.innerHTML = header + '<div class="space-y-3" id="checklist-list">' + rows.map(renderTaskCard).join("") + '</div>';
+      rows.forEach((t) => attachTaskHandlers(t));
+    }
+    function getMode(task) {
+      const def = task.task_definitions || {};
+      if (task.status === "submitted" || task.status === "verified") return "done";
+      if (MULTI_TAG_TITLES.includes(def.title)) return "multi_tag";
+      if (def.evidence_type === "one_tap") return "one_tap";
+      return "text";
+    }
+    function renderTaskCard(t) {
+      const def = t.task_definitions || {};
+      const title = def.title || "Task";
+      const mode = getMode(t);
+      if (mode === "done") {
+        return '<div class="bg-green-50 border border-green-200 rounded-xl p-3"><div class="flex items-start gap-2"><span class="text-green-600">&#10003;</span><div class="flex-1"><p class="font-medium text-green-800 text-sm line-through">' + esc(title) + '</p><p class="text-xs text-green-700 mt-0.5">Submitted</p></div></div></div>';
+      }
+      if (mode === "one_tap") {
+        return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><div class="flex items-start justify-between gap-3"><div class="flex-1"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(def.evidence_hint) + '</p>' : '') + '</div><button data-act="confirm" class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg whitespace-nowrap">Confirm</button></div></div>';
+      }
+      if (mode === "multi_tag") {
+        return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5 mb-2">' + esc(def.evidence_hint) + '</p>' : '<div class="mb-2"></div>') + '<div data-role="tags" class="flex flex-wrap gap-1.5 mb-2"></div><div class="flex gap-2"><input data-role="tag-input" placeholder="Enter ID, press Enter" class="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /><button data-act="submit-tags" disabled class="text-xs bg-orange-500 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg">Submit</button></div></div>';
+      }
+      return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(def.evidence_hint) + '</p>' : '') + '<button data-act="expand" class="mt-2 text-xs text-orange-600">Add note</button><div data-role="input-wrap" class="hidden mt-2"><textarea rows="2" class="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg"></textarea><button data-act="submit-text" disabled class="mt-2 text-xs bg-orange-500 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg">Submit</button></div></div>';
+    }
+    function attachTaskHandlers(t) {
+      const card = $("task-" + t.id); if (!card) return;
+      const mode = getMode(t);
+      if (mode === "one_tap") {
+        card.querySelector('[data-act="confirm"]').addEventListener("click", () => submitTask(t.id, "one_tap"));
+      } else if (mode === "text") {
+        const exp = card.querySelector('[data-act="expand"]');
+        const wrap = card.querySelector('[data-role="input-wrap"]');
+        const ta = card.querySelector("textarea");
+        const sub = card.querySelector('[data-act="submit-text"]');
+        exp.addEventListener("click", () => { exp.classList.add("hidden"); wrap.classList.remove("hidden"); ta.focus(); });
+        ta.addEventListener("input", () => { sub.disabled = !ta.value.trim(); });
+        sub.addEventListener("click", () => submitTask(t.id, "text", { note: ta.value.trim() }));
+      } else if (mode === "multi_tag") {
+        const tagsWrap = card.querySelector('[data-role="tags"]');
+        const input = card.querySelector('[data-role="tag-input"]');
+        const sub = card.querySelector('[data-act="submit-tags"]');
+        const tags = [];
+        const renderTags = () => {
+          tagsWrap.innerHTML = tags.map((tg, i) => '<span class="inline-flex items-center gap-1 bg-orange-100 text-orange-800 text-xs px-2 py-0.5 rounded-full">' + esc(tg) + '<button data-i="' + i + '" class="text-orange-600 hover:text-orange-900">&times;</button></span>').join("");
+          tagsWrap.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { tags.splice(+b.dataset.i, 1); renderTags(); sub.disabled = !tags.length; }));
+          sub.disabled = !tags.length;
+        };
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = input.value.trim().replace(/,$/, ""); if (v) { tags.push(v); input.value = ""; renderTags(); } }
+        });
+        sub.addEventListener("click", () => submitTask(t.id, "tags", { tags }));
+      }
+    }
+    async function submitTask(id, kind, payload) {
+      await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", id);
+      renderCurrent();
+    }
 
-    sb.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") showLogin();
-    });
+    // ---------- KPIs ----------
+    async function renderKPIs() {
+      const pane = $("tab-kpis");
+      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      const userId = VIEW_AS;
+      const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
+      const [posR, shortR, retR, dispR] = await Promise.all([
+        sb.from("expected_actions").select("id", { count: "exact", head: true }).eq("assigned_to", userId).eq("status", "open").eq("type", "vendor_po"),
+        sb.from("expected_actions").select("aed_amount").eq("assigned_to", userId).eq("status", "open").eq("type", "shortage_claim"),
+        sb.from("expected_actions").select("id", { count: "exact", head: true }).eq("assigned_to", userId).eq("status", "open").eq("type", "return_processed"),
+        sb.from("disputes").select("id", { count: "exact", head: true }).neq("dispute_status", "resolved").lt("created_at", threeDaysAgo),
+      ]);
+      const posPending = posR.count || 0;
+      const aedAtRisk = (shortR.data || []).reduce((s, r) => s + (Number(r.aed_amount) || 0), 0);
+      const returnsBacklog = retR.count || 0;
+      const disputesOld = dispR.count || 0;
+      const reconciliationGaps = 0;
+      const card = (label, value, color, sub) => {
+        const dot = color === "red" ? "bg-red-500" : color === "amber" ? "bg-amber-400" : "bg-green-500";
+        return '<div class="bg-white rounded-xl shadow-sm p-4"><div class="flex items-center gap-2 mb-1"><span class="w-2.5 h-2.5 rounded-full ' + dot + '"></span><p class="text-xs text-slate-500 uppercase tracking-wide">' + label + '</p></div><p class="text-2xl font-semibold">' + value + '</p>' + (sub ? '<p class="text-xs text-slate-400 mt-0.5">' + sub + '</p>' : '') + '</div>';
+      };
+      pane.innerHTML =
+        '<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">' +
+          card("POs pending", posPending, posPending > 5 ? "amber" : posPending > 0 ? "amber" : "green") +
+          card("AED at risk", fmtAED(aedAtRisk), aedAtRisk > 0 ? "red" : "green") +
+          card("Returns backlog", returnsBacklog, returnsBacklog > 0 ? "amber" : "green") +
+          card("Disputes > 3 days", disputesOld, disputesOld > 0 ? "red" : "green") +
+          card("Reconciliation gaps", reconciliationGaps, "green", "Coming soon") +
+        '</div>' +
+        '<div class="bg-white rounded-xl shadow-sm divide-y divide-slate-100">' +
+          '<button data-link="notifications" class="w-full flex items-center justify-between p-3 text-left hover:bg-slate-50"><span class="text-sm">' + (posPending + returnsBacklog) + ' notifications need action</span><span class="text-orange-600 text-sm">Open &rarr;</span></button>' +
+          '<button data-link="checklist" class="w-full flex items-center justify-between p-3 text-left hover:bg-slate-50"><span class="text-sm">View today\'s checklist</span><span class="text-orange-600 text-sm">Open &rarr;</span></button>' +
+        '</div>';
+      pane.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.link)));
+    }
+
+    // ---------- PRIORITIES ----------
+    const STATUS_LABEL = { on_track: "On track", at_risk: "At risk", overdue: "Overdue", complete: "Complete" };
+    const STATUS_BADGE = { on_track: "bg-green-100 text-green-700", at_risk: "bg-amber-100 text-amber-700", overdue: "bg-red-100 text-red-700", complete: "bg-slate-200 text-slate-600" };
+    const STATUS_RANK = { overdue: 0, at_risk: 1, on_track: 2, complete: 3 };
+    async function renderPriorities() {
+      const pane = $("tab-priorities");
+      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      const userId = VIEW_AS;
+      const { data, error } = await sb.from("priorities").select("*").or('assigned_to.eq.' + userId + ',assigned_to_both.eq.true').neq("status", "complete").order("due_date");
+      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
+      const rows = (data || []).sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
+      const topBar = '<div class="flex items-center justify-between mb-3"><h2 class="font-semibold text-sm">My priorities</h2><button id="add-priority-btn" class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg">+ Add priority</button></div>';
+      const cards = rows.length === 0 ? '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">No active priorities.</div>' : '<div class="space-y-3">' + rows.map(renderPriorityCard).join("") + '</div>';
+      const exportBar = '<div class="bg-white rounded-xl shadow-sm p-3 mt-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">Export for appraisal</p><div class="flex flex-wrap items-end gap-2"><div><label class="block text-xs text-slate-500 mb-0.5">From</label><input id="exp-from" type="date" class="px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /></div><div><label class="block text-xs text-slate-500 mb-0.5">To</label><input id="exp-to" type="date" class="px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /></div><button id="exp-pdf" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg">Download PDF</button></div></div>';
+      pane.innerHTML = topBar + cards + exportBar;
+      $("add-priority-btn").addEventListener("click", () => openPriorityModal());
+      $("exp-pdf").addEventListener("click", exportPrioritiesPDF);
+      pane.querySelectorAll('[data-prio-slider]').forEach((s) => {
+        s.addEventListener("input", (e) => {
+          const lbl = pane.querySelector('[data-pct="' + s.dataset.prioSlider + '"]');
+          if (lbl) lbl.textContent = e.target.value + "%";
+        });
+        s.addEventListener("change", async (e) => {
+          const id = s.dataset.prioSlider; const v = +e.target.value;
+          await sb.from("priorities").update({ progress_pct: v }).eq("id", id);
+        });
+      });
+      pane.querySelectorAll('[data-prio-edit]').forEach((b) => {
+        b.addEventListener("click", () => { const r = rows.find((x) => x.id === b.dataset.prioEdit); if (r) openPriorityModal(r); });
+      });
+      pane.querySelectorAll('[data-prio-complete]').forEach((b) => {
+        b.addEventListener("click", async () => {
+          const note = prompt("Completion note (optional):", "") || null;
+          await sb.from("priorities").update({ status: "complete", completed_at: new Date().toISOString(), completion_note: note, progress_pct: 100 }).eq("id", b.dataset.prioComplete);
+          renderCurrent();
+        });
+      });
+    }
+    function renderPriorityCard(r) {
+      const assignee = USERS.find((u) => u.id === r.created_by);
+      const initials = assignee ? (assignee.avatar_initials || (assignee.full_name || "??").split(" ").map((s) => s[0]).join("").slice(0, 2)) : "??";
+      const fullName = assignee ? assignee.full_name : "Unknown";
+      const pct = r.progress_pct ?? 0;
+      const due = r.due_date_revised || r.due_date;
+      return '<div class="bg-white rounded-xl shadow-sm p-3">' +
+        '<div class="flex items-start justify-between gap-2 mb-1">' +
+          '<div class="flex-1"><p class="font-medium text-sm">' + esc(r.title) + '</p>' +
+          '<p class="text-xs text-slate-500 mt-0.5">' + fmtDate(r.start_date) + ' &rarr; ' + fmtDate(due) + (r.due_date_revised ? ' <span class="text-amber-600">(revised)</span>' : '') + '</p></div>' +
+          '<span class="text-xs px-2 py-0.5 rounded-full ' + (STATUS_BADGE[r.status] || 'bg-slate-100') + '">' + (STATUS_LABEL[r.status] || r.status) + '</span>' +
+        '</div>' +
+        (r.description ? '<p class="text-xs text-slate-600 mb-2">' + esc(r.description) + '</p>' : '') +
+        '<div class="flex items-center gap-2 mb-2">' +
+          '<input data-prio-slider="' + esc(r.id) + '" type="range" min="0" max="100" value="' + pct + '" class="slider flex-1" />' +
+          '<span class="text-xs font-medium w-10 text-right" data-pct="' + esc(r.id) + '">' + pct + '%</span>' +
+        '</div>' +
+        '<div class="flex items-center justify-between">' +
+          '<div class="flex items-center gap-1.5 text-xs text-slate-500"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">' + esc(initials) + '</span><span>Assigned by ' + esc(fullName) + '</span></div>' +
+          '<div class="flex gap-1"><button data-prio-edit="' + esc(r.id) + '" class="text-xs text-slate-500 hover:text-slate-800">Edit</button><button data-prio-complete="' + esc(r.id) + '" class="text-xs text-green-600 hover:text-green-800">Complete</button></div>' +
+        '</div>' +
+      '</div>';
+    }
+    function setupPriorityModal() {
+      $("pm-close").addEventListener("click", closePriorityModal);
+      $("pm-cancel").addEventListener("click", closePriorityModal);
+      $("pm-pct").addEventListener("input", (e) => { $("pm-pct-label").textContent = e.target.value + "%"; });
+      $("pm-form").addEventListener("submit", savePriorityModal);
+    }
+    function openPriorityModal(r) {
+      $("pm-title").textContent = r ? "Edit priority" : "Add priority";
+      $("pm-id").value = r ? r.id : "";
+      $("pm-name").value = r ? r.title : "";
+      $("pm-desc").value = r ? (r.description || "") : "";
+      $("pm-status").value = r ? r.status : "on_track";
+      $("pm-start").value = r ? r.start_date : todayISO();
+      $("pm-due").value = r ? r.due_date : "";
+      $("pm-revised").value = r ? (r.due_date_revised || "") : "";
+      const pct = r ? (r.progress_pct || 0) : 0;
+      $("pm-pct").value = pct; $("pm-pct-label").textContent = pct + "%";
+      $("pm-error").classList.add("hidden");
+      const wrap = $("pm-assigned-wrap");
+      if (ME && ME.role === "manager") {
+        wrap.classList.remove("hidden");
+        const sel = $("pm-assigned");
+        sel.innerHTML = '<option value="">-- choose --</option>' +
+          USERS.filter((u) => u.role === "staff").map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join("") +
+          '<option value="both">Both</option>';
+        if (r) sel.value = r.assigned_to_both ? "both" : (r.assigned_to || "");
+      } else { wrap.classList.add("hidden"); }
+      $("priority-modal").classList.remove("hidden");
+    }
+    function closePriorityModal() { $("priority-modal").classList.add("hidden"); }
+    async function savePriorityModal(e) {
+      e.preventDefault();
+      const err = $("pm-error"); err.classList.add("hidden");
+      const id = $("pm-id").value;
+      const payload = {
+        title: $("pm-name").value.trim(),
+        description: $("pm-desc").value.trim() || null,
+        status: $("pm-status").value,
+        start_date: $("pm-start").value,
+        due_date: $("pm-due").value,
+        due_date_revised: $("pm-revised").value || null,
+        progress_pct: +$("pm-pct").value,
+      };
+      if (ME && ME.role === "manager") {
+        const a = $("pm-assigned").value;
+        if (a === "both") { payload.assigned_to_both = true; payload.assigned_to = null; }
+        else if (a) { payload.assigned_to = a; payload.assigned_to_both = false; }
+      } else {
+        if (!id) { payload.assigned_to = ME.id; payload.assigned_to_both = false; }
+      }
+      let res;
+      if (id) { res = await sb.from("priorities").update(payload).eq("id", id); }
+      else { payload.created_by = ME.id; if (!payload.assigned_to && !payload.assigned_to_both) payload.assigned_to = ME.id; res = await sb.from("priorities").insert(payload); }
+      if (res.error) { err.textContent = res.error.message; err.classList.remove("hidden"); return; }
+      closePriorityModal(); renderCurrent();
+    }
+    async function exportPrioritiesPDF() {
+      const from = $("exp-from").value || null; const to = $("exp-to").value || null;
+      let q = sb.from("priorities").select("*").or('assigned_to.eq.' + VIEW_AS + ',assigned_to_both.eq.true').order("due_date");
+      if (from) q = q.gte("due_date", from);
+      if (to) q = q.lte("due_date", to);
+      const { data } = await q;
+      const rows = data || [];
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 14;
+      doc.setFontSize(14); doc.text("Priorities report", 14, y); y += 6;
+      doc.setFontSize(9); doc.text((from ? fmtDate(from) : "All") + " to " + (to ? fmtDate(to) : "All") + " · " + rows.length + " items", 14, y); y += 8;
+      rows.forEach((r) => {
+        if (y > 270) { doc.addPage(); y = 14; }
+        doc.setFontSize(11); doc.text(r.title || "Untitled", 14, y); y += 5;
+        doc.setFontSize(8);
+        doc.text("Start: " + fmtDate(r.start_date) + "  Due: " + fmtDate(r.due_date_revised || r.due_date) + "  Status: " + (STATUS_LABEL[r.status] || r.status) + "  Progress: " + (r.progress_pct || 0) + "%", 14, y); y += 4;
+        if (r.completion_note) { doc.text("Note: " + r.completion_note.slice(0, 100), 14, y); y += 4; }
+        const a = USERS.find((u) => u.id === r.created_by);
+        doc.text("Assigned by: " + (a ? a.full_name : "—"), 14, y); y += 6;
+      });
+      doc.save("priorities-" + todayISO() + ".pdf");
+    }
   </script>
 </body>
 </html>
