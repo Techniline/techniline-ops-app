@@ -4,87 +4,293 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Techniline Ops</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    .tab-active { color: #1e293b; border-color: #f97316; }
-    .tab-inactive { color: #64748b; border-color: transparent; }
-    .slider { -webkit-appearance: none; appearance: none; height: 6px; background: #e2e8f0; border-radius: 9999px; outline: none; }
-    .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 9999px; background: #f97316; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-    .slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 9999px; background: #f97316; cursor: pointer; border: 2px solid white; }
+    :root {
+      --navy: #1B3A5C;
+      --navy-hover: #254e7a;
+      --navy-soft: #E6F1FB;
+      --navy-text: #185FA5;
+      --red: #C0392B;
+      --red-soft: #FCEBEB;
+      --red-text: #A32D2D;
+      --amber: #BA7517;
+      --amber-fill: #EF9F27;
+      --amber-soft: #FAEEDA;
+      --amber-text: #854F0B;
+      --green: #0F6E56;
+      --green-fill: #1D9E75;
+      --green-soft: #E5F4EE;
+      --cream: #F8F7F3;
+      --border: #E8E6DF;
+      --text: #1B3A5C;
+      --muted: #888780;
+      --body: #5F5E5A;
+      --bg: #FBFAF7;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    .hidden { display: none !important; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select, textarea { font-family: inherit; font-size: 13px; color: var(--text); }
+    a { color: var(--navy); }
+
+    /* LOGIN */
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); }
+    .login-card { width: 100%; max-width: 380px; background: white; border: 0.5px solid var(--border); border-radius: 16px; padding: 32px; }
+    .login-title { font-size: 18px; font-weight: 700; color: var(--navy); text-align: center; margin: 0 0 4px; }
+    .login-sub { font-size: 12px; color: var(--muted); text-align: center; margin: 0 0 24px; }
+    .field { margin-bottom: 14px; }
+    .label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; outline: none; }
+    .input:focus { border-color: var(--navy); }
+    .err { display: none; color: var(--red); font-size: 12px; margin: 6px 0; }
+    .err.show { display: block; }
+
+    /* TOP BAR */
+    .topbar { background: white; border-bottom: 1px solid var(--border); }
+    .topbar-inner { max-width: 880px; margin: 0 auto; height: 56px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
+    .brand-name { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 12px; color: var(--muted); margin: 0; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .topbar-date { font-size: 12px; color: var(--muted); }
+    .topbar-link { font-size: 12px; color: var(--muted); background: none; border: none; padding: 0; }
+    .topbar-link:hover { color: var(--text); }
+    .view-switcher { font-size: 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: white; color: var(--text); }
+
+    /* TAB BAR */
+    .tabbar { background: white; border-bottom: 1px solid var(--border); }
+    .tabbar-inner { max-width: 880px; margin: 0 auto; padding: 0 8px; display: flex; }
+    .tab-btn { flex: 1; padding: 14px 20px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
+    .tab-btn svg { width: 15px; height: 15px; }
+    .tab-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--navy); color: white; font-size: 11px; font-weight: 700; }
+    .tab-badge.hidden { display: none !important; }
+
+    /* LAYOUT */
+    .main { max-width: 880px; margin: 0 auto; padding: 20px; }
+    .empty { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    /* SECTION HEADER */
+    .section-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+    .section-title { font-size: 15px; font-weight: 700; color: var(--navy); margin: 0; }
+    .section-meta { font-size: 12px; color: var(--muted); }
+
+    /* SUMMARY ROW (notifications) */
+    .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+    .sum-card { background: var(--cream); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .sum-num { font-size: 24px; font-weight: 700; line-height: 1.1; color: var(--navy); }
+    .sum-num.red { color: var(--red); }
+    .sum-num.green { color: var(--green); }
+    .sum-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 6px; }
+
+    /* NOTIFICATION CARDS */
+    .notif-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 10px; border-left: 4px solid var(--border); }
+    .notif-card.left-red { border-left-color: var(--red); }
+    .notif-card.left-amber { border-left-color: var(--amber-fill); }
+    .notif-card.left-navy { border-left-color: var(--navy); }
+    .notif-card.left-green { border-left-color: var(--green-fill); }
+    .notif-card.done { opacity: 0.6; border-left-color: var(--border); }
+    .notif-row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .notif-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0 0 4px; }
+    .notif-detail { font-size: 13px; color: var(--body); margin: 0; }
+    .notif-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .notif-detailbox { margin-top: 10px; background: var(--cream); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--body); }
+    .notif-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .notif-actions .spacer { flex: 1; }
+
+    /* TYPE PILLS */
+    .pill { display: inline-block; padding: 3px 9px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+    .pill-red { background: var(--red-soft); color: var(--red-text); }
+    .pill-amber { background: var(--amber-soft); color: var(--amber-text); }
+    .pill-navy { background: var(--navy-soft); color: var(--navy-text); }
+    .pill-green { background: var(--green-soft); color: var(--green); }
+    .pill-grey { background: #ECEAE4; color: var(--muted); }
+
+    /* SLA BADGE */
+    .sla { display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .sla-red { background: var(--red-soft); color: var(--red-text); }
+    .sla-amber { background: var(--amber-soft); color: var(--amber-text); }
+    .sla-green { background: var(--green-soft); color: var(--green); }
+
+    /* BUTTONS */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; border: none; line-height: 1; transition: background-color 0.15s; }
+    .btn-primary { background: var(--navy); color: white; }
+    .btn-primary:hover { background: var(--navy-hover); }
+    .btn-secondary { background: white; color: var(--navy); border: 1px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy-soft); }
+    .btn-ghost { background: none; color: var(--muted); padding: 8px 8px; }
+    .btn-ghost:hover { color: var(--body); }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-danger:hover { background: #a3271c; }
+    .btn-sm { padding: 6px 12px; font-size: 11px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* DONE row */
+    .done-row { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 12px; font-weight: 600; }
+    .done-row svg { width: 14px; height: 14px; }
+
+    /* CHECKLIST */
+    .progress-wrap { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    .progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 9999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--amber-fill); transition: width 0.3s, background-color 0.3s; }
+    .progress-fill.full { background: var(--green-fill); }
+    .task-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid var(--amber-fill); }
+    .task-card.done { border-left-color: var(--green-fill); background: #FBFCFB; }
+    .task-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .task-name { font-size: 13px; font-weight: 700; color: var(--navy); margin: 0; }
+    .task-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+    .task-status { display: inline-flex; align-items: center; gap: 5px; }
+    .task-expand { margin-top: 10px; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; background: var(--navy-soft); color: var(--navy-text); border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .tag button { background: none; border: none; color: var(--navy-text); padding: 0; line-height: 1; font-size: 14px; }
+    .tag-input-row { display: flex; gap: 6px; align-items: center; }
+    .tag-input-row .input { flex: 1; padding: 7px 10px; font-size: 12px; }
+    .tag-meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .task-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+    /* KPI cards */
+    .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px; }
+    .kpi-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; position: relative; }
+    .kpi-dot { position: absolute; top: 14px; right: 14px; width: 6px; height: 6px; border-radius: 9999px; }
+    .kpi-dot.red { background: var(--red); }
+    .kpi-dot.amber { background: var(--amber-fill); }
+    .kpi-dot.green { background: var(--green-fill); }
+    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; padding-right: 16px; }
+    .kpi-value { font-size: 28px; font-weight: 700; color: var(--navy); line-height: 1; }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.amber { color: var(--amber); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .link-list { background: var(--cream); border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .link-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--cream); border: none; width: 100%; text-align: left; border-bottom: 0.5px solid var(--border); }
+    .link-row:last-child { border-bottom: none; }
+    .link-row:hover { background: #f2f0e8; }
+    .link-row .icon { width: 16px; height: 16px; color: var(--navy); }
+    .link-row .text { flex: 1; font-size: 13px; color: var(--text); }
+    .link-row .chev { color: var(--muted); }
+
+    /* PRIORITIES */
+    .filter-chips { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .chip { padding: 5px 14px; border-radius: 9999px; font-size: 12px; color: var(--muted); background: white; border: 0.5px solid var(--border); cursor: pointer; }
+    .chip.active { background: var(--navy); color: white; border-color: var(--navy); }
+    .prio-card { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+    .prio-card.s-overdue { border-color: rgba(192, 57, 43, 0.4); }
+    .prio-card.s-at_risk { border-color: rgba(239, 159, 39, 0.4); }
+    .prio-card.s-on_track { border-color: rgba(29, 158, 117, 0.4); }
+    .prio-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .prio-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0; }
+    .prio-dates { font-size: 11px; color: var(--muted); margin: 4px 0 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .prio-dates svg { width: 11px; height: 11px; }
+    .prio-desc { font-size: 12px; color: var(--body); margin: 8px 0 0; }
+    .prio-progress-bar { height: 5px; background: var(--border); border-radius: 9999px; overflow: hidden; margin-top: 10px; }
+    .prio-progress-fill { height: 100%; }
+    .prio-progress-fill.green { background: var(--green-fill); }
+    .prio-progress-fill.amber { background: var(--amber-fill); }
+    .prio-progress-fill.red { background: var(--red); }
+    .prio-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 10px; }
+    .avatar { width: 24px; height: 24px; border-radius: 9999px; background: var(--navy); color: white; font-weight: 700; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
+    .prio-foot-left { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .prio-foot-right { display: flex; align-items: center; gap: 8px; }
+    .slider { -webkit-appearance: none; appearance: none; width: 100px; height: 4px; background: var(--border); border-radius: 9999px; outline: none; }
+    .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 9999px; background: var(--navy); cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px var(--border); }
+    .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 9999px; background: var(--navy); cursor: pointer; border: 2px solid white; }
+    .slider-pct { font-size: 11px; font-weight: 700; color: var(--navy); min-width: 32px; text-align: right; }
+    .revised-tag { display: inline-block; background: #ECEAE4; color: var(--muted); font-size: 10px; padding: 2px 7px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* MODAL */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { background: white; border-radius: 16px; max-width: 480px; width: 100%; padding: 24px; max-height: 90vh; overflow-y: auto; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .modal-title { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; }
+    .modal-close { background: none; border: none; font-size: 20px; line-height: 1; color: var(--muted); padding: 0; }
+    .modal-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .req { color: var(--red); }
+
+    /* EXPORT */
+    .export-bar { margin-top: 16px; padding: 14px 0 4px; border-top: 1px solid var(--border); }
+    .export-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+    .export-row .field { margin: 0; }
+    .export-row .input { width: 130px; }
+
+    @media (max-width: 720px) {
+      .summary-row { grid-template-columns: repeat(2, 1fr); }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .tab-btn { padding: 12px 8px; font-size: 12px; }
+      .topbar-date { display: none; }
+    }
   </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800">
+<body>
 
   <!-- LOGIN -->
-  <div id="login-screen" class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-sm bg-white rounded-2xl shadow-md p-8">
-      <h1 class="text-2xl font-bold text-center mb-1">Techniline Ops</h1>
-      <p class="text-sm text-slate-500 text-center mb-6">Sign in to continue</p>
-      <form id="login-form" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
-          <input id="login-email" type="email" required autocomplete="username"
-            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+  <div id="login-screen" class="login-wrap">
+    <div class="login-card">
+      <h1 class="login-title">Techniline Ops</h1>
+      <p class="login-sub">Sign in to continue</p>
+      <form id="login-form">
+        <div class="field">
+          <label class="label">Email</label>
+          <input id="login-email" type="email" required autocomplete="username" class="input" />
         </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
-          <input id="login-password" type="password" required autocomplete="current-password"
-            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+        <div class="field">
+          <label class="label">Password</label>
+          <input id="login-password" type="password" required autocomplete="current-password" class="input" />
         </div>
-        <p id="login-error" class="hidden text-sm text-red-600"></p>
-        <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 rounded-lg">Sign in</button>
+        <p id="login-error" class="err"></p>
+        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px; justify-content:center; margin-top:6px;">Sign in</button>
       </form>
     </div>
   </div>
 
   <!-- APP -->
   <div id="app-screen" class="hidden">
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
-      <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header class="topbar">
+      <div class="topbar-inner">
         <div>
-          <h1 class="font-semibold text-lg">Techniline Ops</h1>
-          <p id="header-user" class="text-xs text-slate-500"></p>
+          <p class="brand-name">Techniline Ops</p>
+          <p id="header-user" class="brand-sub"></p>
         </div>
-        <div class="flex items-center gap-2">
-          <select id="view-switcher" class="hidden text-sm border border-slate-300 rounded-lg px-2 py-1 bg-white">
-            <option value="self">My view (Manager)</option>
-            <option value="maricel">Maricel view</option>
-            <option value="aaron">Aaron view</option>
-          </select>
-          <button id="signout-btn" class="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
+        <div class="topbar-right">
+          <select id="view-switcher" class="view-switcher hidden"></select>
+          <span id="topbar-date" class="topbar-date"></span>
+          <button id="signout-btn" class="topbar-link">Sign out</button>
         </div>
       </div>
-      <nav class="max-w-3xl mx-auto px-2 flex">
-        <button data-tab="notifications" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-active relative">
-          <span class="inline-flex items-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg>
-            <span>Notifications</span>
-            <span id="notif-badge" class="hidden ml-1 bg-red-500 text-white text-xs font-semibold px-1.5 py-0.5 rounded-full">0</span>
-          </span>
-        </button>
-        <button data-tab="checklist" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
-          <span class="inline-flex items-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-            <span>Checklist</span>
-          </span>
-        </button>
-        <button data-tab="kpis" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
-          <span class="inline-flex items-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-            <span>KPIs</span>
-          </span>
-        </button>
-        <button data-tab="priorities" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 tab-inactive">
-          <span class="inline-flex items-center gap-1.5">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-            <span>Priorities</span>
-          </span>
-        </button>
-      </nav>
     </header>
-    <main class="max-w-3xl mx-auto px-4 py-4">
+    <nav class="tabbar">
+      <div class="tabbar-inner">
+        <button data-tab="notifications" class="tab-btn active">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg>
+          <span>Notifications</span>
+          <span id="notif-badge" class="tab-badge hidden">0</span>
+        </button>
+        <button data-tab="checklist" class="tab-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          <span>Checklist</span>
+        </button>
+        <button data-tab="kpis" class="tab-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span>KPIs</span>
+        </button>
+        <button data-tab="priorities" class="tab-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 3l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+          <span>Priorities</span>
+        </button>
+      </div>
+    </nav>
+    <main class="main">
       <section id="tab-notifications" class="tab-pane"></section>
       <section id="tab-checklist" class="tab-pane hidden"></section>
       <section id="tab-kpis" class="tab-pane hidden"></section>
@@ -93,59 +299,28 @@
   </div>
 
   <!-- Priority Modal -->
-  <div id="priority-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center px-2">
-    <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold text-lg" id="pm-title">Add priority</h2>
-        <button id="pm-close" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+  <div id="priority-modal" class="modal-bg hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" id="pm-title">Add priority</h2>
+        <button id="pm-close" class="modal-close">&times;</button>
       </div>
-      <form id="pm-form" class="space-y-3 text-sm">
+      <form id="pm-form">
         <input id="pm-id" type="hidden" />
-        <div>
-          <label class="block font-medium mb-1">Title *</label>
-          <input id="pm-name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        <div class="field"><label class="label">Title <span class="req">*</span></label><input id="pm-name" required class="input" /></div>
+        <div class="field"><label class="label">Description</label><textarea id="pm-desc" rows="2" class="input"></textarea></div>
+        <div id="pm-assigned-wrap" class="field hidden"><label class="label">Assigned to</label><select id="pm-assigned" class="input"><option value="">-- choose --</option></select></div>
+        <div class="field"><label class="label">Status</label><select id="pm-status" class="input"><option value="on_track">On track</option><option value="at_risk">At risk</option><option value="overdue">Overdue</option><option value="complete">Complete</option></select></div>
+        <div class="modal-grid-2">
+          <div class="field"><label class="label">Start <span class="req">*</span></label><input id="pm-start" type="date" required class="input" /></div>
+          <div class="field"><label class="label">Due <span class="req">*</span></label><input id="pm-due" type="date" required class="input" /></div>
         </div>
-        <div>
-          <label class="block font-medium mb-1">Description</label>
-          <textarea id="pm-desc" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
-        </div>
-        <div id="pm-assigned-wrap" class="hidden">
-          <label class="block font-medium mb-1">Assigned to</label>
-          <select id="pm-assigned" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
-            <option value="">-- choose --</option>
-          </select>
-        </div>
-        <div>
-          <label class="block font-medium mb-1">Status</label>
-          <select id="pm-status" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
-            <option value="on_track">On track</option>
-            <option value="at_risk">At risk</option>
-            <option value="overdue">Overdue</option>
-            <option value="complete">Complete</option>
-          </select>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block font-medium mb-1">Start *</label>
-            <input id="pm-start" type="date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-          </div>
-          <div>
-            <label class="block font-medium mb-1">Due *</label>
-            <input id="pm-due" type="date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-          </div>
-        </div>
-        <div>
-          <label class="block font-medium mb-1">Date revised</label>
-          <input id="pm-revised" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-        </div>
-        <div>
-          <label class="block font-medium mb-1">Progress: <span id="pm-pct-label">0%</span></label>
-          <input id="pm-pct" type="range" min="0" max="100" value="0" class="slider w-full" />
-        </div>
-        <p id="pm-error" class="hidden text-sm text-red-600"></p>
-        <div class="flex gap-2 pt-2">
-          <button type="button" id="pm-cancel" class="flex-1 py-2 border border-slate-300 rounded-lg font-medium">Cancel</button>
-          <button type="submit" class="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium">Save</button>
+        <div class="field"><label class="label">Date revised</label><input id="pm-revised" type="date" class="input" /></div>
+        <div class="field"><label class="label">Progress: <span id="pm-pct-label">0%</span></label><input id="pm-pct" type="range" min="0" max="100" value="0" class="slider" style="width:100%;" /></div>
+        <p id="pm-error" class="err"></p>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="button" id="pm-cancel" class="btn btn-secondary" style="flex:1; justify-content:center;">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Save</button>
         </div>
       </form>
     </div>
@@ -159,25 +334,22 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])));
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-    const fmtAED = (n) => n == null ? "—" : new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED", maximumFractionDigits: 0 }).format(n);
-    const fmtTime = (d) => d ? new Date(d).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : "—";
+    const fmtAED = (n) => n == null ? "—" : new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED", maximumFractionDigits: 2 }).format(n);
+    const fmtTimeUAE = (d) => { if(!d) return "—"; const opts={timeZone:"Asia/Dubai",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",hour12:false}; const parts=new Intl.DateTimeFormat("en-GB",opts).formatToParts(new Date(d)); const get=(t)=>parts.find(p=>p.type===t)?.value||""; return get("day")+" "+get("month")+" · "+get("hour")+":"+get("minute"); };
     const todayISO = () => new Date().toISOString().slice(0, 10);
+    const isFallbackRef = (s) => !!s && (s.includes("==") || s.startsWith("CLAIM-"));
+    const isCancelledSubject = (s) => !!s && /cancelled/i.test(s);
+    const validAed = (n) => n != null && Number(n) >= 100;
 
-    let SESSION = null;
-    let ME = null;
-    let USERS = [];
-    let VIEW_AS = null;
-    let CURRENT_TAB = "notifications";
+    let SESSION = null, ME = null, USERS = [], VIEW_AS = null, CURRENT_TAB = "notifications";
 
-    // ---------- AUTH ----------
     $("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const err = $("login-error");
-      err.classList.add("hidden");
+      const err = $("login-error"); err.classList.remove("show");
       const email = $("login-email").value.trim();
       const password = $("login-password").value;
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) { err.textContent = error.message; err.classList.remove("hidden"); return; }
+      if (error) { err.textContent = error.message; err.classList.add("show"); return; }
       await bootstrap(data.session);
     });
     $("signout-btn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
@@ -191,6 +363,7 @@
       $("login-screen").classList.add("hidden");
       $("app-screen").classList.remove("hidden");
       $("header-user").textContent = ME.full_name + " · " + (ME.role === "manager" ? "Manager" : "Staff");
+      $("topbar-date").textContent = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
       if (ME.role === "manager") {
         const sw = $("view-switcher");
         sw.classList.remove("hidden");
@@ -198,25 +371,14 @@
           USERS.filter((u) => u.id !== ME.id).map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + ' view</option>').join("");
         sw.addEventListener("change", (e) => { VIEW_AS = e.target.value; renderCurrent(); });
       }
-      setupTabs();
-      setupPriorityModal();
-      renderCurrent();
+      setupTabs(); setupPriorityModal(); renderCurrent();
     }
-
     sb.auth.getSession().then(({ data }) => { if (data.session) bootstrap(data.session); });
 
-    function setupTabs() {
-      document.querySelectorAll(".tab-btn").forEach((b) => {
-        b.addEventListener("click", () => switchTab(b.dataset.tab));
-      });
-    }
+    function setupTabs() { document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab))); }
     function switchTab(name) {
       CURRENT_TAB = name;
-      document.querySelectorAll(".tab-btn").forEach((b) => {
-        const on = b.dataset.tab === name;
-        b.classList.toggle("tab-active", on);
-        b.classList.toggle("tab-inactive", !on);
-      });
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
       document.querySelectorAll(".tab-pane").forEach((p) => p.classList.add("hidden"));
       $("tab-" + name).classList.remove("hidden");
       renderCurrent();
@@ -231,99 +393,161 @@
     async function updateBadge() {
       const { count } = await sb.from("expected_actions").select("id", { count: "exact", head: true })
         .eq("assigned_to", VIEW_AS).eq("status", "open");
-      const badge = $("notif-badge");
-      if (count && count > 0) { badge.textContent = count; badge.classList.remove("hidden"); }
-      else { badge.classList.add("hidden"); }
+      const b = $("notif-badge");
+      if (count && count > 0) { b.textContent = count; b.classList.remove("hidden"); }
+      else b.classList.add("hidden");
     }
 
     // ---------- NOTIFICATIONS ----------
     const URGENCY = { shortage_claim: 1, po_cancellation: 1, dispute_update: 2, vendor_po: 3, remittance: 4, return_processed: 4 };
-    const TYPE_LABEL = { shortage_claim: "Shortage claim", po_cancellation: "PO cancelled", vendor_po: "Vendor PO", dispute_update: "Dispute update", remittance: "Remittance advice", return_processed: "Return processed" };
-    const TYPE_BORDER = { shortage_claim: "border-red-400", po_cancellation: "border-red-400", dispute_update: "border-amber-400", vendor_po: "border-amber-400", remittance: "border-blue-400", return_processed: "border-blue-400" };
-    const TYPE_BADGE = { shortage_claim: "bg-red-100 text-red-700", po_cancellation: "bg-red-100 text-red-700", dispute_update: "bg-amber-100 text-amber-700", vendor_po: "bg-amber-100 text-amber-700", remittance: "bg-blue-100 text-blue-700", return_processed: "bg-blue-100 text-blue-700" };
+    const TYPE_LABEL = { shortage_claim: "Shortage claim", po_cancellation: "PO cancelled", vendor_po: "Vendor PO", dispute_update: "Dispute", remittance: "Remittance", return_processed: "Return" };
+    const TYPE_PILL = { shortage_claim: "pill-red", po_cancellation: "pill-amber", vendor_po: "pill-amber", dispute_update: "pill-red", remittance: "pill-navy", return_processed: "pill-navy" };
+    const TYPE_LEFT = { shortage_claim: "left-red", po_cancellation: "left-amber", vendor_po: "left-amber", dispute_update: "left-red", remittance: "left-navy", return_processed: "left-navy" };
 
     async function renderNotifications() {
       const pane = $("tab-notifications");
-      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
-      const { data, error } = await sb.from("expected_actions").select("*")
-        .eq("assigned_to", VIEW_AS).order("email_received_at", { ascending: false }).limit(200);
-      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
+      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
+      const { data, error } = await sb.from("expected_actions").select("*").eq("assigned_to", VIEW_AS).order("email_received_at", { ascending: false }).limit(200);
+      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
       const rows = data || [];
+      // Auto-action cancelled shortage claims
+      const toAutoAction = rows.filter((r) => r.status === "open" && r.type === "shortage_claim" && isCancelledSubject(r.email_subject));
+      if (toAutoAction.length) {
+        await sb.from("expected_actions").update({ status: "actioned", actioned_at: new Date().toISOString() }).in("id", toAutoAction.map((r) => r.id));
+        toAutoAction.forEach((r) => { r.status = "actioned"; r.actioned_at = new Date().toISOString(); });
+      }
       const open = rows.filter((r) => r.status === "open");
       const done = rows.filter((r) => r.status !== "open");
       open.sort((a, b) => (URGENCY[a.type] || 9) - (URGENCY[b.type] || 9));
-      const counts = {};
-      for (const r of open) counts[r.type] = (counts[r.type] || 0) + 1;
-      const sumBar = '<div class="flex flex-wrap gap-2 mb-3">' +
-        Object.keys(TYPE_LABEL).map((t) => {
-          const c = counts[t] || 0;
-          if (!c) return "";
-          return '<span class="text-xs px-2 py-1 rounded-full ' + TYPE_BADGE[t] + '">' + TYPE_LABEL[t] + ': ' + c + '</span>';
-        }).join("") + '</div>';
-      const emptyMsg = open.length === 0 ? '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">Nothing needs action right now.</div>' : "";
-      pane.innerHTML = sumBar + emptyMsg +
-        '<div class="space-y-3">' + open.map(renderNotifCard).join("") + '</div>' +
-        (done.length ? '<h3 class="text-xs uppercase tracking-wide text-slate-400 mt-6 mb-2">Done</h3><div class="space-y-2">' + done.slice(0, 15).map(renderDoneCard).join("") + '</div>' : "");
+
+      // Summary 4 cards: urgent | needs action | informational | done today
+      const urgent = open.filter((r) => r.type === "shortage_claim" || r.type === "dispute_update" || r.type === "po_cancellation").length;
+      const needs = open.filter((r) => r.type === "vendor_po").length;
+      const info = open.filter((r) => r.type === "remittance" || r.type === "return_processed").length;
+      const todayStr = new Date().toDateString();
+      const doneToday = done.filter((r) => r.actioned_at && new Date(r.actioned_at).toDateString() === todayStr).length;
+      const sumCard = (n, label, tone) => '<div class="sum-card"><div class="sum-num ' + tone + '">' + n + '</div><div class="sum-label">' + label + '</div></div>';
+      const summary = '<div class="summary-row">' +
+        sumCard(urgent, "Urgent", urgent > 0 ? "red" : "green") +
+        sumCard(needs, "Needs action", needs > 0 ? "" : "green") +
+        sumCard(info, "Informational", "") +
+        sumCard(doneToday, "Done today", "green") +
+      '</div>';
+
+      const emptyMsg = open.length === 0 ? '<div class="empty">Nothing needs action right now.</div>' : "";
+      let html = summary + emptyMsg + '<div>' + open.map(renderNotifCard).join("") + '</div>';
+      if (done.length) {
+        html += '<h3 style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin:22px 0 10px">Done</h3>' +
+          '<div>' + done.slice(0, 15).map(renderDoneCard).join("") + '</div>';
+      }
+      pane.innerHTML = html;
       attachNotifHandlers();
     }
+
+    function buildNotifContent(r) {
+      const type = r.type;
+      const subject = r.email_subject || "";
+      const refDisp = isFallbackRef(r.ref_number) ? null : r.ref_number;
+      const refFallback = isFallbackRef(r.ref_number) ? r.ref_number : null;
+      const aedOk = validAed(r.aed_amount);
+      let title = subject || TYPE_LABEL[type] || type;
+      let detail = "";
+      let detailBox = "";
+      if (type === "vendor_po") {
+        const po = r.po_number || refDisp || r.ref_number || "—";
+        title = "New PO: " + po;
+        detail = "Vendor Central · Confirm within 2 days";
+      } else if (type === "shortage_claim") {
+        const cancelled = isCancelledSubject(subject);
+        if (cancelled) {
+          title = "Shortage claim cancelled — no action needed";
+          detail = "Cancellation acknowledged · No further steps";
+        } else {
+          title = "Shortage deduction — " + (refDisp || "see Vendor Central");
+          const parts = [];
+          parts.push(aedOk ? fmtAED(r.aed_amount) : "Amount: check Vendor Central");
+          parts.push("Deducted from next payment");
+          if (r.invoice_ref) parts.push("Invoice: " + r.invoice_ref);
+          detail = parts.join(" · ");
+          if (refFallback) {
+            detailBox = 'Ref: <code style="font-family:monospace">' + esc(refFallback) + '</code> — full details in Vendor Central';
+          }
+        }
+      } else if (type === "po_cancellation") {
+        const po = r.po_number || refDisp || r.ref_number || "—";
+        title = "PO cancellation — " + po;
+        detail = "Do not ship · Acknowledge receipt";
+      } else if (type === "remittance") {
+        title = "Payment received — " + (refDisp || r.ref_number || "—");
+        detail = "Payment# " + (refDisp || r.ref_number || "—") + " · Reconcile against SOA";
+      } else if (type === "return_processed") {
+        title = "Return processed — " + (refDisp || r.ref_number || "—");
+        detail = (aedOk ? fmtAED(r.aed_amount) + " refund" : "Refund posted") + " · Log SRT/PRT reference";
+      } else if (type === "dispute_update") {
+        title = "Dispute update — " + (refDisp || r.ref_number || "—");
+        detail = "Vendor Central · Update status";
+      }
+      return { title, detail, detailBox };
+    }
+
     function renderNotifCard(r) {
-      const border = TYPE_BORDER[r.type] || "border-slate-300";
-      const badge = TYPE_BADGE[r.type] || "bg-slate-100 text-slate-700";
+      const leftCls = TYPE_LEFT[r.type] || "";
+      const pillCls = TYPE_PILL[r.type] || "pill-grey";
       const label = TYPE_LABEL[r.type] || r.type;
-      let body = '';
-      if (r.type === "vendor_po") {
-        body = '<p class="text-sm text-slate-600">PO ' + esc(r.po_number || r.ref_number || "—") + (r.asin ? ' · ASIN ' + esc(r.asin) : '') + '</p>';
-      } else if (r.type === "po_cancellation") {
-        body = '<p class="text-sm text-slate-600">PO ' + esc(r.po_number || r.ref_number || "—") + (r.asin ? ' · ASIN ' + esc(r.asin) : '') +
-          (r.qty_confirmed != null ? ' · Confirmed ' + r.qty_confirmed : '') +
-          (r.qty_cancelled != null ? ' · Cancelled ' + r.qty_cancelled : '') + '</p>';
-      } else if (r.type === "shortage_claim") {
-        body = '<p class="text-sm text-slate-600">Doc ' + esc(r.ref_number || "—") + (r.invoice_ref ? ' · Invoice ' + esc(r.invoice_ref) : '') +
-          (r.aed_amount ? ' · ' + fmtAED(r.aed_amount) : '') + '</p>';
-      } else if (r.type === "remittance") {
-        body = '<p class="text-sm text-slate-600">Payment# ' + esc(r.ref_number || "—") + (r.payment_date ? ' · ' + fmtDate(r.payment_date) : '') + '</p>';
-      } else if (r.type === "dispute_update") {
-        body = '<p class="text-sm text-slate-600">Dispute ' + esc(r.ref_number || "—") + '</p>';
-      } else if (r.type === "return_processed") {
-        body = '<p class="text-sm text-slate-600">Ref ' + esc(r.ref_number || "—") + '</p>';
-      }
-      let actions = '';
+      const { title, detail, detailBox } = buildNotifContent(r);
+      const cancelled = r.type === "shortage_claim" && isCancelledSubject(r.email_subject);
+
+      let sla = "";
+      if (r.type === "shortage_claim" && !cancelled) sla = '<span class="sla sla-red">Act within 7 days</span>';
+      else if (r.type === "vendor_po") sla = '<span class="sla sla-amber">2 days to confirm</span>';
+      else if (r.type === "po_cancellation") sla = '<span class="sla sla-amber">Acknowledge ASAP</span>';
+      else if (r.type === "remittance" || r.type === "return_processed") sla = '<span class="sla sla-green">No urgent action</span>';
+      else if (r.type === "dispute_update") sla = '<span class="sla sla-red">Review today</span>';
+
+      let actions = "";
       const aid = esc(r.id);
-      if (r.type === "vendor_po") {
-        actions = '<button data-act="ack" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg">Action PO ' + esc(r.po_number || "—") + '</button>';
+      if (cancelled) {
+        actions = '<span class="sla sla-green">Cancelled — no action needed</span>';
+      } else if (r.type === "vendor_po") {
+        const po = r.po_number || r.ref_number || "PO";
+        actions = '<button data-act="ack" data-id="' + aid + '" class="btn btn-primary btn-sm">Action PO ' + esc(po) + '</button>';
       } else if (r.type === "shortage_claim") {
-        actions = '<button data-act="dispute" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-red-500 text-white rounded-lg">Raise dispute</button>' +
-          '<button data-act="accept" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg">Accept</button>';
+        actions = '<button data-act="dispute" data-id="' + aid + '" class="btn btn-danger btn-sm">Raise dispute</button>' +
+                  '<button data-act="accept" data-id="' + aid + '" class="btn btn-secondary btn-sm">Accept</button>';
       } else if (r.type === "po_cancellation") {
-        actions = '<button data-act="confirm-cancel" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg">Confirmed will not ship</button>' +
-          '<button data-act="escalate" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-red-500 text-white rounded-lg">Already shipped, escalate</button>';
+        actions = '<button data-act="confirm-cancel" data-id="' + aid + '" class="btn btn-primary btn-sm">Confirmed will not ship</button>' +
+                  '<button data-act="escalate" data-id="' + aid + '" class="btn btn-danger btn-sm">Already shipped, escalate</button>';
       } else if (r.type === "remittance") {
-        actions = '<button data-act="reconcile" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-blue-500 text-white rounded-lg">Mark reconciled</button>';
+        actions = '<button data-act="reconcile" data-id="' + aid + '" class="btn btn-primary btn-sm">Mark reconciled</button>';
       } else {
-        actions = '<button data-act="ack" data-id="' + aid + '" class="text-xs px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg">Mark done</button>';
+        actions = '<button data-act="ack" data-id="' + aid + '" class="btn btn-secondary btn-sm">Mark done</button>';
       }
-      return '<div class="bg-white rounded-xl shadow-sm border-l-4 ' + border + ' p-3">' +
-        '<div class="flex items-start justify-between gap-2 mb-1">' +
-          '<span class="text-xs font-medium px-2 py-0.5 rounded-full ' + badge + '">' + label + '</span>' +
-          '<span class="text-xs text-slate-400">' + fmtTime(r.email_received_at) + '</span>' +
-        '</div>' +
-        '<p class="font-medium text-sm">' + esc(r.email_subject || "(no subject)") + '</p>' +
-        body +
-        '<div class="flex flex-wrap gap-2 mt-2">' + actions + '</div>' +
+
+      const detailBoxHtml = detailBox ? '<div class="notif-detailbox">' + detailBox + '</div>' : '';
+
+      return '<div class="notif-card ' + leftCls + '">' +
+        '<div class="notif-row1"><span class="pill ' + pillCls + '">' + label + '</span><span class="notif-time">' + fmtTimeUAE(r.email_received_at) + '</span></div>' +
+        '<p class="notif-title">' + esc(title) + '</p>' +
+        '<p class="notif-detail">' + esc(detail) + '</p>' +
+        detailBoxHtml +
+        '<div class="notif-actions">' + actions + '<span class="spacer"></span>' + sla + '</div>' +
       '</div>';
     }
+
     function renderDoneCard(r) {
-      return '<div class="bg-slate-50 border border-slate-200 rounded-lg p-2 opacity-70">' +
-        '<div class="flex items-center justify-between gap-2 text-xs">' +
-          '<span class="line-through text-slate-500">' + esc(TYPE_LABEL[r.type] || r.type) + ' · ' + esc(r.ref_number || r.po_number || "—") + '</span>' +
-          '<span class="text-slate-400">' + fmtTime(r.actioned_at || r.email_received_at) + '</span>' +
-        '</div></div>';
+      const label = TYPE_LABEL[r.type] || r.type;
+      const ref = (r.po_number || (isFallbackRef(r.ref_number) ? "—" : r.ref_number) || "—");
+      return '<div class="notif-card done">' +
+        '<div class="notif-row1"><span class="pill pill-grey">' + label + '</span><span class="notif-time">' + fmtTimeUAE(r.actioned_at || r.email_received_at) + '</span></div>' +
+        '<p class="notif-title" style="color:var(--muted);text-decoration:line-through">' + esc(label + " · " + ref) + '</p>' +
+        '<span class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Actioned at ' + fmtTimeUAE(r.actioned_at) + '</span>' +
+      '</div>';
     }
+
     function attachNotifHandlers() {
       document.querySelectorAll('#tab-notifications [data-act]').forEach((btn) => {
         btn.addEventListener("click", async () => {
-          const id = btn.dataset.id; const act = btn.dataset.act;
-          btn.disabled = true; btn.textContent = "…";
+          const id = btn.dataset.id; btn.disabled = true; btn.textContent = "…";
           await sb.from("expected_actions").update({ status: "actioned", actioned_at: new Date().toISOString() }).eq("id", id);
           renderCurrent();
         });
@@ -334,23 +558,22 @@
     const MULTI_TAG_TITLES = ["SRT / PRT backlog clearance", "Vendor invoicing", "Appointment booking"];
     async function renderChecklist() {
       const pane = $("tab-checklist");
-      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
       const today = todayISO();
       const { data: tasks, error } = await sb.from("daily_tasks")
         .select("id, task_def_id, status, task_date, source, task_definitions(title, evidence_type, evidence_hint, eod_time)")
         .eq("assigned_to", VIEW_AS).eq("task_date", today).order("created_at");
-      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
+      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
       const rows = tasks || [];
       const total = rows.length;
       const done = rows.filter((t) => t.status === "submitted" || t.status === "verified").length;
       const pct = total ? Math.round((done / total) * 100) : 0;
-      const header = '<div class="mb-3">' +
-        '<div class="flex items-center justify-between mb-1"><p class="text-sm font-medium">Today, ' + fmtDate(today) + '</p>' +
-        '<p class="text-xs text-slate-500">' + done + ' / ' + total + ' done</p></div>' +
-        '<div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden"><div class="h-full bg-orange-500" style="width:' + pct + '%"></div></div>' +
-        '</div>';
-      if (!rows.length) { pane.innerHTML = header + '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">No tasks for today.</div>'; return; }
-      pane.innerHTML = header + '<div class="space-y-3" id="checklist-list">' + rows.map(renderTaskCard).join("") + '</div>';
+      const header = '<div class="progress-wrap">' +
+        '<div class="progress-head"><h2 class="section-title">Today\'s checklist</h2><span class="section-meta">' + done + ' of ' + total + ' complete</span></div>' +
+        '<div class="progress-bar"><div class="progress-fill ' + (pct === 100 ? 'full' : '') + '" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+      if (!rows.length) { pane.innerHTML = header + '<div class="empty">No tasks for today.</div>'; return; }
+      pane.innerHTML = header + '<div id="checklist-list">' + rows.map(renderTaskCard).join("") + '</div>';
       rows.forEach((t) => attachTaskHandlers(t));
     }
     function getMode(task) {
@@ -365,21 +588,29 @@
       const title = def.title || "Task";
       const mode = getMode(t);
       if (mode === "done") {
-        return '<div class="bg-green-50 border border-green-200 rounded-xl p-3"><div class="flex items-start gap-2"><span class="text-green-600">&#10003;</span><div class="flex-1"><p class="font-medium text-green-800 text-sm line-through">' + esc(title) + '</p><p class="text-xs text-green-700 mt-0.5">Submitted</p></div></div></div>';
+        return '<div class="task-card done"><div class="task-head"><p class="task-name" style="text-decoration:line-through;color:var(--muted)">' + esc(title) + '</p><span class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Done</span></div></div>';
       }
       if (mode === "one_tap") {
-        return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><div class="flex items-start justify-between gap-3"><div class="flex-1"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(def.evidence_hint) + '</p>' : '') + '</div><button data-act="confirm" class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg whitespace-nowrap">Confirm</button></div></div>';
+        return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><button data-act="confirm" class="btn btn-secondary btn-sm">Confirm</button></div></div>';
       }
       if (mode === "multi_tag") {
-        return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5 mb-2">' + esc(def.evidence_hint) + '</p>' : '<div class="mb-2"></div>') + '<div data-role="tags" class="flex flex-wrap gap-1.5 mb-2"></div><div class="flex gap-2"><input data-role="tag-input" placeholder="Enter ID, press Enter" class="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /><button data-act="submit-tags" disabled class="text-xs bg-orange-500 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg">Submit</button></div></div>';
+        return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><span class="pill pill-amber">Open</span></div>' +
+          '<div class="task-expand">' +
+            '<label class="label" style="margin-top:4px">Add references</label>' +
+            '<div class="tag-row" data-role="tags"></div>' +
+            '<div class="tag-input-row"><input data-role="tag-input" placeholder="Enter ID, press Enter" class="input" /><button type="button" data-act="add-tag" class="btn btn-secondary btn-sm">Add</button></div>' +
+            '<p class="tag-meta" data-role="count">0 added</p>' +
+            '<div class="task-actions"><button data-act="none-today" class="btn btn-ghost">Nothing to action today</button><div style="flex:1"></div><button data-act="submit-tags" disabled class="btn btn-primary btn-sm">Submit</button></div>' +
+          '</div></div>';
       }
-      return '<div id="task-' + t.id + '" class="bg-white rounded-xl shadow-sm p-3"><p class="font-medium text-sm">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(def.evidence_hint) + '</p>' : '') + '<button data-act="expand" class="mt-2 text-xs text-orange-600">Add note</button><div data-role="input-wrap" class="hidden mt-2"><textarea rows="2" class="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg"></textarea><button data-act="submit-text" disabled class="mt-2 text-xs bg-orange-500 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg">Submit</button></div></div>';
+      return '<div id="task-' + t.id + '" class="task-card"><div class="task-head"><div style="flex:1"><p class="task-name">' + esc(title) + '</p>' + (def.evidence_hint ? '<p class="task-hint">' + esc(def.evidence_hint) + '</p>' : '') + '</div><span class="pill pill-amber">Open</span></div>' +
+        '<div class="task-expand"><button data-act="expand" class="btn btn-ghost" style="padding-left:0">Add note</button><div data-role="input-wrap" class="hidden"><textarea rows="2" class="input"></textarea><div class="task-actions"><div style="flex:1"></div><button data-act="submit-text" disabled class="btn btn-primary btn-sm">Submit</button></div></div></div></div>';
     }
     function attachTaskHandlers(t) {
       const card = $("task-" + t.id); if (!card) return;
       const mode = getMode(t);
       if (mode === "one_tap") {
-        card.querySelector('[data-act="confirm"]').addEventListener("click", () => submitTask(t.id, "one_tap"));
+        card.querySelector('[data-act="confirm"]').addEventListener("click", () => submitTask(t.id));
       } else if (mode === "text") {
         const exp = card.querySelector('[data-act="expand"]');
         const wrap = card.querySelector('[data-role="input-wrap"]');
@@ -387,24 +618,30 @@
         const sub = card.querySelector('[data-act="submit-text"]');
         exp.addEventListener("click", () => { exp.classList.add("hidden"); wrap.classList.remove("hidden"); ta.focus(); });
         ta.addEventListener("input", () => { sub.disabled = !ta.value.trim(); });
-        sub.addEventListener("click", () => submitTask(t.id, "text", { note: ta.value.trim() }));
+        sub.addEventListener("click", () => submitTask(t.id));
       } else if (mode === "multi_tag") {
         const tagsWrap = card.querySelector('[data-role="tags"]');
         const input = card.querySelector('[data-role="tag-input"]');
         const sub = card.querySelector('[data-act="submit-tags"]');
+        const addBtn = card.querySelector('[data-act="add-tag"]');
+        const noneBtn = card.querySelector('[data-act="none-today"]');
+        const countEl = card.querySelector('[data-role="count"]');
         const tags = [];
-        const renderTags = () => {
-          tagsWrap.innerHTML = tags.map((tg, i) => '<span class="inline-flex items-center gap-1 bg-orange-100 text-orange-800 text-xs px-2 py-0.5 rounded-full">' + esc(tg) + '<button data-i="' + i + '" class="text-orange-600 hover:text-orange-900">&times;</button></span>').join("");
-          tagsWrap.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { tags.splice(+b.dataset.i, 1); renderTags(); sub.disabled = !tags.length; }));
+        const render = () => {
+          tagsWrap.innerHTML = tags.map((tg, i) => '<span class="tag">' + esc(tg) + '<button data-i="' + i + '">&times;</button></span>').join("");
+          tagsWrap.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { tags.splice(+b.dataset.i, 1); render(); }));
+          countEl.textContent = tags.length + " added";
           sub.disabled = !tags.length;
+          sub.textContent = tags.length ? ("Submit " + tags.length + " ref" + (tags.length === 1 ? "" : "s")) : "Submit";
         };
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = input.value.trim().replace(/,$/, ""); if (v) { tags.push(v); input.value = ""; renderTags(); } }
-        });
-        sub.addEventListener("click", () => submitTask(t.id, "tags", { tags }));
+        const addTag = () => { const v = input.value.trim().replace(/,$/, ""); if (v) { tags.push(v); input.value = ""; render(); } };
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } });
+        addBtn.addEventListener("click", addTag);
+        noneBtn.addEventListener("click", () => submitTask(t.id));
+        sub.addEventListener("click", () => submitTask(t.id));
       }
     }
-    async function submitTask(id, kind, payload) {
+    async function submitTask(id) {
       await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", id);
       renderCurrent();
     }
@@ -412,7 +649,7 @@
     // ---------- KPIs ----------
     async function renderKPIs() {
       const pane = $("tab-kpis");
-      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
       const userId = VIEW_AS;
       const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
       const [posR, shortR, retR, dispR] = await Promise.all([
@@ -422,54 +659,71 @@
         sb.from("disputes").select("id", { count: "exact", head: true }).neq("dispute_status", "resolved").lt("created_at", threeDaysAgo),
       ]);
       const posPending = posR.count || 0;
-      const aedAtRisk = (shortR.data || []).reduce((s, r) => s + (Number(r.aed_amount) || 0), 0);
+      const aedAtRisk = (shortR.data || []).reduce((s, r) => s + (validAed(r.aed_amount) ? Number(r.aed_amount) : 0), 0);
       const returnsBacklog = retR.count || 0;
       const disputesOld = dispR.count || 0;
       const reconciliationGaps = 0;
-      const card = (label, value, color, sub) => {
-        const dot = color === "red" ? "bg-red-500" : color === "amber" ? "bg-amber-400" : "bg-green-500";
-        return '<div class="bg-white rounded-xl shadow-sm p-4"><div class="flex items-center gap-2 mb-1"><span class="w-2.5 h-2.5 rounded-full ' + dot + '"></span><p class="text-xs text-slate-500 uppercase tracking-wide">' + label + '</p></div><p class="text-2xl font-semibold">' + value + '</p>' + (sub ? '<p class="text-xs text-slate-400 mt-0.5">' + sub + '</p>' : '') + '</div>';
-      };
+
+      const card = (label, value, color, sub) => '<div class="kpi-card"><span class="kpi-dot ' + color + '"></span><div class="kpi-label">' + label + '</div><div class="kpi-value ' + color + '">' + value + '</div>' + (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
+
+      const updatedAt = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Dubai" });
       pane.innerHTML =
-        '<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">' +
-          card("POs pending", posPending, posPending > 5 ? "amber" : posPending > 0 ? "amber" : "green") +
+        '<div class="section-h"><h2 class="section-title">Live KPIs</h2><span class="section-meta">Updated ' + updatedAt + '</span></div>' +
+        '<div class="kpi-row">' +
+          card("POs pending", posPending, posPending > 0 ? "amber" : "green") +
           card("AED at risk", fmtAED(aedAtRisk), aedAtRisk > 0 ? "red" : "green") +
           card("Returns backlog", returnsBacklog, returnsBacklog > 0 ? "amber" : "green") +
           card("Disputes > 3 days", disputesOld, disputesOld > 0 ? "red" : "green") +
           card("Reconciliation gaps", reconciliationGaps, "green", "Coming soon") +
         '</div>' +
-        '<div class="bg-white rounded-xl shadow-sm divide-y divide-slate-100">' +
-          '<button data-link="notifications" class="w-full flex items-center justify-between p-3 text-left hover:bg-slate-50"><span class="text-sm">' + (posPending + returnsBacklog) + ' notifications need action</span><span class="text-orange-600 text-sm">Open &rarr;</span></button>' +
-          '<button data-link="checklist" class="w-full flex items-center justify-between p-3 text-left hover:bg-slate-50"><span class="text-sm">View today\'s checklist</span><span class="text-orange-600 text-sm">Open &rarr;</span></button>' +
+        '<div class="link-list">' +
+          '<button data-link="notifications" class="link-row"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1"/></svg><span class="text">' + (posPending + returnsBacklog) + ' notifications need action</span><span class="chev">&rsaquo;</span></button>' +
+          '<button data-link="checklist" class="link-row"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg><span class="text">View today\'s checklist</span><span class="chev">&rsaquo;</span></button>' +
         '</div>';
       pane.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.link)));
     }
 
     // ---------- PRIORITIES ----------
     const STATUS_LABEL = { on_track: "On track", at_risk: "At risk", overdue: "Overdue", complete: "Complete" };
-    const STATUS_BADGE = { on_track: "bg-green-100 text-green-700", at_risk: "bg-amber-100 text-amber-700", overdue: "bg-red-100 text-red-700", complete: "bg-slate-200 text-slate-600" };
+    const STATUS_PILL = { on_track: "pill-green", at_risk: "pill-amber", overdue: "pill-red", complete: "pill-grey" };
     const STATUS_RANK = { overdue: 0, at_risk: 1, on_track: 2, complete: 3 };
+    const STATUS_BAR = { overdue: "red", at_risk: "amber", on_track: "green", complete: "green" };
+    let PRIO_FILTER = "all";
+
     async function renderPriorities() {
       const pane = $("tab-priorities");
-      pane.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+      pane.innerHTML = '<p style="font-size:13px;color:var(--muted)">Loading…</p>';
       const userId = VIEW_AS;
       const { data, error } = await sb.from("priorities").select("*").or('assigned_to.eq.' + userId + ',assigned_to_both.eq.true').neq("status", "complete").order("due_date");
-      if (error) { pane.innerHTML = '<p class="text-sm text-red-600">' + esc(error.message) + '</p>'; return; }
-      const rows = (data || []).sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
-      const topBar = '<div class="flex items-center justify-between mb-3"><h2 class="font-semibold text-sm">My priorities</h2><button id="add-priority-btn" class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg">+ Add priority</button></div>';
-      const cards = rows.length === 0 ? '<div class="bg-white rounded-xl p-6 text-center text-sm text-slate-500">No active priorities.</div>' : '<div class="space-y-3">' + rows.map(renderPriorityCard).join("") + '</div>';
-      const exportBar = '<div class="bg-white rounded-xl shadow-sm p-3 mt-4"><p class="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">Export for appraisal</p><div class="flex flex-wrap items-end gap-2"><div><label class="block text-xs text-slate-500 mb-0.5">From</label><input id="exp-from" type="date" class="px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /></div><div><label class="block text-xs text-slate-500 mb-0.5">To</label><input id="exp-to" type="date" class="px-2 py-1.5 text-sm border border-slate-300 rounded-lg" /></div><button id="exp-pdf" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg">Download PDF</button></div></div>';
-      pane.innerHTML = topBar + cards + exportBar;
+      if (error) { pane.innerHTML = '<p style="color:var(--red);font-size:13px">' + esc(error.message) + '</p>'; return; }
+      let rows = (data || []).sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
+      if (PRIO_FILTER !== "all") rows = rows.filter((r) => r.status === PRIO_FILTER);
+
+      const chip = (val, label) => '<button class="chip ' + (PRIO_FILTER === val ? "active" : "") + '" data-filter="' + val + '">' + label + '</button>';
+      const header = '<div class="section-h"><h2 class="section-title">Priorities</h2><button id="add-priority-btn" class="btn btn-primary btn-sm">+ Add priority</button></div>' +
+        '<div class="filter-chips">' + chip("all", "All") + chip("overdue", "Overdue") + chip("at_risk", "At risk") + chip("on_track", "On track") + '</div>';
+
+      const cards = rows.length === 0 ? '<div class="empty">No priorities matching this filter.</div>' : rows.map(renderPriorityCard).join("");
+
+      const exportBar = '<div class="export-bar">' +
+        '<div class="section-h" style="margin-bottom:8px"><h3 class="section-title" style="font-size:13px">Export for appraisal</h3></div>' +
+        '<div class="export-row">' +
+          '<div class="field"><label class="label">From</label><input id="exp-from" type="date" class="input" /></div>' +
+          '<div class="field"><label class="label">To</label><input id="exp-to" type="date" class="input" /></div>' +
+          '<button id="exp-pdf" class="btn btn-secondary">📄 Download PDF</button>' +
+        '</div></div>';
+
+      pane.innerHTML = header + '<div>' + cards + '</div>' + exportBar;
       $("add-priority-btn").addEventListener("click", () => openPriorityModal());
       $("exp-pdf").addEventListener("click", exportPrioritiesPDF);
+      pane.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { PRIO_FILTER = b.dataset.filter; renderPriorities(); }));
       pane.querySelectorAll('[data-prio-slider]').forEach((s) => {
         s.addEventListener("input", (e) => {
           const lbl = pane.querySelector('[data-pct="' + s.dataset.prioSlider + '"]');
           if (lbl) lbl.textContent = e.target.value + "%";
         });
         s.addEventListener("change", async (e) => {
-          const id = s.dataset.prioSlider; const v = +e.target.value;
-          await sb.from("priorities").update({ progress_pct: v }).eq("id", id);
+          await sb.from("priorities").update({ progress_pct: +e.target.value }).eq("id", s.dataset.prioSlider);
         });
       });
       pane.querySelectorAll('[data-prio-edit]').forEach((b) => {
@@ -489,22 +743,27 @@
       const fullName = assignee ? assignee.full_name : "Unknown";
       const pct = r.progress_pct ?? 0;
       const due = r.due_date_revised || r.due_date;
-      return '<div class="bg-white rounded-xl shadow-sm p-3">' +
-        '<div class="flex items-start justify-between gap-2 mb-1">' +
-          '<div class="flex-1"><p class="font-medium text-sm">' + esc(r.title) + '</p>' +
-          '<p class="text-xs text-slate-500 mt-0.5">' + fmtDate(r.start_date) + ' &rarr; ' + fmtDate(due) + (r.due_date_revised ? ' <span class="text-amber-600">(revised)</span>' : '') + '</p></div>' +
-          '<span class="text-xs px-2 py-0.5 rounded-full ' + (STATUS_BADGE[r.status] || 'bg-slate-100') + '">' + (STATUS_LABEL[r.status] || r.status) + '</span>' +
+      const barCls = STATUS_BAR[r.status] || "green";
+      return '<div class="prio-card s-' + (r.status || "on_track") + '">' +
+        '<div class="prio-head"><div style="flex:1"><p class="prio-title">' + esc(r.title) + '</p>' +
+          '<div class="prio-dates">' +
+            '<span>📅 Start ' + fmtDate(r.start_date) + '</span>' +
+            '<span>⏳ Due ' + fmtDate(due) + '</span>' +
+            (r.due_date_revised ? '<span class="revised-tag">revised</span>' : '') +
+          '</div></div>' +
+          '<span class="pill ' + (STATUS_PILL[r.status] || 'pill-grey') + '">' + (STATUS_LABEL[r.status] || r.status) + '</span>' +
         '</div>' +
-        (r.description ? '<p class="text-xs text-slate-600 mb-2">' + esc(r.description) + '</p>' : '') +
-        '<div class="flex items-center gap-2 mb-2">' +
-          '<input data-prio-slider="' + esc(r.id) + '" type="range" min="0" max="100" value="' + pct + '" class="slider flex-1" />' +
-          '<span class="text-xs font-medium w-10 text-right" data-pct="' + esc(r.id) + '">' + pct + '%</span>' +
-        '</div>' +
-        '<div class="flex items-center justify-between">' +
-          '<div class="flex items-center gap-1.5 text-xs text-slate-500"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">' + esc(initials) + '</span><span>Assigned by ' + esc(fullName) + '</span></div>' +
-          '<div class="flex gap-1"><button data-prio-edit="' + esc(r.id) + '" class="text-xs text-slate-500 hover:text-slate-800">Edit</button><button data-prio-complete="' + esc(r.id) + '" class="text-xs text-green-600 hover:text-green-800">Complete</button></div>' +
-        '</div>' +
-      '</div>';
+        (r.description ? '<p class="prio-desc">' + esc(r.description) + '</p>' : '') +
+        '<div class="prio-progress-bar"><div class="prio-progress-fill ' + barCls + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="prio-foot">' +
+          '<div class="prio-foot-left"><span class="avatar">' + esc(initials) + '</span><span>Assigned by ' + esc(fullName) + '</span></div>' +
+          '<div class="prio-foot-right">' +
+            '<input data-prio-slider="' + esc(r.id) + '" type="range" min="0" max="100" value="' + pct + '" class="slider" />' +
+            '<span class="slider-pct" data-pct="' + esc(r.id) + '">' + pct + '%</span>' +
+            '<button data-prio-edit="' + esc(r.id) + '" class="btn btn-ghost btn-sm">Edit</button>' +
+            '<button data-prio-complete="' + esc(r.id) + '" class="btn btn-secondary btn-sm">Complete</button>' +
+          '</div>' +
+        '</div></div>';
     }
     function setupPriorityModal() {
       $("pm-close").addEventListener("click", closePriorityModal);
@@ -523,7 +782,7 @@
       $("pm-revised").value = r ? (r.due_date_revised || "") : "";
       const pct = r ? (r.progress_pct || 0) : 0;
       $("pm-pct").value = pct; $("pm-pct-label").textContent = pct + "%";
-      $("pm-error").classList.add("hidden");
+      $("pm-error").classList.remove("show");
       const wrap = $("pm-assigned-wrap");
       if (ME && ME.role === "manager") {
         wrap.classList.remove("hidden");
@@ -538,7 +797,7 @@
     function closePriorityModal() { $("priority-modal").classList.add("hidden"); }
     async function savePriorityModal(e) {
       e.preventDefault();
-      const err = $("pm-error"); err.classList.add("hidden");
+      const err = $("pm-error"); err.classList.remove("show");
       const id = $("pm-id").value;
       const payload = {
         title: $("pm-name").value.trim(),
@@ -559,7 +818,7 @@
       let res;
       if (id) { res = await sb.from("priorities").update(payload).eq("id", id); }
       else { payload.created_by = ME.id; if (!payload.assigned_to && !payload.assigned_to_both) payload.assigned_to = ME.id; res = await sb.from("priorities").insert(payload); }
-      if (res.error) { err.textContent = res.error.message; err.classList.remove("hidden"); return; }
+      if (res.error) { err.textContent = res.error.message; err.classList.add("show"); return; }
       closePriorityModal(); renderCurrent();
     }
     async function exportPrioritiesPDF() {
