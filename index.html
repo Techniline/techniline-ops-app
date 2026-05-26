@@ -102,6 +102,18 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .dispute-pill.rejected { background: #FEE2E2; color: #991B1B; }
     .dispute-pill.resolved { background: #E0E7FF; color: #3730A3; }
     .dispute-amount { font-size: 14px; font-weight: 600; color: var(--navy); }
+    .dispute-row-wrap { margin-bottom: 10px; }
+    .dispute-row-wrap .dispute-row { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; }
+    .dispute-tickets { background: var(--bg-soft, #F8FAFC); border: 1px solid var(--border); border-top: none; border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); padding: 10px 16px; display: flex; gap: 18px; flex-wrap: wrap; }
+    .ticket-field { display: flex; align-items: center; gap: 8px; }
+    .ticket-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase; min-width: 32px; }
+    .ticket-input { font-family: 'DM Mono', monospace; font-size: 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: white; width: 160px; }
+    .ticket-input:focus { outline: none; border-color: var(--navy); }
+    .ticket-save { font-size: 11px; padding: 6px 12px; border: 1px solid var(--navy); background: white; color: var(--navy); border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; }
+    .ticket-save:hover { background: var(--navy); color: white; }
+    .ticket-ok { color: var(--green); font-size: 16px; font-weight: 700; }
+    .po-actions-header { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px 0; }
+    .po-actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
     .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
@@ -426,6 +438,8 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
         <div class="kpi-updated" id="kpi-updated">—</div>
       </div>
       <div class="kpi-grid" id="kpi-grid"><div class="loading-state">Loading KPIs…</div></div>
+      <div class="po-actions-header" id="po-actions-header" style="display:none">Today’s PO actions</div>
+      <div class="po-actions-grid" id="po-actions-grid"></div>
       <div class="kpi-links" id="kpi-links"></div>
     </div>
 
@@ -1280,6 +1294,7 @@ async function loadKPIs() {
       <span class="kpi-link-text" style="color:${openNotifs>0?'var(--red)':'inherit'}">${openNotifs} notification${openNotifs!==1?'s':''} need${openNotifs===1?'s':''} action</span>
       <svg class="kpi-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </div>`;
+  await loadPOActionsKPI();
 }
 
 // ── Priorities ─────────────────────────────────────────
@@ -1440,6 +1455,37 @@ async function exportPrioritiesPDF() {
   win.print();
 }
 
+// ── PO actions KPI ─────────────────────────────────────
+async function loadPOActionsKPI() {
+  const uid = currentUser.id;
+  const today = new Date().toISOString().split('T')[0];
+  const startIso = today + 'T00:00:00';
+  const endIso = today + 'T23:59:59.999';
+  // Query purchase_orders for today's actions by this user
+  const { data, error } = await sb.from('purchase_orders')
+    .select('outcome')
+    .eq('actioned_by', uid)
+    .gte('actioned_at', startIso)
+    .lte('actioned_at', endIso);
+  const grid = document.getElementById('po-actions-grid');
+  const header = document.getElementById('po-actions-header');
+  if (!grid || !header) return;
+  if (error) { grid.innerHTML = ''; header.style.display = 'none'; return; }
+  const rows = data || [];
+  const accepted = rows.filter(r => r.outcome === 'fully_accepted').length;
+  const partial = rows.filter(r => r.outcome === 'partially_accepted' || r.outcome === 'partially_cancelled').length;
+  const rejected = rows.filter(r => r.outcome === 'fully_cancelled').length;
+  header.style.display = 'block';
+  const cards = [
+    { label: 'POs accepted', value: accepted, dot: 'green', cls: accepted > 0 ? 'success' : 'navy' },
+    { label: 'POs partial',  value: partial,  dot: 'amber', cls: partial > 0 ? 'warning' : 'navy' },
+    { label: 'POs rejected', value: rejected, dot: 'red',   cls: rejected > 0 ? 'danger' : 'navy' }
+  ];
+  grid.innerHTML = cards.map(c =>
+    `<div class="kpi-card"><div class="kpi-dot ${c.dot}"></div><div class="kpi-label">${c.label}</div><div class="kpi-value ${c.cls}">${c.value}</div><div class="kpi-sub">Today</div></div>`
+  ).join('');
+}
+
 // ── Disputes ───────────────────────────────────────────
 let allDisputes = [];
 let currentDisputeFilter = 'all';
@@ -1483,15 +1529,78 @@ function renderDisputes(rows) {
     const k = disputeStatusKey(d);
     const gap = (d.invoice_amount_aed !== null && d.approved_amount_aed !== null && !isNaN(Number(d.invoice_amount_aed)) && !isNaN(Number(d.approved_amount_aed)))
       ? (Number(d.invoice_amount_aed) - Number(d.approved_amount_aed)).toFixed(2) : '—';
-    return `<div class="dispute-row">
-      <div class="dispute-row-main">
-        <div class="dispute-row-title">${d.dispute_number || '(no DSPT)'} · ${d.tle_invoice_number || '—'}</div>
-        <div class="dispute-row-sub">PO: ${d.po_number || '—'} · Payment: ${d.payment_number || '—'} · Raised: ${fmtDate(d.submitted_for_approval_at)}</div>
+    const srtVal = (d.srt_number || '').replace(/"/g, '&quot;');
+    const prtVal = (d.prt_number || '').replace(/"/g, '&quot;');
+    return `<div class="dispute-row-wrap">
+      <div class="dispute-row">
+        <div class="dispute-row-main">
+          <div class="dispute-row-title">${d.dispute_number || '(no DSPT)'} · ${d.tle_invoice_number || '—'}</div>
+          <div class="dispute-row-sub">PO: ${d.po_number || '—'} · Payment: ${d.payment_number || '—'} · Raised: ${fmtDate(d.submitted_for_approval_at)}</div>
+        </div>
+        <div class="dispute-amount">AED ${fmtAed(d.invoice_amount_aed)}</div>
+        <span class="dispute-pill ${k}">${disputeStatusLabel(k)}</span>
       </div>
-      <div class="dispute-amount">AED ${fmtAed(d.invoice_amount_aed)}</div>
-      <span class="dispute-pill ${k}">${disputeStatusLabel(k)}</span>
+      <div class="dispute-tickets">
+        <div class="ticket-field">
+          <label class="ticket-label">SRT</label>
+          <input type="text" class="ticket-input" id="srt-${d.id}" value="${srtVal}" placeholder="SRT number" />
+          <button class="ticket-save" onclick="saveDisputeTicket('${d.id}', 'srt')">Save</button>
+          <span class="ticket-ok" id="srt-ok-${d.id}" style="display:none">✓</span>
+        </div>
+        <div class="ticket-field">
+          <label class="ticket-label">PRT</label>
+          <input type="text" class="ticket-input" id="prt-${d.id}" value="${prtVal}" placeholder="PRT number" />
+          <button class="ticket-save" onclick="saveDisputeTicket('${d.id}', 'prt')">Save</button>
+          <span class="ticket-ok" id="prt-ok-${d.id}" style="display:none">✓</span>
+        </div>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function saveDisputeTicket(disputeId, kind) {
+  // kind is 'srt' or 'prt'
+  const input = document.getElementById(`${kind}-${disputeId}`);
+  const ok = document.getElementById(`${kind}-ok-${disputeId}`);
+  const value = (input.value || '').trim();
+  if (!value) { alert('Enter a ' + kind.toUpperCase() + ' number first.'); return; }
+  const col = kind === 'srt' ? 'srt_number' : 'prt_number';
+  const update = {};
+  update[col] = value;
+  const { error } = await sb.from('disputes').update(update).eq('id', disputeId);
+  if (error) { alert('Save failed: ' + error.message); return; }
+  // Show green tick
+  if (ok) { ok.style.display = 'inline'; setTimeout(() => { ok.style.display = 'none'; }, 2500); }
+  // Update local copy
+  const local = allDisputes.find(x => x.id === disputeId);
+  if (local) local[col] = value;
+  // If it's an SRT, try to mark a matching return_processed expected_action as actioned
+  if (kind === 'srt' && local) {
+    const invoice = local.tle_invoice_number;
+    const dsptNum = local.dispute_number;
+    if (invoice) {
+      try {
+        const matches = await sb.from('expected_actions')
+          .select('id,ref_number,invoice_ref')
+          .eq('type', 'return_processed')
+          .eq('status', 'open')
+          .or(`ref_number.eq.${invoice},invoice_ref.eq.${invoice}`);
+        const ids = (matches.data || []).map(r => r.id);
+        if (ids.length > 0) {
+          await sb.from('expected_actions').update({
+            status: 'actioned',
+            actioned_at: new Date().toISOString(),
+            actioned_note: `SRT raised — linked to dispute ${dsptNum || ''}`.trim()
+          }).in('id', ids);
+          showToast(`SRT saved · linked ${ids.length} return${ids.length>1?'s':''} as actioned`);
+          await loadNotifications();
+          await loadKPIs();
+          return;
+        }
+      } catch(e) { /* silent */ }
+    }
+  }
+  showToast((kind === 'srt' ? 'SRT' : 'PRT') + ' number saved');
 }
 
 function filterDisputes(key, btn) {
