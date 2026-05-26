@@ -178,6 +178,15 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .import-stat-value.amber { color: #D97706; }
     .import-summary-sub { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
     @media (max-width: 720px) { .import-summary-grid { grid-template-columns: repeat(2, 1fr); } }
+    .retry-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; margin-bottom: 12px; font-weight: 500; transition: background 0.15s; }
+    .retry-banner:hover { background: #FDE68A; }
+    .global-banner { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #FEF3C7; border-bottom: 1px solid #F59E0B; color: #92400E; font-size: 13px; font-weight: 500; }
+    .global-banner svg { flex-shrink: 0; }
+    .global-banner span { flex: 1; }
+    .global-banner-retry { background: #92400E; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; }
+    .global-banner-retry:hover { background: #78350F; }
+    .global-banner-close { background: none; border: none; color: #92400E; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 6px; }
+    .global-banner-close:hover { color: var(--navy); }
     .po-actions-header { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px 0; }
     .po-actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
     .tab-pane { display: none; }
@@ -844,6 +853,65 @@ let currentReturnActionId = null;
 let selectedOutcome = null;
 let selectedReturnType = null;
 
+// ── Supabase query timeout wrapper ─────────────────────
+async function sbQuery(queryPromise, fallback = [], timeout = 8000) {
+  try {
+    const result = await Promise.race([
+      queryPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+    ]);
+    return result;
+  } catch (err) {
+    console.warn('Supabase query failed or timed out:', err.message);
+    return { data: fallback, error: err };
+  }
+}
+
+function showRetryBanner(containerId, retryFn, message) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const msg = message || 'Could not load data — tap to retry';
+  el.innerHTML = '<div class="retry-banner" onclick="(' + retryFn.toString() + ')()">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>' +
+    '<span>' + msg + '</span></div>';
+}
+
+function showGlobalBanner(message, retryFn) {
+  let banner = document.getElementById('global-conn-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'global-conn-banner';
+    banner.className = 'global-banner';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+  banner.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+    '<span>' + message + '</span>' +
+    '<button class="global-banner-retry" onclick="(' + retryFn.toString() + ')()">Retry</button>' +
+    '<button class="global-banner-close" onclick="this.parentElement.remove()">×</button>';
+  banner.style.display = 'flex';
+}
+
+function hideGlobalBanner() {
+  const banner = document.getElementById('global-conn-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+async function checkSupabaseConnection() {
+  const r = await sbQuery(sb.from('users').select('id').limit(1), null, 5000);
+  if (r.error) {
+    showGlobalBanner('Connection issue — some data may not load.', async () => {
+      hideGlobalBanner();
+      await checkSupabaseConnection();
+      if (typeof initApp === 'function' && currentUser) {
+        await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes()]);
+      }
+    });
+    return false;
+  }
+  hideGlobalBanner();
+  return true;
+}
+
 // ── Auth ───────────────────────────────────────────────
 async function handleLogin() {
   const email = document.getElementById('login-email').value.trim();
@@ -878,6 +946,8 @@ async function initApp(user) {
   if (dispTo) dispTo.value = new Date().toISOString().split('T')[0];
   if (dispFrom) dispFrom.value = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
   await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes()]);
+  // Verify Supabase connection — show banner if anything is unreachable
+  checkSupabaseConnection();
 }
 
 async function handleSignOut() {
@@ -902,10 +972,15 @@ function switchTab(name, btn) {
 
 // ── Notifications ──────────────────────────────────────
 async function loadNotifications() {
-  const { data, error } = await sb.from('expected_actions')
-    .select('*').eq('assigned_to', currentUser.id)
-    .order('email_received_at', { ascending: false }).limit(50);
-  if (error || !data) { document.getElementById('notif-list').innerHTML = '<div class="loading-state">Could not load notifications.</div>'; return; }
+  const { data, error } = await sbQuery(
+    sb.from('expected_actions')
+      .select('*').eq('assigned_to', currentUser.id)
+      .order('email_received_at', { ascending: false }).limit(50)
+  );
+  if (error || !data) {
+    showRetryBanner('notif-list', () => loadNotifications(), 'Could not load notifications — tap to retry');
+    return;
+  }
   allNotifications = data;
   renderNotifications(data);
 }
@@ -1198,10 +1273,16 @@ async function submitReturn() {
 // ── Checklist ──────────────────────────────────────────
 async function loadChecklist() {
   const today = new Date().toISOString().split('T')[0];
-  const { data: tasks, error } = await sb.from('daily_tasks')
-    .select('*, task_definitions(title, evidence_type, evidence_hint)')
-    .eq('task_date', today).eq('assigned_to', currentUser.id);
-  if (error || !tasks || tasks.length === 0) {
+  const { data: tasks, error } = await sbQuery(
+    sb.from('daily_tasks')
+      .select('*, task_definitions(title, evidence_type, evidence_hint)')
+      .eq('task_date', today).eq('assigned_to', currentUser.id)
+  );
+  if (error) {
+    showRetryBanner('task-list', () => loadChecklist(), 'Could not load checklist — tap to retry');
+    return;
+  }
+  if (!tasks || tasks.length === 0) {
     document.getElementById('task-list').innerHTML = '<div class="loading-state">No tasks found for today. Contact your administrator.</div>';
     return;
   }
@@ -1354,11 +1435,15 @@ async function submitTagTask(taskId) {
 async function loadKPIs() {
   const uid = currentUser.id;
   const [posRes, claimsRes, retRes, dispRes] = await Promise.all([
-    sb.from('expected_actions').select('id', {count:'exact'}).eq('type','vendor_po').eq('status','open').eq('assigned_to', uid),
-    sb.from('expected_actions').select('aed_amount').eq('type','shortage_claim').eq('status','open').eq('assigned_to', uid),
-    sb.from('expected_actions').select('id', {count:'exact'}).eq('type','return_processed').eq('status','open').eq('assigned_to', uid),
-    sb.from('disputes').select('id', {count:'exact'}).neq('dispute_status','resolved').lt('created_at', new Date(Date.now() - 3*86400000).toISOString())
+    sbQuery(sb.from('expected_actions').select('id', {count:'exact'}).eq('type','vendor_po').eq('status','open').eq('assigned_to', uid)),
+    sbQuery(sb.from('expected_actions').select('aed_amount').eq('type','shortage_claim').eq('status','open').eq('assigned_to', uid)),
+    sbQuery(sb.from('expected_actions').select('id', {count:'exact'}).eq('type','return_processed').eq('status','open').eq('assigned_to', uid)),
+    sbQuery(sb.from('disputes').select('id', {count:'exact'}).neq('dispute_status','resolved').lt('created_at', new Date(Date.now() - 3*86400000).toISOString()))
   ]);
+  if (posRes.error && claimsRes.error && retRes.error && dispRes.error) {
+    showRetryBanner('kpi-grid', () => loadKPIs(), 'Could not load KPIs — tap to retry');
+    return;
+  }
   const posPending = posRes.count || 0;
   const claimAed = (claimsRes.data || []).reduce((s, r) => s + (parseFloat(r.aed_amount)||0), 0);
   const retBacklog = retRes.count || 0;
@@ -1375,7 +1460,7 @@ async function loadKPIs() {
     `<div class="kpi-card"><div class="kpi-dot ${m.dot}"></div><div class="kpi-label">${m.label}</div><div class="kpi-value ${m.cls}">${m.value}</div><div class="kpi-sub">${m.sub}</div></div>`
   ).join('');
   const today = new Date().toISOString().split('T')[0];
-  const tasksRes = await sb.from('daily_tasks').select('id,status').eq('task_date', today).eq('assigned_to', uid);
+  const tasksRes = await sbQuery(sb.from('daily_tasks').select('id,status').eq('task_date', today).eq('assigned_to', uid));
   const tasks = tasksRes.data || [];
   const done = tasks.filter(t=>t.status==='submitted').length;
   const openNotifs = allNotifications.filter(n=>n.status==='open').length;
@@ -1398,9 +1483,11 @@ async function loadDisputeRecoveryKPI() {
   const header = document.getElementById('recovery-header');
   const grid = document.getElementById('recovery-grid');
   if (!grid || !header) return;
-  const { data, error } = await sb.from('disputes')
-    .select('invoice_amount_aed, approved_amount_aed, dispute_status')
-    .in('dispute_status', ['amazon_approved','amazon_partial','resolved']);
+  const { data, error } = await sbQuery(
+    sb.from('disputes')
+      .select('invoice_amount_aed, approved_amount_aed, dispute_status')
+      .in('dispute_status', ['amazon_approved','amazon_partial','resolved'])
+  );
   if (error) { grid.innerHTML = ''; header.style.display = 'none'; return; }
   const rows = data || [];
   let totalInv = 0, totalApp = 0;
@@ -1431,11 +1518,16 @@ async function loadDisputeRecoveryKPI() {
 
 // ── Priorities ─────────────────────────────────────────
 async function loadPriorities() {
-  const { data, error } = await sb.from('priorities')
-    .select('*').neq('status','complete')
-    .or(`assigned_to.eq.${currentUser.id},assigned_to_both.eq.true`)
-    .order('created_at', { ascending: false });
-  if (error) { document.getElementById('pri-list').innerHTML = '<div class="loading-state">Could not load priorities.</div>'; return; }
+  const { data, error } = await sbQuery(
+    sb.from('priorities')
+      .select('*').neq('status','complete')
+      .or(`assigned_to.eq.${currentUser.id},assigned_to_both.eq.true`)
+      .order('created_at', { ascending: false })
+  );
+  if (error) {
+    showRetryBanner('pri-list', () => loadPriorities(), 'Could not load priorities — tap to retry');
+    return;
+  }
   allPriorities = data || [];
   renderPriorities(allPriorities);
 }
@@ -1594,11 +1686,13 @@ async function loadPOActionsKPI() {
   const startIso = today + 'T00:00:00';
   const endIso = today + 'T23:59:59.999';
   // Query purchase_orders for today's actions by this user
-  const { data, error } = await sb.from('purchase_orders')
-    .select('outcome')
-    .eq('actioned_by', uid)
-    .gte('actioned_at', startIso)
-    .lte('actioned_at', endIso);
+  const { data, error } = await sbQuery(
+    sb.from('purchase_orders')
+      .select('outcome')
+      .eq('actioned_by', uid)
+      .gte('actioned_at', startIso)
+      .lte('actioned_at', endIso)
+  );
   const grid = document.getElementById('po-actions-grid');
   const header = document.getElementById('po-actions-header');
   if (!grid || !header) return;
@@ -1623,8 +1717,13 @@ let allDisputes = [];
 let currentDisputeFilter = 'all';
 
 async function loadDisputes() {
-  const { data, error } = await sb.from('disputes').select('*').order('submitted_for_approval_at', { ascending: false }).limit(500);
-  if (error) { document.getElementById('disp-list').innerHTML = '<div class="loading-state">Could not load disputes.</div>'; return; }
+  const { data, error } = await sbQuery(
+    sb.from('disputes').select('*').order('submitted_for_approval_at', { ascending: false }).limit(500)
+  );
+  if (error) {
+    showRetryBanner('disp-list', () => loadDisputes(), 'Could not load disputes — tap to retry');
+    return;
+  }
   allDisputes = data || [];
   // Update count badge with open disputes
   const openCount = allDisputes.filter(d => d.dispute_status === 'open').length;
