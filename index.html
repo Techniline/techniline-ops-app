@@ -164,6 +164,20 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .recovery-value.gray { color: var(--text-muted); }
     .recovery-sub { font-size: 13px; color: var(--text-muted); }
     .recovery-detail { font-size: 12px; color: var(--slate); margin-top: 4px; }
+    .import-summary { position: relative; background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 22px; margin-bottom: 16px; }
+    .import-summary-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .import-summary-close { position: absolute; top: 10px; right: 12px; background: none; border: none; font-size: 22px; line-height: 1; color: var(--text-muted); cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .import-summary-close:hover { background: #F1F5F9; color: var(--navy); }
+    .import-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .import-stat { background: #F8FAFC; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .import-stat-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .import-stat-value { font-size: 22px; font-weight: 600; font-family: 'DM Sans', sans-serif; }
+    .import-stat-value.navy { color: var(--navy); }
+    .import-stat-value.green { color: #047857; }
+    .import-stat-value.red { color: #B91C1C; }
+    .import-stat-value.amber { color: #D97706; }
+    .import-summary-sub { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+    @media (max-width: 720px) { .import-summary-grid { grid-template-columns: repeat(2, 1fr); } }
     .po-actions-header { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px 0; }
     .po-actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
     .tab-pane { display: none; }
@@ -535,11 +549,11 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Download disputes PDF
           </button>
-          <button class="export-btn" onclick="document.getElementById('soa-file-input').click()">
+          <button class="export-btn" onclick="document.getElementById('vc-file-input').click()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-            Import SOA data
+            Import from Vendor Central
           </button>
-          <input type="file" id="soa-file-input" accept=".xlsx" style="display:none" onchange="importSOAData(this)" />
+          <input type="file" id="vc-file-input" accept=".csv,.xlsx" style="display:none" onchange="importVendorCentral(this)" />
         </div>
       </div>
       <div class="filter-chips" id="disp-filters">
@@ -549,6 +563,29 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
         <div class="filter-chip" onclick="filterDisputes('partial', this)">Partially approved</div>
         <div class="filter-chip" onclick="filterDisputes('rejected', this)">Rejected by Amazon</div>
         <div class="filter-chip" onclick="filterDisputes('resolved', this)">Resolved</div>
+      </div>
+      <div class="import-summary" id="import-summary" style="display:none">
+        <button class="import-summary-close" onclick="document.getElementById('import-summary').style.display='none'" aria-label="Dismiss">×</button>
+        <div class="import-summary-title">Import financial summary</div>
+        <div class="import-summary-grid">
+          <div class="import-stat">
+            <div class="import-stat-label">Total disputed AED</div>
+            <div class="import-stat-value navy" id="imp-stat-disputed">—</div>
+          </div>
+          <div class="import-stat">
+            <div class="import-stat-label">Total approved AED</div>
+            <div class="import-stat-value green" id="imp-stat-approved">—</div>
+          </div>
+          <div class="import-stat">
+            <div class="import-stat-label">Total gap AED</div>
+            <div class="import-stat-value red" id="imp-stat-gap">—</div>
+          </div>
+          <div class="import-stat">
+            <div class="import-stat-label">Recovery rate</div>
+            <div class="import-stat-value" id="imp-stat-rate">—</div>
+          </div>
+        </div>
+        <div class="import-summary-sub" id="imp-stat-sub"></div>
       </div>
       <div class="pri-list" id="disp-list"><div class="loading-state">Loading disputes…</div></div>
     </div>
@@ -1667,7 +1704,7 @@ function getDispSortVal(d, col) {
 function renderDisputes(rows) {
   const list = document.getElementById('disp-list');
   if (!rows || rows.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-title">No disputes yet</div><div class="empty-sub">Raise a dispute from a shortage claim notification, or click Import SOA data to load historical disputes.</div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-title">No disputes yet</div><div class="empty-sub">Raise a dispute from a shortage claim notification, or click Import from Vendor Central to load historical disputes.</div></div>';
     return;
   }
 
@@ -1977,139 +2014,153 @@ function updateCharCount(fieldId, countId, min) {
   el.textContent = len < min ? `${min - len} more characters needed` : `${len} characters ✓`;
   el.className = 'char-count' + (len < min ? ' warn' : '');
 }
-async function importSOAData(input) {
+function parseVCCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g,'').trim());
+  return lines.slice(1).map(line => {
+    const vals = [];
+    let cur = '';
+    let inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').replace(/^"|"$/g, '').trim());
+    return obj;
+  });
+}
+
+function _toFloat(s) {
+  if (s === null || s === undefined) return null;
+  const cleaned = String(s).replace(/AED/gi, '').replace(/,/g, '').replace(/\s/g, '').trim();
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+
+function _statusFromVC(statusRaw, total, approved) {
+  const s = String(statusRaw || '').toLowerCase();
+  if (s.includes('resolved')) {
+    if (approved !== null && total !== null && approved >= total - 0.005) return 'amazon_approved';
+    if (approved !== null && approved > 0) return 'amazon_partial';
+    return 'amazon_rejected';
+  }
+  return 'open';
+}
+
+async function importVendorCentral(input) {
   const file = input.files[0];
   if (!file) return;
-  showToast('Reading SOA file...');
-  const reader = new FileReader();
-  reader.onload = async function(e) {
+  const name = (file.name || '').toLowerCase();
+  showToast('Reading Vendor Central file...');
+
+  const processRows = async (rows) => {
+    let imported = 0, approved = 0, partial = 0, rejected = 0;
+    let totalDisputed = 0, totalApproved = 0;
+    for (const row of rows) {
+      const disputeNumber = String(row['Dispute ID'] || row['Dispute Id'] || row['dispute_id'] || '').trim();
+      if (!disputeNumber || !disputeNumber.startsWith('DSPT')) continue;
+      const disputeType = String(row['Dispute Type'] || row['Dispute type'] || '').trim();
+      const disputeReason = String(row['Dispute Reason'] || row['Dispute reason'] || '').trim();
+      const createdOn = String(row['Created On'] || row['Created on'] || '').trim();
+      const statusRaw = String(row['Dispute Status'] || row['Dispute status'] || '').trim();
+      const totalRaw = row['Total Disputed Amount'] || row['Total disputed amount'] || row['Total Disputed'] || '';
+      const approvedRaw = row['Approved Amount'] || row['Approved amount'] || '';
+      const total = _toFloat(totalRaw);
+      const appr = _toFloat(approvedRaw);
+      const status = _statusFromVC(statusRaw, total, appr);
+      const gap = (total !== null && appr !== null) ? total - appr : null;
+
+      const record = {
+        dispute_number: disputeNumber,
+        dispute_type: disputeType || null,
+        maricel_comment: disputeReason || null,
+        dispute_status: status,
+        invoice_amount_aed: total,
+        approved_amount_aed: appr,
+        gap_aed: gap,
+        created_by: currentUser.id,
+        assigned_to: currentUser.id
+      };
+      if (createdOn) {
+        // try parse as DD/MM/YYYY or YYYY-MM-DD
+        let iso = null;
+        const m1 = createdOn.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m1) iso = m1[3] + '-' + m1[2].padStart(2,'0') + '-' + m1[1].padStart(2,'0');
+        else if (/^\d{4}-\d{2}-\d{2}/.test(createdOn)) iso = createdOn.substring(0,10);
+        if (iso) record.submitted_for_approval_at = iso + 'T00:00:00Z';
+      }
+
+      const { data: existing } = await sb.from('disputes').select('id').eq('dispute_number', disputeNumber).maybeSingle();
+      if (existing) continue; // never overwrite
+
+      const { error: insErr } = await sb.from('disputes').insert(record);
+      if (insErr) continue;
+      imported++;
+      if (status === 'amazon_approved') approved++;
+      else if (status === 'amazon_partial') partial++;
+      else if (status === 'amazon_rejected') rejected++;
+      if (total !== null) totalDisputed += total;
+      if (appr !== null) totalApproved += appr;
+    }
+    return { imported, approved, partial, rejected, totalDisputed, totalApproved };
+  };
+
+  const finish = async (rows) => {
     try {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      let stats = { po: 0, invoice: 0, payment: 0, srt: 0, disputes: 0 };
-
-      // --- Sheet 1: Dispute Item ---
-      if (workbook.SheetNames.includes('Dispute Item')) {
-        const ws = workbook.Sheets['Dispute Item'];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        for (const row of rows) {
-          const po = String(row['PO#'] || '').trim();
-          const invoice = String(row['Invoice #'] || '').trim();
-          const srtRaw = String(row['Unnamed: 9'] || '').trim();
-          const disputeRaw = String(row['Unnamed: 10'] || '') + ' ' + String(row['Unnamed: 11'] || '');
-          const dsptMatch = disputeRaw.match(/DSPT\d+/);
-          if (!dsptMatch) continue;
-          const disputeNumber = dsptMatch[0];
-          const srtMatch = srtRaw.match(/SRT[\/\-]?\w+/i);
-          const srtNumber = srtMatch ? srtMatch[0] : null;
-          const updates = {};
-          if (po) updates.po_number = po;
-          if (invoice) updates.tle_invoice_number = invoice;
-          if (srtNumber) updates.srt_number = srtNumber;
-          if (Object.keys(updates).length > 0) {
-            const { data: existing } = await sb.from('disputes').select('id, po_number, tle_invoice_number, srt_number').eq('dispute_number', disputeNumber).maybeSingle();
-            if (existing) {
-              const toUpdate = {};
-              if (updates.po_number && !existing.po_number) { toUpdate.po_number = updates.po_number; stats.po++; }
-              if (updates.tle_invoice_number && !existing.tle_invoice_number) { toUpdate.tle_invoice_number = updates.tle_invoice_number; stats.invoice++; }
-              if (updates.srt_number && !existing.srt_number) { toUpdate.srt_number = updates.srt_number; stats.srt++; }
-              if (Object.keys(toUpdate).length > 0) {
-                await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
-              }
-            }
-          }
-        }
-      }
-
-      // --- Sheet 2: Shortage Claim Deduction ---
-      if (workbook.SheetNames.some(s => s.trim() === 'Shortage Claim Deduction')) {
-        const sheetName = workbook.SheetNames.find(s => s.trim() === 'Shortage Claim Deduction');
-        const ws = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        for (const row of rows) {
-          const disputeNumber = String(row['Dispute#'] || '').trim();
-          const invoice = String(row['Invoice'] || '').trim();
-          const amount = parseFloat(String(row['Amount'] || '0').replace(/[^0-9.]/g, '')) || null;
-          const approved = parseFloat(String(row['Amount Approved'] || '0').replace(/[^0-9.]/g, '')) || null;
-          if (!disputeNumber || !disputeNumber.startsWith('DSPT')) continue;
-          const { data: existing } = await sb.from('disputes').select('id, tle_invoice_number, invoice_amount_aed').eq('dispute_number', disputeNumber).maybeSingle();
-          if (existing) {
-            const toUpdate = {};
-            if (invoice && !existing.tle_invoice_number) { toUpdate.tle_invoice_number = invoice; stats.invoice++; }
-            if (amount && !existing.invoice_amount_aed) toUpdate.invoice_amount_aed = amount;
-            if (approved) toUpdate.approved_amount_aed = approved;
-            if (Object.keys(toUpdate).length > 0) await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
-          }
-        }
-      }
-
-      // --- Sheet 3: Master File (payment numbers) ---
-      if (workbook.SheetNames.includes('Master File')) {
-        const ws = workbook.Sheets['Master File'];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '', range: 1 });
-        for (const row of rows) {
-          const disputeRaw = String(row['Dispute'] || '').trim();
-          const dsptMatch = disputeRaw.match(/DSPT\d+/);
-          if (!dsptMatch) continue;
-          const disputeNumber = dsptMatch[0];
-          const paymentNumber = String(row['Payment Number'] || '').trim();
-          if (!paymentNumber || paymentNumber === '0') continue;
-          const { data: existing } = await sb.from('disputes').select('id, payment_number').eq('dispute_number', disputeNumber).maybeSingle();
-          if (existing && !existing.payment_number) {
-            await sb.from('disputes').update({ payment_number: paymentNumber }).eq('dispute_number', disputeNumber);
-            stats.payment++;
-          }
-        }
-      }
-
-      // --- Sheet 4: Dispute data 2025_2026 ---
-      if (workbook.SheetNames.includes('Dispute data 2025_2026')) {
-        const ws = workbook.Sheets['Dispute data 2025_2026'];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        for (const row of rows) {
-          const disputeNumber = String(row['Dispute ID'] || '').trim();
-          if (!disputeNumber || !disputeNumber.startsWith('DSPT')) continue;
-          const totalRaw = String(row['Total disputed amount'] || '').replace(/[^0-9.]/g, '');
-          const approvedRaw = String(row['Approved Amount'] || row['Approved Amount.1'] || '').replace(/[^0-9.]/g, '');
-          const total = parseFloat(totalRaw) || null;
-          const approved = parseFloat(approvedRaw) || null;
-          const statusRaw = String(row['Dispute status'] || '').toLowerCase();
-          let status = 'open';
-          if (statusRaw.includes('resolved')) {
-            if (approved && total && approved >= total) status = 'amazon_approved';
-            else if (approved && approved > 0) status = 'amazon_partial';
-            else status = 'amazon_rejected';
-          }
-          const { data: existing } = await sb.from('disputes').select('id').eq('dispute_number', disputeNumber).maybeSingle();
-          if (existing) {
-            const toUpdate = { dispute_status: status };
-            if (total) toUpdate.invoice_amount_aed = total;
-            if (approved !== null) toUpdate.approved_amount_aed = approved;
-            if (total && approved !== null) toUpdate.gap_aed = total - approved;
-            await sb.from('disputes').update(toUpdate).eq('dispute_number', disputeNumber);
-          } else {
-            await sb.from('disputes').insert({
-              dispute_number: disputeNumber,
-              dispute_status: status,
-              invoice_amount_aed: total,
-              approved_amount_aed: approved,
-              gap_aed: total && approved !== null ? total - approved : null,
-              created_by: currentUser.id,
-              assigned_to: currentUser.id
-            });
-            stats.disputes++;
-          }
-        }
-      }
-
-      showToast('SOA import complete — PO: ' + stats.po + ' Invoice: ' + stats.invoice + ' Payment: ' + stats.payment + ' SRT: ' + stats.srt + ' New disputes: ' + stats.disputes);
+      const summary = await processRows(rows);
+      showToast('Imported ' + summary.imported + ' disputes — ' + summary.approved + ' approved, ' + summary.partial + ' partial, ' + summary.rejected + ' rejected');
+      renderImportSummary(summary);
       await loadDisputes();
     } catch (err) {
-      alert('Error reading SOA file: ' + err.message);
+      alert('Error processing rows: ' + err.message);
     }
   };
-  reader.readAsArrayBuffer(file);
+
+  try {
+    if (name.endsWith('.csv')) {
+      const text = await file.text();
+      const rows = parseVCCSV(text);
+      await finish(rows);
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buf), { type: 'array' });
+      const firstSheet = workbook.SheetNames[0];
+      const ws = workbook.Sheets[firstSheet];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      await finish(rows);
+    } else {
+      alert('Please select a .csv or .xlsx file.');
+    }
+  } catch (err) {
+    alert('Could not read file: ' + err.message);
+  }
   input.value = '';
+}
+
+function renderImportSummary(summary) {
+  const panel = document.getElementById('import-summary');
+  if (!panel) return;
+  const fmt = (n) => Number(n || 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totalDisputed = summary.totalDisputed || 0;
+  const totalApproved = summary.totalApproved || 0;
+  const gap = totalDisputed - totalApproved;
+  const rate = totalDisputed > 0 ? (totalApproved / totalDisputed) * 100 : 0;
+  let rateCls = 'red';
+  if (rate >= 80) rateCls = 'green';
+  else if (rate >= 50) rateCls = 'amber';
+  document.getElementById('imp-stat-disputed').textContent = fmt(totalDisputed);
+  document.getElementById('imp-stat-approved').textContent = fmt(totalApproved);
+  document.getElementById('imp-stat-gap').textContent = fmt(gap);
+  const rateEl = document.getElementById('imp-stat-rate');
+  rateEl.textContent = rate.toFixed(1) + '%';
+  rateEl.className = 'import-stat-value ' + rateCls;
+  document.getElementById('imp-stat-sub').textContent = 'Imported ' + summary.imported + ' disputes — ' + summary.approved + ' approved, ' + summary.partial + ' partial, ' + summary.rejected + ' rejected.';
+  panel.style.display = 'block';
 }
 
 function showToast(msg) {
