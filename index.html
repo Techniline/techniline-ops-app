@@ -36,8 +36,6 @@
 
   <!-- ========== CHECKLIST SCREEN ========== -->
   <div id="checklist-screen" class="hidden max-w-3xl mx-auto px-4 py-6">
-
-    <!-- Header -->
     <div class="flex items-center justify-between mb-4">
       <div>
         <h1 class="text-2xl font-bold">Today's Checklist</h1>
@@ -50,7 +48,6 @@
       </div>
     </div>
 
-    <!-- Progress -->
     <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-medium text-slate-700">Daily progress</span>
@@ -61,14 +58,11 @@
       </div>
     </div>
 
-    <!-- Daily tasks -->
     <h2 class="text-lg font-semibold mt-2 mb-2">Daily tasks</h2>
     <div id="daily-tasks" class="space-y-3"></div>
 
-    <!-- Expected actions -->
     <h2 class="text-lg font-semibold mt-6 mb-2">Email-triggered actions</h2>
     <div id="expected-actions" class="space-y-3"></div>
-
   </div>
 
   <script>
@@ -76,6 +70,11 @@
     const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Titles that use the multi-tag input pattern
+    const MULTI_TAG_VENDOR_INVOICING = "Vendor invoicing";
+    const MULTI_TAG_APPOINTMENT = "Appointment booking";
+    const MULTI_TAG_SRTPRT = "SRT / PRT backlog clearance";
 
     // ============ DOM ============
     const loginScreen = document.getElementById("login-screen");
@@ -146,7 +145,6 @@
       showChecklist(data.user);
     });
 
-    // ============ SIGN OUT ============
     signoutBtn.addEventListener("click", async () => {
       await sb.auth.signOut();
       showLogin();
@@ -180,6 +178,15 @@
       renderDailyTasks();
     }
 
+    function getRenderMode(task) {
+      const def = task.task_definitions || {};
+      if (def.title === MULTI_TAG_VENDOR_INVOICING) return "tag_single_invoice";
+      if (def.title === MULTI_TAG_APPOINTMENT) return "tag_single_appointment";
+      if (def.title === MULTI_TAG_SRTPRT) return "tag_double_srt_prt";
+      if (def.evidence_type === "one_tap") return "one_tap";
+      return "text"; // catch-all for text and id_list
+    }
+
     function renderDailyTasks() {
       updateProgress(dailyTasksCache);
       if (dailyTasksCache.length === 0) {
@@ -187,35 +194,12 @@
         return;
       }
       dailyTasksEl.innerHTML = dailyTasksCache.map(renderDailyCard).join("");
-      // Attach handlers
       dailyTasksCache.forEach(task => {
         const cardEl = document.getElementById("task-" + task.id);
         if (!cardEl) return;
         const isDone = task.status === "submitted" || task.status === "verified";
         if (isDone) return;
-        const evType = (task.task_definitions && task.task_definitions.evidence_type) || "text";
-        if (evType === "one_tap") {
-          const btn = cardEl.querySelector("[data-action='confirm']");
-          if (btn) btn.addEventListener("click", () => handleOneTap(task, btn));
-        } else {
-          const expandBtn = cardEl.querySelector("[data-action='expand']");
-          const submitBtn = cardEl.querySelector("[data-action='submit']");
-          const textarea = cardEl.querySelector("textarea");
-          const inputWrap = cardEl.querySelector("[data-role='input-wrap']");
-          if (expandBtn) {
-            expandBtn.addEventListener("click", () => {
-              expandBtn.classList.add("hidden");
-              inputWrap.classList.remove("hidden");
-              textarea.focus();
-            });
-          }
-          if (textarea && submitBtn) {
-            textarea.addEventListener("input", () => {
-              submitBtn.disabled = textarea.value.trim().length < 10;
-            });
-            submitBtn.addEventListener("click", () => handleTextSubmit(task, textarea.value.trim(), submitBtn));
-          }
-        }
+        attachCardHandlers(task, cardEl);
       });
     }
 
@@ -223,8 +207,8 @@
       const def = task.task_definitions || {};
       const title = def.title || "(no title)";
       const hint = def.evidence_hint || "";
-      const evType = def.evidence_type || "text";
       const isDone = task.status === "submitted" || task.status === "verified";
+      const mode = getRenderMode(task);
 
       if (isDone) {
         const submittedAt = task.submitted_at_local || prettyTime();
@@ -240,7 +224,7 @@
         </div>`;
       }
 
-      if (evType === "one_tap") {
+      if (mode === "one_tap") {
         return `
         <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
           <div class="flex items-start justify-between gap-4">
@@ -256,7 +240,17 @@
         </div>`;
       }
 
-      // text or id_list
+      if (mode === "tag_single_invoice") {
+        return tagSingleCard(task, title, hint, "Invoice numbers", "Add invoice number", "e.g. WS/2601519", "No invoices to raise today");
+      }
+      if (mode === "tag_single_appointment") {
+        return tagSingleCard(task, title, hint, "Appointment IDs", "Add appointment ID", "e.g. APT-2461", "No appointments to book today");
+      }
+      if (mode === "tag_double_srt_prt") {
+        return tagDoubleCard(task, title, hint);
+      }
+
+      // fallback: text/id_list
       return `
         <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
           <div class="flex items-start justify-between gap-4">
@@ -266,14 +260,14 @@
             </div>
             <button data-action="expand"
               class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg">
-              Add evidence
+              Add details
             </button>
           </div>
           <div data-role="input-wrap" class="hidden mt-3">
-            <textarea rows="3" placeholder="Type your evidence (min 10 characters)..."
+            <textarea rows="3" placeholder="Type your notes (min 10 characters)..."
               class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
             <div class="flex justify-end mt-2">
-              <button data-action="submit" disabled
+              <button data-action="submit-text" disabled
                 class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
                 Submit
               </button>
@@ -282,9 +276,169 @@
         </div>`;
     }
 
+    function tagSingleCard(task, title, hint, fieldLabel, addBtnLabel, placeholder, nothingLabel) {
+      return `
+        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
+          <div class="mb-3">
+            <p class="font-medium">${escapeHtml(title)}</p>
+            <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
+          </div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">${escapeHtml(fieldLabel)}</label>
+          <div class="flex gap-2 mb-2">
+            <input type="text" data-role="tag-input" placeholder="${escapeHtml(placeholder)}"
+              class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+            <button data-action="add-tag"
+              class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
+          </div>
+          <div data-role="tag-list" class="flex flex-wrap gap-2 mb-3"></div>
+          <p data-role="count-text" class="text-xs text-slate-500 mb-3">0 added</p>
+          <div class="flex justify-between items-center">
+            <button data-action="nothing" data-note="${escapeHtml(nothingLabel)}"
+              class="text-sm text-slate-600 underline hover:text-slate-800">${escapeHtml(nothingLabel)}</button>
+            <button data-action="submit-tags" disabled
+              class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+              Submit
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function tagDoubleCard(task, title, hint) {
+      return `
+        <div id="task-${task.id}" class="bg-white rounded-xl shadow-sm p-4">
+          <div class="mb-3">
+            <p class="font-medium">${escapeHtml(title)}</p>
+            <p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>
+          </div>
+
+          <div class="mb-3" data-group="srt">
+            <label class="block text-sm font-medium text-slate-700 mb-1">SRT ticket numbers</label>
+            <div class="flex gap-2 mb-2">
+              <input type="text" data-role="tag-input" placeholder="e.g. SRT-0041"
+                class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <button data-action="add-tag"
+                class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
+            </div>
+            <div data-role="tag-list" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <div class="mb-3" data-group="prt">
+            <label class="block text-sm font-medium text-slate-700 mb-1">PRT ticket numbers</label>
+            <div class="flex gap-2 mb-2">
+              <input type="text" data-role="tag-input" placeholder="e.g. PRT-0017"
+                class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <button data-action="add-tag"
+                class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg">Add</button>
+            </div>
+            <div data-role="tag-list" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <p data-role="count-text" class="text-xs text-slate-500 mb-3">0 added</p>
+
+          <div class="flex justify-between items-center">
+            <button data-action="nothing" data-note="Backlog is clear"
+              class="text-sm text-slate-600 underline hover:text-slate-800">Backlog is clear</button>
+            <button data-action="submit-tags" disabled
+              class="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-1.5 rounded-lg">
+              Submit
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function attachCardHandlers(task, cardEl) {
+      const mode = getRenderMode(task);
+      if (mode === "one_tap") {
+        const btn = cardEl.querySelector("[data-action='confirm']");
+        if (btn) btn.addEventListener("click", () => handleOneTap(task, btn));
+        return;
+      }
+      if (mode === "text") {
+        const expandBtn = cardEl.querySelector("[data-action='expand']");
+        const submitBtn = cardEl.querySelector("[data-action='submit-text']");
+        const textarea = cardEl.querySelector("textarea");
+        const inputWrap = cardEl.querySelector("[data-role='input-wrap']");
+        if (expandBtn) {
+          expandBtn.addEventListener("click", () => {
+            expandBtn.classList.add("hidden");
+            inputWrap.classList.remove("hidden");
+            textarea.focus();
+          });
+        }
+        if (textarea && submitBtn) {
+          textarea.addEventListener("input", () => {
+            submitBtn.disabled = textarea.value.trim().length < 10;
+          });
+          submitBtn.addEventListener("click", () => handleTextSubmit(task, textarea.value.trim(), submitBtn));
+        }
+        return;
+      }
+      // tag modes
+      const groups = cardEl.querySelectorAll("[data-group]");
+      if (groups.length > 0) {
+        // double (SRT/PRT)
+        groups.forEach(g => wireTagGroup(g, cardEl));
+      } else {
+        // single
+        wireTagGroup(cardEl, cardEl);
+      }
+      const submitBtn = cardEl.querySelector("[data-action='submit-tags']");
+      const nothingBtn = cardEl.querySelector("[data-action='nothing']");
+      if (submitBtn) {
+        submitBtn.addEventListener("click", () => handleTagSubmit(task, cardEl, submitBtn));
+      }
+      if (nothingBtn) {
+        nothingBtn.addEventListener("click", () => handleNothingTodo(task, nothingBtn.getAttribute("data-note"), nothingBtn));
+      }
+    }
+
+    function wireTagGroup(scope, cardEl) {
+      const input = scope.querySelector("[data-role='tag-input']");
+      const addBtn = scope.querySelector("[data-action='add-tag']");
+      const list = scope.querySelector("[data-role='tag-list']");
+      if (!input || !addBtn || !list) return;
+      function addTag() {
+        const val = input.value.trim();
+        if (!val) return;
+        const tag = document.createElement("span");
+        tag.className = "inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full";
+        tag.dataset.value = val;
+        tag.innerHTML = escapeHtml(val) + ' <button type="button" class="text-blue-600 hover:text-blue-900" data-action="remove-tag" aria-label="Remove">&times;</button>';
+        list.appendChild(tag);
+        input.value = "";
+        input.focus();
+        updateTagState(cardEl);
+      }
+      addBtn.addEventListener("click", addTag);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); addTag(); }
+      });
+      list.addEventListener("click", (e) => {
+        if (e.target.matches("[data-action='remove-tag']")) {
+          e.target.closest("[data-value]").remove();
+          updateTagState(cardEl);
+        }
+      });
+    }
+
+    function collectTags(cardEl) {
+      // Returns array of all tag values across all tag-lists in the card, in order
+      const tags = cardEl.querySelectorAll("[data-role='tag-list'] [data-value]");
+      return Array.from(tags).map(el => el.dataset.value);
+    }
+
+    function updateTagState(cardEl) {
+      const count = collectTags(cardEl).length;
+      const countEl = cardEl.querySelector("[data-role='count-text']");
+      if (countEl) countEl.textContent = count + (count === 1 ? " added" : " added");
+      const submitBtn = cardEl.querySelector("[data-action='submit-tags']");
+      if (submitBtn) submitBtn.disabled = count < 1;
+    }
+
+    // ============ SUBMIT HANDLERS ============
     async function handleOneTap(task, btn) {
       btn.disabled = true;
-      const originalLabel = btn.textContent;
+      const original = btn.textContent;
       btn.textContent = "Saving...";
       const { data: { user } } = await sb.auth.getUser();
       const hint = (task.task_definitions && task.task_definitions.evidence_hint) || "";
@@ -294,27 +448,15 @@
         is_nothing_to_action: true,
         nothing_to_action_note: hint,
       });
-      if (insErr) {
-        alert("Could not save submission: " + insErr.message);
-        btn.disabled = false;
-        btn.textContent = originalLabel;
-        return;
-      }
+      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
       const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) {
-        alert("Submission saved but status update failed: " + updErr.message);
-        btn.disabled = false;
-        btn.textContent = originalLabel;
-        return;
-      }
-      task.status = "submitted";
-      task.submitted_at_local = prettyTime();
-      renderDailyTasks();
+      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
+      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
     }
 
     async function handleTextSubmit(task, text, btn) {
       btn.disabled = true;
-      const originalLabel = btn.textContent;
+      const original = btn.textContent;
       btn.textContent = "Saving...";
       const { data: { user } } = await sb.auth.getUser();
       const { error: insErr } = await sb.from("submissions").insert({
@@ -322,22 +464,45 @@
         submitted_by: user.id,
         evidence_text: text,
       });
-      if (insErr) {
-        alert("Could not save submission: " + insErr.message);
-        btn.disabled = false;
-        btn.textContent = originalLabel;
-        return;
-      }
+      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
       const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
-      if (updErr) {
-        alert("Submission saved but status update failed: " + updErr.message);
-        btn.disabled = false;
-        btn.textContent = originalLabel;
-        return;
-      }
-      task.status = "submitted";
-      task.submitted_at_local = prettyTime();
-      renderDailyTasks();
+      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
+      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
+    }
+
+    async function handleTagSubmit(task, cardEl, btn) {
+      const tags = collectTags(cardEl);
+      if (tags.length < 1) return;
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = "Saving...";
+      const { data: { user } } = await sb.auth.getUser();
+      const { error: insErr } = await sb.from("submissions").insert({
+        daily_task_id: task.id,
+        submitted_by: user.id,
+        evidence_text: tags.join(", "),
+        evidence_count: tags.length,
+      });
+      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; btn.textContent=original; return; }
+      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
+      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; btn.textContent=original; return; }
+      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
+    }
+
+    async function handleNothingTodo(task, note, btn) {
+      btn.disabled = true;
+      const { data: { user } } = await sb.auth.getUser();
+      const { error: insErr } = await sb.from("submissions").insert({
+        daily_task_id: task.id,
+        submitted_by: user.id,
+        is_nothing_to_action: true,
+        nothing_to_action_note: note,
+        evidence_count: 0,
+      });
+      if (insErr) { alert("Could not save: " + insErr.message); btn.disabled=false; return; }
+      const { error: updErr } = await sb.from("daily_tasks").update({ status: "submitted" }).eq("id", task.id);
+      if (updErr) { alert("Saved but status update failed: " + updErr.message); btn.disabled=false; return; }
+      task.status = "submitted"; task.submitted_at_local = prettyTime(); renderDailyTasks();
     }
 
     // ============ EXPECTED ACTIONS ============
@@ -379,11 +544,7 @@
           btn.disabled = true;
           const id = btn.getAttribute("data-id");
           const { error } = await sb.from("expected_actions").update({ status: "actioned" }).eq("id", id);
-          if (error) {
-            alert("Could not update: " + error.message);
-            btn.disabled = false;
-            return;
-          }
+          if (error) { alert("Could not update: " + error.message); btn.disabled=false; return; }
           loadExpectedActions(user);
         });
       });
@@ -392,11 +553,8 @@
     // ============ INIT ============
     (async () => {
       const { data: { session } } = await sb.auth.getSession();
-      if (session && session.user) {
-        showChecklist(session.user);
-      } else {
-        showLogin();
-      }
+      if (session && session.user) showChecklist(session.user);
+      else showLogin();
     })();
 
     sb.auth.onAuthStateChange((event, session) => {
