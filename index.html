@@ -960,7 +960,31 @@ async function handleSignOut() {
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session?.user && !currentUser) await initApp(session.user);
 });
-sb.auth.getSession().then(({ data: { session } }) => { if (session?.user) initApp(session.user); });
+(async () => {
+        try {
+          const raw = localStorage.getItem('sb-xtvjzpmmuryaoluhynvl-auth-token');
+          if (raw) {
+            const tok = JSON.parse(raw);
+            const expiresAt = (tok.expires_at || 0) * 1000;
+            if (tok && tok.user && expiresAt > Date.now() + 60000) {
+              initApp(tok.user);
+              return;
+            }
+          }
+        } catch(e) { console.warn('cached session read failed', e); }
+        try {
+          const result = await Promise.race([
+            sb.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('getSession timeout')), 4000))
+          ]);
+          if (result && result.data && result.data.session) {
+            initApp(result.data.session.user);
+          }
+        } catch(e) {
+          console.warn('getSession failed:', e.message);
+          showGlobalBanner('Could not verify session — please sign in again', () => location.reload());
+        }
+      })();
 
 // ── Tab switching ──────────────────────────────────────
 function switchTab(name, btn) {
