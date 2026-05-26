@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Techniline Ops</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+  <!-- ========== LOGIN SCREEN ========== -->
+  <div id="login-screen" class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-md p-8">
+      <h1 class="text-2xl font-bold text-center mb-1">Techniline Ops</h1>
+      <p class="text-sm text-slate-500 text-center mb-6">Sign in to see your tasks</p>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <input id="login-email" type="email" required autocomplete="username"
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+          <input id="login-password" type="password" required autocomplete="current-password"
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button type="submit" id="login-btn"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition">
+          Sign in
+        </button>
+        <p id="login-error" class="text-sm text-red-600 hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== CHECKLIST SCREEN ========== -->
+  <div id="checklist-screen" class="hidden min-h-screen">
+    <header class="bg-white border-b border-slate-200">
+      <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-bold">Today's Checklist</h1>
+          <p id="today-date" class="text-sm text-slate-500"></p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="user-email" class="text-sm text-slate-600 hidden sm:block"></span>
+          <button id="logout-btn"
+            class="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg px-3 py-1">
+            Sign out
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 py-6 space-y-8">
+
+      <!-- Daily tasks -->
+      <section>
+        <h2 class="text-lg font-semibold mb-3">Daily tasks</h2>
+        <div id="daily-list" class="bg-white rounded-xl shadow-sm divide-y divide-slate-200">
+          <div class="p-4 text-sm text-slate-500">Loading…</div>
+        </div>
+      </section>
+
+      <!-- Expected actions (email-triggered) -->
+      <section>
+        <h2 class="text-lg font-semibold mb-3">Email-triggered actions</h2>
+        <div id="actions-list" class="bg-white rounded-xl shadow-sm divide-y divide-slate-200">
+          <div class="p-4 text-sm text-slate-500">Loading…</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // ============ CONFIG ============
+    const SUPABASE_URL = "https://xtvjzpmmuryaoluhynvl.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8";
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ============ ELEMENTS ============
+    const loginScreen = document.getElementById("login-screen");
+    const checklistScreen = document.getElementById("checklist-screen");
+    const loginForm = document.getElementById("login-form");
+    const loginError = document.getElementById("login-error");
+    const loginBtn = document.getElementById("login-btn");
+    const userEmailEl = document.getElementById("user-email");
+    const todayDateEl = document.getElementById("today-date");
+    const dailyList = document.getElementById("daily-list");
+    const actionsList = document.getElementById("actions-list");
+    const logoutBtn = document.getElementById("logout-btn");
+
+    // ============ HELPERS ============
+    function todayISO() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function prettyDate() {
+      return new Date().toLocaleDateString(undefined, {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
+      });
+    }
+
+    function showLogin() {
+      loginScreen.classList.remove("hidden");
+      checklistScreen.classList.add("hidden");
+    }
+
+    function showChecklist(user) {
+      loginScreen.classList.add("hidden");
+      checklistScreen.classList.remove("hidden");
+      userEmailEl.textContent = user.email || "";
+      todayDateEl.textContent = prettyDate();
+      loadAll(user);
+    }
+
+    function setLoginError(msg) {
+      loginError.textContent = msg;
+      loginError.classList.remove("hidden");
+    }
+
+    function clearLoginError() {
+      loginError.textContent = "";
+      loginError.classList.add("hidden");
+    }
+
+    // ============ LOGIN ============
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearLoginError();
+      loginBtn.disabled = true;
+      loginBtn.textContent = "Signing in…";
+      const email = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Sign in";
+      if (error) {
+        setLoginError(error.message || "Sign-in failed");
+        return;
+      }
+      showChecklist(data.user);
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      showLogin();
+    });
+
+    // ============ LOAD CHECKLIST ============
+    async function loadAll(user) {
+      await Promise.all([loadDailyTasks(user), loadExpectedActions(user)]);
+    }
+
+    async function loadDailyTasks(user) {
+      dailyList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
+      const today = todayISO();
+      const { data, error } = await supabase
+        .from("daily_tasks")
+        .select("id, status, task_date, task_definitions(title, evidence_hint)")
+        .eq("assigned_to", user.id)
+        .eq("task_date", today)
+        .order("id", { ascending: true });
+
+      if (error) {
+        dailyList.innerHTML = `<div class="p-4 text-sm text-red-600">Error loading daily tasks: ${error.message}</div>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        dailyList.innerHTML = '<div class="p-4 text-sm text-slate-500">No daily tasks for today.</div>';
+        return;
+      }
+      dailyList.innerHTML = "";
+      data.forEach((row) => {
+        const title = row.task_definitions?.title || "(Untitled task)";
+        const hint = row.task_definitions?.evidence_hint || "";
+        const done = row.status !== "open";
+        const item = document.createElement("div");
+        item.className = "p-4 flex items-start gap-3";
+        item.innerHTML = `
+          <div class="flex-1">
+            <p class="font-medium ${done ? "line-through text-slate-400" : ""}">${escapeHtml(title)}</p>
+            ${hint ? `<p class="text-xs text-slate-500 mt-1">${escapeHtml(hint)}</p>` : ""}
+            <p class="text-xs mt-1 ${done ? "text-emerald-600" : "text-slate-400"}">Status: ${row.status}</p>
+          </div>
+          <button data-id="${row.id}" ${done ? "disabled" : ""}
+            class="mark-daily px-3 py-1 rounded-lg text-sm font-medium ${done ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"}">
+            ${done ? "Done" : "Mark done"}
+          </button>
+        `;
+        dailyList.appendChild(item);
+      });
+
+      dailyList.querySelectorAll(".mark-daily").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.dataset.id;
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          const { error } = await supabase
+            .from("daily_tasks")
+            .update({ status: "submitted" })
+            .eq("id", id);
+          if (error) {
+            alert("Could not update: " + error.message);
+            btn.disabled = false;
+            btn.textContent = "Mark done";
+            return;
+          }
+          loadDailyTasks(user);
+        });
+      });
+    }
+
+    async function loadExpectedActions(user) {
+      actionsList.innerHTML = '<div class="p-4 text-sm text-slate-500">Loading…</div>';
+      const { data, error } = await supabase
+        .from("expected_actions")
+        .select("id, type, ref_number, aed_amount, email_received_at, status")
+        .eq("assigned_to", user.id)
+        .eq("status", "open")
+        .order("email_received_at", { ascending: true });
+
+      if (error) {
+        actionsList.innerHTML = `<div class="p-4 text-sm text-red-600">Error loading actions: ${error.message}</div>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        actionsList.innerHTML = '<div class="p-4 text-sm text-slate-500">No open email-triggered actions. 🎉</div>';
+        return;
+      }
+      actionsList.innerHTML = "";
+      data.forEach((row) => {
+        const item = document.createElement("div");
+        item.className = "p-4 flex items-start gap-3";
+        const dateStr = row.email_received_at
+          ? new Date(row.email_received_at).toLocaleDateString()
+          : "";
+        const amount = row.aed_amount != null
+          ? `AED ${Number(row.aed_amount).toFixed(2)}`
+          : "";
+        item.innerHTML = `
+          <div class="flex-1">
+            <p class="font-medium">${escapeHtml(row.type || "(no type)")} — ${escapeHtml(row.ref_number || "")}</p>
+            <p class="text-xs text-slate-500 mt-1">${dateStr}${amount ? " · " + amount : ""}</p>
+          </div>
+          <button data-id="${row.id}"
+            class="mark-action px-3 py-1 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
+            Mark actioned
+          </button>
+        `;
+        actionsList.appendChild(item);
+      });
+
+      actionsList.querySelectorAll(".mark-action").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.dataset.id;
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          const { error } = await supabase
+            .from("expected_actions")
+            .update({ status: "actioned" })
+            .eq("id", id);
+          if (error) {
+            alert("Could not update: " + error.message);
+            btn.disabled = false;
+            btn.textContent = "Mark actioned";
+            return;
+          }
+          loadExpectedActions(user);
+        });
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    // ============ INIT ============
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user) {
+        showChecklist(session.user);
+      } else {
+        showLogin();
+      }
+    })();
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") showLogin();
+    });
+  </script>
+</body>
+</html>
