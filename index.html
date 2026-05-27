@@ -707,6 +707,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
           <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs attention</div></div>
         </div>
         <div id="returns-completion-area"></div>
+        <div class="returns-tab-header" style="display:flex; justify-content:flex-end; margin-top:8px;"><button type="button" class="primary-btn add-return-btn" onclick="openAddReturnModal()" style="padding:10px 18px; background:#0F2744; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer;">+ Add return</button></div>
         <div class="returns-filter-chips" id="returns-filter-chips">
           <button type="button" class="chip active" onclick="filterReturns('all', this)">All</button>
           <button type="button" class="chip" onclick="filterReturns('needs', this)">Needs attention</button>
@@ -1238,7 +1239,7 @@ function buildNotifCard(n) {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Status updated')">Update status</button>`;
   }
   const truncSubject = detailBox.length > 100 ? detailBox.slice(0, 100) + '…' : detailBox;
-  return `<div class="notif-card${isDone?' done':''}">
+  return `<div class="notif-card${isDone?' done':''}" data-email-received-at="${n.email_received_at||''}" data-notif-type="${n.type||''}">
     <div class="notif-inner">
       <div class="notif-accent-bar ${color}"></div>
       <div class="notif-body">
@@ -2049,7 +2050,7 @@ function renderDisputes(rows) {
       actions = d.resolved_at ? '<span style="color:var(--text-muted);font-size:11px">' + fmtDispDate(d.resolved_at) + '</span>' : '<span style="color:var(--text-muted)">—</span>';
     }
 
-    const main = '<tr>'
+    const main = '<tr data-created-at="' + (d.created_at||'') + '" data-dispute-type="' + (d.dispute_type||'') + '" data-srt="' + (d.srt_number||'') + '" data-tle="' + (d.tle_invoice_number||'') + '" data-id="' + d.id + '">'
       + '<td><span class="dispute-id-cell" onclick="toggleDisputeExpand(\'' + d.id + '\')">' + (d.dispute_number || '(no DSPT)') + '</span></td>'
       + '<td><span class="disp-pill ' + k + '">' + disputeStatusLabel(k) + '</span></td>'
       + '<td class="mono">' + (d.tle_invoice_number || '—') + '</td>'
@@ -2611,31 +2612,55 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         if (incomplete.length === 0) {
           compArea.innerHTML = '';
         } else {
-          let html = '<div class="returns-completion-bar">' + incomplete.length + ' returns need your attention — missing SRT or Dispute ID</div>';
-          html += '<div class="returns-completion-list">';
+          let html = '<div class="returns-completion-bar">' + incomplete.length + ' returns need your attention</div>';
           incomplete.forEach(r => {
-            html += '<div class="return-incomplete-card" id="ret-card-' + r.id + '">';
-            html += '<div class="return-top-row">';
-            html += '<span><strong>' + fmtRetDate(r.date_received) + '</strong></span>';
-            html += '<span>VRET <strong>' + (r.vret_number || '—') + '</strong></span>';
-            html += '<span>SKU <strong>' + (r.model_sku || '—') + '</strong></span>';
-            html += '<span>PO <strong>' + (r.po_number || '—') + '</strong></span>';
-            html += '<span>TLE Inv <strong>' + (r.amazon_invoice || '—') + '</strong></span>';
-            html += '<span class="return-stage-badge">' + (r.stage || 'pending') + '</span>';
-            html += '</div>';
-            if (!r.srt_number) {
-              html += '<div class="return-inline-fix"><label>SRT Number</label><input type="text" id="srt-input-' + r.id + '" placeholder="Enter SRT"><button onclick="saveReturnField(\'' + r.id + '\', \'srt_number\', \'srt-input-' + r.id + '\')">Save</button></div>';
+            const fmt = (s) => s ? String(s) : '<span style="color:#94A3B8;">—</span>';
+            const ageHtml = (typeof ageBadgeHtml === 'function') ? ageBadgeHtml(r.date_received) : '';
+            const stage = r.stage || 'New';
+            const isTypeB = r.return_type === 'type_b';
+            const needsSrt = !r.srt_number;
+            const needsDispute = !r.dispute_id_ref;
+            const needsPrt = isTypeB && !r.prt_number;
+            html += '<div class="returns-completion-card" data-return-id="' + r.id + '">'
+              + '<div class="rc-top">'
+              + '  <div class="rc-fields">'
+              + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">VRET</div><div class="rc-val mono">' + fmt(r.vret_number) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">SKU</div><div class="rc-val mono">' + fmt(r.model_sku) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">PO</div><div class="rc-val mono">' + fmt(r.po_number) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">TLE invoice</div><div class="rc-val mono">' + fmt(r.tle_invoice_number) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">Stage</div><div class="rc-val"><span class="stage-pill">' + stage + '</span>' + ageHtml + '</div></div>'
+              + '  </div>'
+              + '</div>'
+              + '<div class="rc-inputs">';
+            if (needsSrt) {
+              html += '<div class="rc-input-row amber">'
+                + '<label>Missing SRT number</label>'
+                + '<input type="text" id="srt-' + r.id + '" placeholder="Enter SRT number">'
+                + '<button onclick="saveReturnField(\'' + r.id + '\', \'srt_number\', \'srt-' + r.id + '\')">Save</button>'
+                + '</div>';
             }
-            if (!r.dispute_id_ref) {
-              html += '<div class="return-inline-fix"><label>Dispute ID</label><input type="text" id="dref-input-' + r.id + '" placeholder="Enter Dispute ID"><button onclick="saveReturnField(\'' + r.id + '\', \'dispute_id_ref\', \'dref-input-' + r.id + '\')">Save</button></div>';
+            if (needsDispute) {
+              html += '<div class="rc-input-row amber">'
+                + '<label>Missing Dispute ID</label>'
+                + '<input type="text" id="dref-' + r.id + '" placeholder="Enter Dispute ID (DSPT…)">'
+                + '<button onclick="saveReturnField(\'' + r.id + '\', \'dispute_id_ref\', \'dref-' + r.id + '\')">Save</button>'
+                + '</div>';
             }
-            html += '</div>';
+            if (needsPrt) {
+              html += '<div class="rc-input-row amber">'
+                + '<label>Missing PRT number (Type B)</label>'
+                + '<input type="text" id="prt-' + r.id + '" placeholder="Enter PRT number">'
+                + '<button onclick="saveReturnField(\'' + r.id + '\', \'prt_number\', \'prt-' + r.id + '\')">Save</button>'
+                + '</div>';
+            }
+            html += '</div></div>';
           });
-          html += '</div>';
           compArea.innerHTML = html;
         }
       }
-      // Full table (PART C)
+
+      // Full table (PART C)// Full table (PART C)
       renderReturnsTable();
     }
     function fmtRetDate(s) {
@@ -2959,7 +2984,225 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
   else attach();
   setInterval(runAll, 5000);
 })();
+
+// ===== Returns: Add return modal + auto-link =====
+function openAddReturnModal(){
+  let overlay = document.getElementById('add-return-modal');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'add-return-modal';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box" style="max-width:760px;">
+        <div class="modal-header">
+          <div class="modal-title">Log new return</div>
+          <button class="modal-close" onclick="closeAddReturnModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:18px; max-height:70vh; overflow-y:auto;">
+          <div class="form-section">
+            <div class="form-section-title">A. From Amazon email</div>
+            <div class="form-row"><label>Return ID *</label><input type="text" id="nr-return-id" placeholder="from Amazon return email" oninput="checkReturnIdAutoLink()"></div>
+            <div id="nr-autolink-banner"></div>
+            <div class="form-row"><label>VRET number</label><input type="text" id="nr-vret"></div>
+            <div class="form-row"><label>Amazon invoice (7500…)</label><input type="text" id="nr-amazon-invoice"></div>
+            <div class="form-row"><label>Date received *</label><input type="date" id="nr-date-received"></div>
+            <div class="form-row"><label>Warehouse</label><input type="text" id="nr-warehouse"></div>
+          </div>
+          <div class="form-section">
+            <div class="form-section-title">B. From your records</div>
+            <div class="form-row"><label>TLE invoice (WS…) *</label><input type="text" id="nr-tle"></div>
+            <div class="form-row"><label>PO number *</label><input type="text" id="nr-po"></div>
+            <div class="form-row"><label>Model / SKU *</label><input type="text" id="nr-sku"></div>
+            <div class="form-row"><label>Quantity *</label><input type="number" id="nr-qty" value="1" min="1"></div>
+            <div class="form-row"><label>Total cost AED *</label><input type="number" id="nr-cost" step="0.01"></div>
+            <div class="form-row"><label>Recovery AED</label><input type="number" id="nr-recovery" step="0.01"></div>
+          </div>
+          <div class="form-section">
+            <div class="form-section-title">C. Return outcome</div>
+            <div class="form-row"><label>Return type</label>
+              <div class="rt-row">
+                <button type="button" class="rt-btn" data-type="type_a" onclick="setReturnType('type_a')">Type A — money only</button>
+                <button type="button" class="rt-btn" data-type="type_b" onclick="setReturnType('type_b')">Type B — product returned</button>
+              </div>
+            </div>
+            <div class="form-row"><label>SRT number</label><input type="text" id="nr-srt" placeholder="optional but recommended"></div>
+            <div class="form-row" id="nr-prt-row" style="display:none;"><label>PRT number</label><input type="text" id="nr-prt"></div>
+            <div class="form-row"><label>Stage</label>
+              <select id="nr-stage">
+                <option value="SRT Required">SRT Required</option>
+                <option value="SRT Raised">SRT Raised</option>
+                <option value="PRT Pending">PRT Pending</option>
+                <option value="PRT Received">PRT Received</option>
+                <option value="Dispute Raised">Dispute Raised</option>
+                <option value="Resolved">Resolved</option>
+              </select>
+            </div>
+            <div class="form-row"><label>Comments</label><textarea id="nr-comments" rows="3"></textarea></div>
+          </div>
+          <div class="form-section">
+            <div class="form-section-title">D. Dispute linking</div>
+            <div class="form-row"><label>Dispute ID</label><input type="text" id="nr-dispute-id" placeholder="DSPT…"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding:14px 18px; border-top:1px solid #E2E8F0; display:flex; gap:10px; justify-content:flex-end;">
+          <button type="button" onclick="closeAddReturnModal()" style="padding:10px 18px; background:#fff; border:1px solid #E2E8F0; border-radius:8px; cursor:pointer;">Cancel</button>
+          <button type="button" onclick="saveNewReturn()" style="padding:10px 22px; background:#0F2744; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer;">Save return</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('nr-date-received').value = new Date().toISOString().slice(0,10);
+  window._newReturnType = null;
+  overlay.classList.add('active');
+  overlay.style.display = 'flex';
+}
+function closeAddReturnModal(){
+  const o = document.getElementById('add-return-modal');
+  if (o) { o.classList.remove('active'); o.style.display = 'none'; }
+}
+function setReturnType(t){
+  window._newReturnType = t;
+  document.querySelectorAll('.rt-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t));
+  document.getElementById('nr-prt-row').style.display = (t === 'type_b') ? '' : 'none';
+}
+async function checkReturnIdAutoLink(){
+  const rid = (document.getElementById('nr-return-id').value || '').trim();
+  const banner = document.getElementById('nr-autolink-banner');
+  if (!rid || rid.length < 4) { banner.innerHTML = ''; return; }
+  try {
+    const { data } = await sb.from('disputes').select('dispute_number, tle_invoice_number, po_number, invoice_amount_aed, return_ids').or('return_ids.ilike.%' + rid + '%, return_id.ilike.%' + rid + '%').limit(1);
+    if (data && data.length) {
+      const d = data[0];
+      banner.innerHTML = '<div style="background:#ECFDF5; border:1px solid #34D399; color:#065F46; padding:10px 14px; border-radius:8px; margin:8px 0;">Auto-linked to dispute ' + d.dispute_number + ' — pulled invoice & PO data</div>';
+      if (d.tle_invoice_number && !document.getElementById('nr-tle').value) document.getElementById('nr-tle').value = d.tle_invoice_number;
+      if (d.po_number && !document.getElementById('nr-po').value) document.getElementById('nr-po').value = d.po_number;
+      if (d.invoice_amount_aed && !document.getElementById('nr-cost').value) document.getElementById('nr-cost').value = d.invoice_amount_aed;
+      if (!document.getElementById('nr-dispute-id').value) document.getElementById('nr-dispute-id').value = d.dispute_number;
+    } else {
+      banner.innerHTML = '';
+    }
+  } catch(e) { banner.innerHTML = ''; }
+}
+async function saveNewReturn(){
+  const v = (id) => (document.getElementById(id).value || '').trim();
+  const nv = (id) => { const x = document.getElementById(id).value; return x === '' ? null : Number(x); };
+  const rid = v('nr-return-id');
+  const tle = v('nr-tle');
+  const po = v('nr-po');
+  const sku = v('nr-sku');
+  const cost = nv('nr-cost');
+  const dr = v('nr-date-received');
+  if (!rid || !tle || !po || !sku || !cost || !dr) { alert('Please fill all required fields (marked with *)'); return; }
+  const srt = v('nr-srt');
+  const dispId = v('nr-dispute-id');
+  const record = {
+    return_id: rid,
+    vret_number: v('nr-vret') || null,
+    amazon_invoice: v('nr-amazon-invoice') || null,
+    date_received: dr,
+    warehouse: v('nr-warehouse') || null,
+    tle_invoice_number: tle,
+    po_number: po,
+    model_sku: sku,
+    qty: nv('nr-qty') || 1,
+    total_cost_aed: cost,
+    recovery_amt_aed: nv('nr-recovery'),
+    return_type: window._newReturnType || null,
+    srt_number: srt || null,
+    prt_number: v('nr-prt') || null,
+    stage: v('nr-stage') || 'SRT Required',
+    dispute_id_ref: dispId || null,
+    is_complete: !!srt,
+    status: 'open',
+    source: 'new'
+  };
+  try {
+    const { data, error } = await sb.from('returns').insert(record).select().single();
+    if (error) { alert('Save failed: ' + error.message); return; }
+    // If dispute_id_ref provided, backfill dispute row
+    if (dispId) {
+      const { data: dispRow } = await sb.from('disputes').select('id, po_number, tle_invoice_number').eq('dispute_number', dispId).limit(1);
+      if (dispRow && dispRow.length) {
+        const dr2 = dispRow[0];
+        const patch = {};
+        if (!dr2.po_number && po) patch.po_number = po;
+        if (!dr2.tle_invoice_number && tle) patch.tle_invoice_number = tle;
+        if (Object.keys(patch).length) await sb.from('disputes').update(patch).eq('id', dr2.id);
+      }
+    }
+    closeAddReturnModal();
+    if (typeof showToast === 'function') showToast('Return logged successfully'); else alert('Return logged successfully');
+    if (typeof loadReturns === 'function') loadReturns();
+  } catch(e) { alert('Save error: ' + e.message); }
+}
+function showToast(msg){
+  let t = document.getElementById('app-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'app-toast';
+    t.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0F2744; color:#fff; padding:12px 22px; border-radius:8px; z-index:10000; box-shadow:0 6px 20px rgba(0,0,0,0.2); font-weight:600;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+// === Auto-link on saveReturnField for dispute_id_ref ===
+(function(){
+  const orig = window.saveReturnField;
+  if (typeof orig === 'function') {
+    window.saveReturnField = async function(returnId, field, inputId){
+      const inp = document.getElementById(inputId);
+      const val = inp ? inp.value.trim() : '';
+      await orig(returnId, field, inputId);
+      if (field === 'dispute_id_ref' && val) {
+        try {
+          const { data: dispRow } = await sb.from('disputes').select('dispute_number, po_number, tle_invoice_number, invoice_amount_aed').eq('dispute_number', val).limit(1);
+          if (dispRow && dispRow.length) {
+            const d = dispRow[0];
+            const r = (window._allReturns || []).find(x => x.id === returnId);
+            const patch = {};
+            if (r && !r.tle_invoice_number && d.tle_invoice_number) patch.tle_invoice_number = d.tle_invoice_number;
+            if (r && !r.po_number && d.po_number) patch.po_number = d.po_number;
+            if (r && !r.total_cost_aed && d.invoice_amount_aed) patch.total_cost_aed = d.invoice_amount_aed;
+            if (Object.keys(patch).length) {
+              await sb.from('returns').update(patch).eq('id', returnId);
+              Object.assign(r, patch);
+              showToast('Linked to dispute ' + d.dispute_number + ' — pulled invoice & PO data');
+              if (typeof renderReturns === 'function') renderReturns();
+            }
+          }
+        } catch(e){ console.warn('auto-link failed', e); }
+      }
+    };
+  }
+})();
 </script>
+
+<style id="add-return-modal-css">
+.returns-completion-card { background:#fff; border:1px solid #E2E8F0; border-left:4px solid #F59E0B; border-radius:10px; padding:14px 16px; margin:10px 0; }
+.returns-completion-card .rc-top { margin-bottom:10px; }
+.returns-completion-card .rc-fields { display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; }
+.returns-completion-card .rc-label { font-size:11px; color:#64748B; text-transform:uppercase; font-weight:600; letter-spacing:0.5px; }
+.returns-completion-card .rc-val { font-size:13px; color:#0F2744; font-weight:600; margin-top:2px; }
+.returns-completion-card .rc-val.mono { font-family:'DM Mono', monospace; font-size:12px; }
+.returns-completion-card .rc-inputs { display:flex; flex-direction:column; gap:8px; }
+.returns-completion-card .rc-input-row { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#FFFBEB; border:1px solid #FCD34D; border-radius:8px; }
+.returns-completion-card .rc-input-row label { font-size:12px; color:#92400E; font-weight:600; min-width:200px; }
+.returns-completion-card .rc-input-row input { flex:1; padding:6px 10px; border:1px solid #FCD34D; border-radius:6px; font-size:13px; }
+.returns-completion-card .rc-input-row button { padding:6px 14px; background:#0F2744; color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:12px; }
+.stage-pill { display:inline-block; padding:2px 10px; background:#EEF2F6; color:#475467; border-radius:999px; font-size:11px; font-weight:600; }
+.form-section { margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid #F1F5F9; }
+.form-section:last-child { border-bottom:none; }
+.form-section-title { font-size:13px; font-weight:700; color:#0F2744; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+.form-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.form-row label { min-width:160px; font-size:13px; color:#475467; font-weight:500; }
+.form-row input[type="text"], .form-row input[type="number"], .form-row input[type="date"], .form-row select, .form-row textarea { flex:1; padding:8px 12px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px; font-family:inherit; }
+.rt-row { display:flex; gap:10px; flex:1; }
+.rt-btn { flex:1; padding:14px; background:#fff; border:2px solid #E2E8F0; border-radius:10px; cursor:pointer; font-weight:600; color:#475467; }
+.rt-btn.active { border-color:#0F2744; background:#0F2744; color:#fff; }
+.modal-overlay.active { display:flex; align-items:center; justify-content:center; position:fixed; inset:0; background:rgba(15,39,68,0.5); z-index:9999; }
+</style>
 </body>
 </html>
 
