@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Techniline Ops</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.mhin.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1612,10 +1612,10 @@ async function submitTagTask(taskId) {
 async function loadKPIs() {
   const uid = currentUser.id;
   const [posRes, claimsRes, retRes, dispRes] = await Promise.all([
-    sbQuery(sb.from('expected_actions').select('id', {count:'exact'}).eq('type','vendor_po').eq('status','open').eq('assigned_to', uid)),
+    sbQuery(sb.from('expected_actions').select('id', {count:'exact'}).eq('type','vendor_po').eq('status','open').eq('assigned_to', uid).gte('email_received_at', new Date(Date.now() - 14*86400000).toISOString())),
     sbQuery(sb.from('expected_actions').select('aed_amount').eq('type','shortage_claim').eq('status','open').eq('assigned_to', uid)),
     sbQuery(sb.from('expected_actions').select('id', {count:'exact'}).eq('type','return_processed').eq('status','open').eq('assigned_to', uid)),
-    sbQuery(sb.from('disputes').select('id', {count:'exact'}).neq('dispute_status','resolved').lt('created_at', new Date(Date.now() - 3*86400000).toISOString()))
+    sbQuery(sb.from('disputes').select('id', {count:'exact'}).in('dispute_status', ['open','awaiting_amazon','raised','replied']).lt('created_at', new Date(Date.now() - 3*86400000).toISOString()))
   ]);
   if (posRes.error && claimsRes.error && retRes.error && dispRes.error) {
     showRetryBanner('kpi-grid', () => loadKPIs(), 'Could not load KPIs — tap to retry');
