@@ -697,10 +697,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       <div class="pri-list" id="disp-list"><div class="loading-state">Loading disputes…</div></div>
     </div>
 
-  </div>
-</div>
-
-
+  
       <!-- Returns Tab -->
       <div class="tab-pane" id="pane-returns">
         <div class="summary-bar">
@@ -719,6 +716,11 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
         </div>
         <div class="returns-table-wrap"><div id="returns-table-host"><div class="loading-state">Loading returns…</div></div></div>
       </div>
+    </div>
+</div>
+
+
+      
 
       
     <!-- Pre-dispute checklist overlay -->
@@ -2885,6 +2887,78 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         if (name === 'disputes') setTimeout(ensureWired, 200);
       };
     })();
+
+// ===== Post-render badge augmentation =====
+(function(){
+  function augmentNotifCards(){
+    const cards = document.querySelectorAll('#notif-list .notif-card');
+    cards.forEach(card => {
+      if (card.dataset.badgesApplied) return;
+      const dateStr = card.dataset.emailReceivedAt || card.dataset.receivedAt || card.dataset.createdAt;
+      if (!dateStr || typeof getAgeWarning !== 'function') return;
+      const warn = getAgeWarning(dateStr);
+      if (!warn) { card.dataset.badgesApplied = '1'; return; }
+      const meta = card.querySelector('.notif-meta, .notif-actions, .notif-foot');
+      const pill = document.createElement('span');
+      pill.className = 'age-pill ' + warn.class;
+      pill.textContent = warn.text;
+      if (meta) meta.appendChild(pill);
+      else card.appendChild(pill);
+      card.dataset.badgesApplied = '1';
+    });
+  }
+  function augmentDisputeRows(){
+    const rows = document.querySelectorAll('#disp-list .disp-row, #disp-list tr.disp-row, .disp-row');
+    rows.forEach(row => {
+      if (row.dataset.badgesApplied) return;
+      const createdAt = row.dataset.createdAt;
+      const dispType = row.dataset.disputeType;
+      const srt = row.dataset.srt;
+      const tle = row.dataset.tle;
+      const comment = row.dataset.comment || '';
+      const cell = row.querySelector('.disp-status-cell, .disp-actions-cell, td:last-child');
+      if (createdAt && typeof getAgeWarning === 'function') {
+        const warn = getAgeWarning(createdAt);
+        if (warn) {
+          const pill = document.createElement('span');
+          pill.className = 'age-pill ' + warn.class;
+          pill.textContent = warn.text;
+          if (cell) cell.appendChild(pill);
+        }
+      }
+      if (typeof getRecoveryProbability === 'function') {
+        const fake = { dispute_type: dispType, srt_number: srt, tle_invoice_number: tle, comment };
+        const rec = getRecoveryProbability(fake);
+        if (rec) {
+          const pill = document.createElement('span');
+          pill.className = 'rec-pill rec-' + rec.toLowerCase();
+          pill.textContent = rec + ' recovery';
+          if (cell) cell.appendChild(pill);
+        }
+      }
+      row.dataset.badgesApplied = '1';
+    });
+  }
+  function runAll(){
+    try { augmentNotifCards(); } catch(e){}
+    try { augmentDisputeRows(); } catch(e){}
+  }
+  const targets = ['notif-list', 'disp-list'];
+  function attach(){
+    targets.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.dataset.augObserver) {
+        const obs = new MutationObserver(() => { setTimeout(runAll, 50); });
+        obs.observe(el, { childList: true, subtree: true });
+        el.dataset.augObserver = '1';
+      }
+    });
+    runAll();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
+  else attach();
+  setInterval(runAll, 5000);
+})();
 </script>
 </body>
 </html>
