@@ -408,6 +408,91 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .notif-window-btn { background:#fff; border:1px solid #E4E7EC; color:#475467; padding:6px 14px; border-radius:999px; cursor:pointer; font-size:13px; font-weight:500; transition:all .15s; }
     .notif-window-btn:hover { border-color:#0F2744; }
     .notif-window-btn.active { background:#0F2744; color:#fff; border-color:#0F2744; }
+  
+    /* === Updates 1-7 styles === */
+    .predispute-overlay { position:fixed; inset:0; background:rgba(15,39,68,0.6); z-index:9999; display:none; align-items:center; justify-content:center; padding:20px; }
+    .predispute-overlay.open { display:flex; }
+    .predispute-box { background:#fff; border-radius:16px; max-width:540px; width:100%; padding:28px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); }
+    .predispute-title { font-size:20px; font-weight:700; color:#0F2744; margin-bottom:6px; }
+    .predispute-subtitle { font-size:13px; color:#64748B; margin-bottom:20px; }
+    .predispute-check { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid #E2E8F0; border-radius:10px; margin-bottom:10px; cursor:pointer; transition:all .15s; user-select:none; }
+    .predispute-check:hover { border-color:#0F2744; }
+    .predispute-check.checked { background:#ECFDF5; border-color:#059669; }
+    .predispute-check-box { width:22px; height:22px; border:2px solid #CBD5E1; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:transparent; font-weight:700; }
+    .predispute-check.checked .predispute-check-box { background:#059669; border-color:#059669; color:#fff; }
+    .predispute-check-label { font-size:14px; font-weight:500; color:#0F2744; }
+    .predispute-result { margin-top:18px; padding:14px; border-radius:10px; font-size:13px; font-weight:600; }
+    .predispute-result.ok { background:#ECFDF5; color:#059669; }
+    .predispute-result.warn { background:#FFFBEB; color:#D97706; }
+    .predispute-actions { display:flex; gap:10px; margin-top:16px; }
+    .predispute-btn { flex:1; padding:12px 16px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; border:1px solid transparent; transition:all .15s; }
+    .predispute-btn.primary { background:#0F2744; color:#fff; }
+    .predispute-btn.primary:hover { background:#1B3A5C; }
+    .predispute-btn.ghost { background:#fff; color:#475467; border-color:#E2E8F0; }
+    .predispute-btn.accept { background:#fff; color:#D97706; border-color:#FBBF24; }
+    .predispute-btn.dispute-anyway { background:#fff; color:#0F2744; border-color:#CBD5E1; font-size:13px; flex:0 0 auto; padding:10px 14px; }
+    .predispute-footnote { margin-top:10px; font-size:12px; color:#64748B; line-height:1.5; }
+    .vret-decision { padding:8px 0; }
+    .vret-question { font-weight:600; font-size:13px; color:#0F2744; margin-bottom:8px; }
+    .vret-options { display:flex; gap:8px; flex-wrap:wrap; }
+    .vret-opt { flex:1; min-width:140px; padding:12px 14px; border-radius:10px; cursor:pointer; font-weight:600; font-size:13px; border:1.5px solid; background:#fff; transition:all .15s; text-align:left; }
+    .vret-opt.green { color:#059669; border-color:#059669; }
+    .vret-opt.green:hover { background:#ECFDF5; }
+    .vret-opt.amber { color:#D97706; border-color:#FBBF24; }
+    .vret-opt.amber:hover { background:#FFFBEB; }
+    .vret-opt.red { color:#DC2626; border-color:#DC2626; }
+    .vret-opt.red:hover { background:#FEF2F2; }
+    .vret-opt-title { display:block; margin-bottom:2px; }
+    .vret-opt-sub { display:block; font-size:11px; font-weight:500; opacity:0.85; }
+    .age-warning { background:#FFFBEB; color:#D97706; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:8px; }
+    .age-danger { background:#FEF2F2; color:#DC2626; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:8px; }
+    .age-critical { background:#DC2626; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:8px; animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+    .recovery-high { background:#ECFDF5; color:#059669; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:6px; }
+    .recovery-medium { background:#FFFBEB; color:#D97706; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:6px; }
+    .recovery-low { background:#FEF2F2; color:#DC2626; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; display:inline-block; margin-left:6px; }
+    .returns-completion-bar { background:#FFFBEB; border:1px solid #FBBF24; color:#92400E; padding:12px 16px; border-radius:10px; font-weight:600; font-size:13px; margin-bottom:12px; }
+    .returns-completion-list { display:flex; flex-direction:column; gap:10px; margin-bottom:20px; }
+    .return-incomplete-card { background:#fff; border:1px solid #E2E8F0; border-left:4px solid #FBBF24; border-radius:8px; padding:14px 16px; transition:all .35s; }
+    .return-incomplete-card.flash-ok { background:#ECFDF5; border-left-color:#059669; }
+    .return-top-row { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:#475467; margin-bottom:8px; align-items:center; }
+    .return-top-row strong { color:#0F2744; font-weight:600; }
+    .return-stage-badge { background:#E0E7FF; color:#3730A3; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; }
+    .return-inline-fix { display:flex; gap:8px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+    .return-inline-fix label { font-size:12px; font-weight:600; color:#0F2744; min-width:90px; }
+    .return-inline-fix input { padding:6px 10px; border:1px solid #FBBF24; border-radius:6px; font-size:13px; min-width:160px; }
+    .return-inline-fix button { padding:6px 14px; background:#0F2744; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .return-inline-fix button:hover { background:#1B3A5C; }
+    .returns-table-wrap { overflow-x:auto; }
+    .returns-table { width:100%; border-collapse:collapse; font-size:13px; min-width:1200px; }
+    .returns-table thead { position:sticky; top:0; background:#0F2744; z-index:2; }
+    .returns-table th { padding:12px 10px; color:#fff; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; user-select:none; }
+    .returns-table tbody tr { border-bottom:1px solid #E2E8F0; cursor:pointer; }
+    .returns-table tbody tr:nth-child(even) { background:#F8FAFC; }
+    .returns-table tbody tr:hover { background:#EFF6FF; }
+    .returns-table td { padding:10px; vertical-align:top; }
+    .returns-table .num { text-align:right; font-variant-numeric:tabular-nums; }
+    .returns-table .dispute-link { color:#0F2744; font-weight:600; cursor:pointer; text-decoration:underline; }
+    .returns-table .dispute-link:hover { color:#1B3A5C; }
+    .returns-filter-chips { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
+    .returns-filter-chips .chip { padding:6px 14px; border-radius:999px; border:1px solid #E2E8F0; background:#fff; color:#475467; font-size:12px; font-weight:600; cursor:pointer; }
+    .returns-filter-chips .chip.active { background:#0F2744; color:#fff; border-color:#0F2744; }
+    .returns-expand-row { background:#F8FAFC; }
+    .returns-expand-row td { padding:14px 18px; }
+    .returns-expand-link { background:#fff; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px; }
+    .returns-expand-link .row { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; margin-bottom:6px; }
+    .returns-expand-link strong { color:#0F2744; }
+    .returns-expand-prompt { background:#FFFBEB; border:1px solid #FBBF24; color:#92400E; padding:12px 14px; border-radius:8px; }
+    .returns-expand-prompt button { margin-left:10px; padding:6px 14px; background:#0F2744; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .disp-expand-row { background:#F8FAFC; }
+    .disp-expand-row td { padding:14px 18px; }
+    .linked-return-box { background:#fff; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px; }
+    .linked-return-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:#64748B; margin-bottom:8px; }
+    .linked-return-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px 18px; font-size:12px; }
+    .linked-return-grid div strong { display:block; color:#0F2744; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; }
+    .disp-row-expandable { cursor:pointer; }
+    .disp-chevron { display:inline-block; transition:transform .15s; }
+    .disp-chevron.open { transform:rotate(90deg); }
   </style>
 </head>
 <body>
@@ -484,6 +569,10 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
       Disputes <span class="notif-count" id="disp-count" style="display:none;background:var(--amber)">0</span>
     </button>
+        <button class="tab-btn" onclick="switchTab('returns', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Returns <span class="notif-count" id="returns-count" style="display:none">0</span>
+        </button>
   </div>
 
   <div class="tab-content-area">
@@ -611,7 +700,41 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
   </div>
 </div>
 
-<!-- PO Action Modal -->
+
+      <!-- Returns Tab -->
+      <div class="tab-pane" id="pane-returns">
+        <div class="summary-bar">
+          <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
+          <div class="sum-card"><div class="sum-card-val" id="ret-cost">—</div><div class="sum-card-label">Total cost AED</div></div>
+          <div class="sum-card"><div class="sum-card-val success" id="ret-recovered">—</div><div class="sum-card-label">Total recovered AED</div></div>
+          <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs attention</div></div>
+        </div>
+        <div id="returns-completion-area"></div>
+        <div class="returns-filter-chips" id="returns-filter-chips">
+          <button type="button" class="chip active" onclick="filterReturns('all', this)">All</button>
+          <button type="button" class="chip" onclick="filterReturns('needs', this)">Needs attention</button>
+          <button type="button" class="chip" onclick="filterReturns('complete', this)">Complete</button>
+          <button type="button" class="chip" onclick="filterReturns('historical', this)">Historical</button>
+          <button type="button" class="chip" onclick="filterReturns('new', this)">New</button>
+        </div>
+        <div class="returns-table-wrap"><div id="returns-table-host"><div class="loading-state">Loading returns…</div></div></div>
+      </div>
+
+      
+    <!-- Pre-dispute checklist overlay -->
+    <div class="predispute-overlay" id="predispute-overlay">
+      <div class="predispute-box">
+        <div class="predispute-title">Before raising a dispute — confirm all of the following</div>
+        <div class="predispute-subtitle">Disputing without evidence reduces recovery credibility</div>
+        <div class="predispute-check" id="pdc-1" onclick="togglePreDisputeCheck(1)"><div class="predispute-check-box">✓</div><div class="predispute-check-label">POD was signed and confirmed by carrier</div></div>
+        <div class="predispute-check" id="pdc-2" onclick="togglePreDisputeCheck(2)"><div class="predispute-check-box">✓</div><div class="predispute-check-label">ASN was submitted correctly</div></div>
+        <div class="predispute-check" id="pdc-3" onclick="togglePreDisputeCheck(3)"><div class="predispute-check-box">✓</div><div class="predispute-check-label">Carton count matched the invoice</div></div>
+        <div class="predispute-check" id="pdc-4" onclick="togglePreDisputeCheck(4)"><div class="predispute-check-box">✓</div><div class="predispute-check-label">Carrier confirmation exists</div></div>
+        <div id="predispute-result-area"></div>
+      </div>
+    </div>
+
+    <!-- PO Action Modal -->
 <div class="modal-overlay" id="po-modal">
   <div class="modal-box">
     <div class="modal-header">
@@ -697,7 +820,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       </div>
       <div class="modal-field">
         <label class="modal-label">Recommendation <span class="req">*</span></label>
-        <select class="modal-input" id="disp-rec">
+        <select class="modal-input" id="disp-rec" onchange="handleRecChange(this)">
           <option value="">Select recommendation</option>
           <option value="dispute">Dispute — Amazon claim is incorrect</option>
           <option value="accept">Accept — deduction is valid</option>
@@ -1102,13 +1225,13 @@ function buildNotifCard(n) {
   } else if (n.type === 'vendor_po') {
     actions = `<button class="btn-navy" onclick="openPOModal('${n.id}','${n.ref_number}')">Action PO ${n.ref_number}</button><span class="sla-pill warning">2 days to confirm</span>`;
   } else if (n.type === 'shortage_claim') {
-    actions = `<button class="btn-navy" onclick="openDisputeModal('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="acceptDeduction('${n.id}')">Accept</button><span class="sla-pill urgent">Act within 2 days</span>`;
+    actions = `<button class="btn-navy" onclick="raiseDisputeFromClaim('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="acceptDeduction('${n.id}')">Accept</button><span class="sla-pill urgent">Act within 2 days</span>`;
   } else if (n.type === 'po_cancellation') {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Confirmed — will not ship')">Confirmed — will not ship</button><button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif('${n.id}','Already shipped — escalating')">Already shipped — escalate</button>`;
   } else if (n.type === 'remittance') {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Reconciled')">Mark reconciled</button><span class="sla-pill ok">No urgent action</span>`;
   } else if (n.type === 'return_processed') {
-    actions = `<button class="btn-navy" onclick="openReturnModal('${n.id}','${n.ref_number||''}')">Log return details</button><span class="sla-pill warning">Action today</span>`;
+    actions = `<div class="vret-decision"><div class="vret-question">Was stock physically returned to your warehouse?</div><div class="vret-options"><button class="vret-opt green" onclick="chooseVretA('${n.id}')"><span class="vret-opt-title">Yes — sellable condition</span><span class="vret-opt-sub">Accept — rebook to inventory</span></button><button class="vret-opt amber" onclick="chooseVretB('${n.id}')"><span class="vret-opt-title">Yes — damaged or incomplete</span><span class="vret-opt-sub">Medium recovery probability</span></button><button class="vret-opt red" onclick="chooseVretC('${n.id}')"><span class="vret-opt-title">Not received — dispute</span><span class="vret-opt-sub">High recovery probability</span></button></div></div>`;
   } else if (n.type === 'dispute_update') {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Status updated')">Update status</button>`;
   }
@@ -2289,6 +2412,479 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open')); });
 document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+
+
+    // ============================================================
+    // ===== Updates 1-7: NEW HELPERS AND HANDLERS =====
+    // ============================================================
+    
+    // ----- Update 1: Pre-dispute checklist -----
+    let _pdState = {1:false, 2:false, 3:false, 4:false, currentId:null};
+    function raiseDisputeFromClaim(id) {
+      _pdState = {1:false, 2:false, 3:false, 4:false, currentId:id};
+      for (let i = 1; i <= 4; i++) {
+        const el = document.getElementById('pdc-' + i);
+        if (el) el.classList.remove('checked');
+      }
+      renderPreDisputeResult();
+      document.getElementById('predispute-overlay').classList.add('open');
+    }
+    function togglePreDisputeCheck(n) {
+      _pdState[n] = !_pdState[n];
+      const el = document.getElementById('pdc-' + n);
+      if (el) el.classList.toggle('checked', _pdState[n]);
+      renderPreDisputeResult();
+    }
+    function renderPreDisputeResult() {
+      const area = document.getElementById('predispute-result-area');
+      if (!area) return;
+      const allChecked = _pdState[1] && _pdState[2] && _pdState[3] && _pdState[4];
+      const id = _pdState.currentId;
+      if (allChecked) {
+        area.innerHTML = '<div class="predispute-result ok">Strong case for dispute — proceed</div>'
+          + '<div class="predispute-actions">'
+          + '<button class="predispute-btn primary" onclick="proceedPreDispute()">Proceed to raise dispute</button>'
+          + '<button class="predispute-btn ghost" onclick="closePreDispute()">Cancel</button>'
+          + '</div>';
+      } else {
+        area.innerHTML = '<div class="predispute-result warn">This deduction may be valid — consider accepting instead</div>'
+          + '<div class="predispute-actions">'
+          + '<button class="predispute-btn accept" onclick="closePreDispute(); acceptDeduction(\'' + id + '\')">Accept deduction</button>'
+          + '<button class="predispute-btn dispute-anyway" onclick="proceedPreDispute()">Raise dispute anyway</button>'
+          + '</div>'
+          + '<div class="predispute-footnote">Raising disputes without supporting documents reduces your recovery rate and Amazon credibility score</div>';
+      }
+    }
+    function closePreDispute() {
+      document.getElementById('predispute-overlay').classList.remove('open');
+    }
+    function proceedPreDispute() {
+      const id = _pdState.currentId;
+      // Save checklist state on a global so saveDispute / submitDispute can attach it
+      window._pdChecks = JSON.stringify(_pdState);
+      closePreDispute();
+      openDisputeModal(id);
+    }
+    
+    // ----- Update 2: VRET decision tree -----
+    let _vretState = {}; // id -> chosen path
+    function chooseVretA(id) {
+      _vretState[id] = {return_type:'type_a', note:'Stock received in sellable condition — rebook inventory'};
+      openReturnModalWithPreset(id, _vretState[id]);
+    }
+    function chooseVretB(id) {
+      _vretState[id] = {return_type:'type_b', dispute_reason:'Damaged product — not in original condition', recovery:'Medium'};
+      openReturnModalWithPreset(id, _vretState[id]);
+    }
+    function chooseVretC(id) {
+      _vretState[id] = {return_type:'type_a', dispute_reason:'Product not physically received — deduction unsupported', recovery:'High'};
+      openReturnModalWithPreset(id, _vretState[id]);
+    }
+    function openReturnModalWithPreset(id, preset) {
+      // Pull the existing notification record from allNotifications, derive ref_number
+      const n = (window.allNotifications || []).find(x => x.id === id) || {};
+      const refNum = n.ref_number || '';
+      window._vretPreset = preset;
+      if (typeof openReturnModal === 'function') {
+        openReturnModal(id, refNum);
+      }
+      // After the modal opens, try to pre-fill type and reason if those inputs exist
+      setTimeout(() => {
+        try {
+          if (preset.return_type) {
+            const tEl = document.getElementById('ret-type');
+            if (tEl) { tEl.value = preset.return_type; tEl.dispatchEvent(new Event('change', {bubbles:true})); }
+          }
+          if (preset.dispute_reason) {
+            const rEl = document.getElementById('ret-reason') || document.getElementById('return-reason');
+            if (rEl) rEl.value = preset.dispute_reason;
+          }
+          if (preset.note) {
+            const nEl = document.getElementById('ret-note') || document.getElementById('return-note');
+            if (nEl) nEl.value = preset.note;
+          }
+        } catch(e) { console.warn('vret pre-fill skipped', e); }
+      }, 100);
+    }
+    
+    // ----- Update 3: Age warning helper -----
+    function getAgeWarning(dateString) {
+      if (!dateString) return null;
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return null;
+      const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+      if (days < 30) return null;
+      if (days < 60)  return { text: days + ' days — act soon', cls: 'age-warning' };
+      if (days < 90)  return { text: days + ' days — recovery at risk', cls: 'age-danger' };
+      return { text: days + ' days — very difficult to recover', cls: 'age-critical' };
+    }
+    function ageBadgeHtml(dateString) {
+      const w = getAgeWarning(dateString);
+      if (!w) return '';
+      return '<span class="' + w.cls + '">' + w.text + '</span>';
+    }
+    
+    // ----- Update 4: Recovery probability helper -----
+    function getRecoveryProbability(d) {
+      if (!d) return null;
+      const dt = (d.dispute_type || '').toLowerCase();
+      const cmt = (d.maricel_comment || '').toLowerCase();
+      const rec = (d.maricel_recommendation || '').toLowerCase();
+      const hasSrt = !!d.srt_number;
+      const hasInv = !!d.tle_invoice_number;
+      const created = d.created_at ? new Date(d.created_at) : null;
+      const ageDays = created ? Math.floor((Date.now() - created.getTime()) / 86400000) : null;
+      // Low rules
+      if (dt.includes('coop') || dt.includes('mdf') || dt.includes('co-op')) return 'low';
+      if (dt.includes('price') || dt.includes('pc')) return 'low';
+      if (ageDays !== null && ageDays > 60) return 'low';
+      if (rec === 'accept') return 'low';
+      // High rules
+      if (dt.includes('shortage') && (hasSrt || hasInv)) return 'high';
+      if (dt.includes('vendor returns') && hasSrt) return 'high';
+      if (cmt.includes('not received') || cmt.includes('missing') || cmt.includes('duplicate')) return 'high';
+      // Medium rules
+      if (dt.includes('vendor returns') && !hasSrt) return 'medium';
+      if (dt.includes('shortage') && !hasSrt && !hasInv) return 'medium';
+      if (ageDays !== null && ageDays > 30 && ageDays < 60) return 'medium';
+      return 'medium';
+    }
+    function recoveryBadgeHtml(d) {
+      const lvl = getRecoveryProbability(d);
+      if (!lvl) return '';
+      const labels = { high: 'High recovery', medium: 'Medium recovery', low: 'Low recovery' };
+      return '<span class="recovery-' + lvl + '">' + labels[lvl] + '</span>';
+    }
+    
+    // ----- Update 5: Escalation pre-fill -----
+    function handleRecChange(sel) {
+      if (sel && sel.value === 'escalate') {
+        const ta = document.getElementById('disp-comment');
+        if (ta && (!ta.value || ta.value.trim() === '')) {
+          ta.value = 'We are unable to identify supporting records for this deduction in Vendor Central and request supporting documentation, return reference linkage, and guidance on dispute resolution.';
+          if (typeof updateCharCount === 'function') {
+            updateCharCount('disp-comment', 'disp-char-count', 20);
+          }
+          ta.dispatchEvent(new Event('input', {bubbles:true}));
+        }
+      }
+    }
+    
+    // ----- Update 6: Returns tab logic -----
+    let _allReturns = [];
+    let _returnsFilter = 'all';
+    async function loadReturns() {
+      try {
+        const { data, error } = await sb.from('returns').select('*').order('date_received', { ascending: false }).limit(1000);
+        if (error) {
+          const host = document.getElementById('returns-table-host');
+          if (host) host.innerHTML = '<div class="empty-state"><div class="empty-title">Could not load returns</div><div class="empty-sub">' + (error.message || 'tap to retry') + '</div></div>';
+          return;
+        }
+        _allReturns = data || [];
+        renderReturns();
+      } catch (e) {
+        console.warn('loadReturns failed:', e);
+      }
+    }
+    function renderReturns() {
+      // Summary
+      const total = _allReturns.length;
+      const totCost = _allReturns.reduce((s,r) => s + (parseFloat(r.total_cost_aed) || 0), 0);
+      const totRec  = _allReturns.reduce((s,r) => s + (parseFloat(r.recovery_amt_aed) || 0), 0);
+      const incomplete = _allReturns.filter(r => !r.is_complete);
+      const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      setText('ret-total', total);
+      setText('ret-cost', totCost.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}));
+      setText('ret-recovered', totRec.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}));
+      setText('ret-needs', incomplete.length);
+      const badge = document.getElementById('returns-count');
+      if (badge) {
+        badge.textContent = incomplete.length;
+        badge.style.display = incomplete.length > 0 ? 'inline-flex' : 'none';
+      }
+      // Completion queue (PART B)
+      const compArea = document.getElementById('returns-completion-area');
+      if (compArea) {
+        if (incomplete.length === 0) {
+          compArea.innerHTML = '';
+        } else {
+          let html = '<div class="returns-completion-bar">' + incomplete.length + ' returns need your attention — missing SRT or Dispute ID</div>';
+          html += '<div class="returns-completion-list">';
+          incomplete.forEach(r => {
+            html += '<div class="return-incomplete-card" id="ret-card-' + r.id + '">';
+            html += '<div class="return-top-row">';
+            html += '<span><strong>' + fmtRetDate(r.date_received) + '</strong></span>';
+            html += '<span>VRET <strong>' + (r.vret_number || '—') + '</strong></span>';
+            html += '<span>SKU <strong>' + (r.model_sku || '—') + '</strong></span>';
+            html += '<span>PO <strong>' + (r.po_number || '—') + '</strong></span>';
+            html += '<span>TLE Inv <strong>' + (r.amazon_invoice || '—') + '</strong></span>';
+            html += '<span class="return-stage-badge">' + (r.stage || 'pending') + '</span>';
+            html += '</div>';
+            if (!r.srt_number) {
+              html += '<div class="return-inline-fix"><label>SRT Number</label><input type="text" id="srt-input-' + r.id + '" placeholder="Enter SRT"><button onclick="saveReturnField(\'' + r.id + '\', \'srt_number\', \'srt-input-' + r.id + '\')">Save</button></div>';
+            }
+            if (!r.dispute_id_ref) {
+              html += '<div class="return-inline-fix"><label>Dispute ID</label><input type="text" id="dref-input-' + r.id + '" placeholder="Enter Dispute ID"><button onclick="saveReturnField(\'' + r.id + '\', \'dispute_id_ref\', \'dref-input-' + r.id + '\')">Save</button></div>';
+            }
+            html += '</div>';
+          });
+          html += '</div>';
+          compArea.innerHTML = html;
+        }
+      }
+      // Full table (PART C)
+      renderReturnsTable();
+    }
+    function fmtRetDate(s) {
+      if (!s) return '—';
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s;
+      return d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'numeric'});
+    }
+    function filterReturns(key, btn) {
+      _returnsFilter = key;
+      document.querySelectorAll('#returns-filter-chips .chip').forEach(c => c.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderReturnsTable();
+    }
+    function renderReturnsTable() {
+      const host = document.getElementById('returns-table-host');
+      if (!host) return;
+      let rows = _allReturns.slice();
+      if (_returnsFilter === 'needs') rows = rows.filter(r => !r.is_complete);
+      else if (_returnsFilter === 'complete') rows = rows.filter(r => r.is_complete);
+      else if (_returnsFilter === 'historical') rows = rows.filter(r => (r.source || 'historical') === 'historical');
+      else if (_returnsFilter === 'new') rows = rows.filter(r => r.source === 'new');
+      if (rows.length === 0) {
+        host.innerHTML = '<div class="empty-state"><div class="empty-title">No returns to show</div><div class="empty-sub">Returns will appear here once vendor returns notifications are logged.</div></div>';
+        return;
+      }
+      const head = '<table class="returns-table"><thead><tr>'
+        + '<th>Date</th><th>VRET</th><th>Return ID</th><th>Model/SKU</th><th>PO #</th><th>TLE Invoice</th>'
+        + '<th class="num">Qty</th><th class="num">Total AED</th><th class="num">Recovery AED</th>'
+        + '<th>Stage</th><th>SRT</th><th>PRT</th><th>Dispute ID</th><th>Status</th><th>Source</th><th>Age</th></tr></thead>';
+      const body = '<tbody>' + rows.map(r => {
+        const ageHtml = ageBadgeHtml(r.date_received);
+        const disputeCell = r.dispute_id_ref ? '<span class="dispute-link" onclick="goToDispute(\'' + r.dispute_id_ref + '\')">' + r.dispute_id_ref + '</span>' : '—';
+        return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '">'
+          + '<td>' + fmtRetDate(r.date_received) + '</td>'
+          + '<td>' + (r.vret_number || '—') + '</td>'
+          + '<td>' + (r.return_id_ref || '—') + '</td>'
+          + '<td>' + (r.model_sku || '—') + '</td>'
+          + '<td>' + (r.po_number || '—') + '</td>'
+          + '<td>' + (r.amazon_invoice || '—') + '</td>'
+          + '<td class="num">' + (r.qty != null ? r.qty : '—') + '</td>'
+          + '<td class="num">' + (r.total_cost_aed != null ? Number(r.total_cost_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
+          + '<td class="num">' + (r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
+          + '<td>' + (r.stage || '—') + '</td>'
+          + '<td>' + (r.srt_number || '—') + '</td>'
+          + '<td>' + (r.prt_number || '—') + '</td>'
+          + '<td>' + disputeCell + '</td>'
+          + '<td>' + (r.status || '—') + '</td>'
+          + '<td>' + (r.source || 'historical') + '</td>'
+          + '<td>' + ageHtml + '</td>'
+          + '</tr>';
+      }).join('') + '</tbody></table>';
+      host.innerHTML = head + body;
+    }
+    async function saveReturnField(returnId, field, inputId) {
+      const inp = document.getElementById(inputId);
+      const value = inp ? (inp.value || '').trim() : '';
+      if (!value) { alert('Please enter a value.'); return; }
+      const updates = {}; updates[field] = value;
+      const { error } = await sb.from('returns').update(updates).eq('id', returnId);
+      if (error) { alert('Save failed: ' + error.message); return; }
+      // Update local copy
+      const r = _allReturns.find(x => x.id === returnId);
+      if (r) r[field] = value;
+      // Auto-resolution check
+      if (r) {
+        const stage = (r.stage || '').toLowerCase();
+        const statusText = (r.dispute_status_text || '').toLowerCase();
+        let autoResolve = false;
+        // Rule 1
+        if (r.srt_number && r.dispute_id_ref && statusText === 'resolved') autoResolve = true;
+        // Rule 2
+        if ((r.return_type || '') === 'type_a' && r.srt_number) autoResolve = true;
+        // Rule 3
+        if (stage.includes('resolved') && r.srt_number) autoResolve = true;
+        if (autoResolve) {
+          await sb.from('returns').update({ status: 'closed', is_complete: true }).eq('id', returnId);
+          r.status = 'closed'; r.is_complete = true;
+        } else {
+          await sb.from('returns').update({ is_complete: true, status: 'open' }).eq('id', returnId);
+          r.is_complete = true; r.status = 'open';
+        }
+        // Flash + remove
+        const card = document.getElementById('ret-card-' + returnId);
+        if (card) {
+          card.classList.add('flash-ok');
+          setTimeout(() => { renderReturns(); }, 600);
+        } else {
+          renderReturns();
+        }
+      }
+    }
+    function toggleReturnExpand(returnId, rowEl) {
+      const next = rowEl.nextElementSibling;
+      if (next && next.classList.contains('returns-expand-row')) { next.remove(); return; }
+      const r = _allReturns.find(x => x.id === returnId);
+      if (!r) return;
+      const exp = document.createElement('tr');
+      exp.className = 'returns-expand-row';
+      const td = document.createElement('td');
+      td.colSpan = 16;
+      td.innerHTML = '<div id="ret-exp-' + returnId + '"><div class="loading-state">Loading…</div></div>';
+      exp.appendChild(td);
+      rowEl.parentNode.insertBefore(exp, rowEl.nextSibling);
+      // Lazy-fetch linked dispute
+      (async () => {
+        let html = '';
+        if (r.dispute_id_ref) {
+          const { data, error } = await sb.from('disputes').select('*').eq('dispute_number', r.dispute_id_ref).limit(1);
+          if (error || !data || !data.length) {
+            html = '<div class="returns-expand-prompt">Linked dispute ' + r.dispute_id_ref + ' not found in database.</div>';
+          } else {
+            const d = data[0];
+            const gap = d.gap_aed != null ? Number(d.gap_aed) : null;
+            html = '<div class="returns-expand-link">'
+              + '<div class="row">'
+              + '<span><strong>Dispute</strong> ' + d.dispute_number + '</span>'
+              + '<span><strong>Status</strong> ' + (d.dispute_status || '—') + '</span>'
+              + '<span><strong>Invoice AED</strong> ' + (d.invoice_amount_aed != null ? Number(d.invoice_amount_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</span>'
+              + '<span><strong>Approved AED</strong> ' + (d.approved_amount_aed != null ? Number(d.approved_amount_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</span>'
+              + '<span><strong>Gap AED</strong> <span style="color:' + (gap > 0 ? '#DC2626' : '#059669') + '">' + (gap != null ? gap.toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</span></span>'
+              + recoveryBadgeHtml(d) + ageBadgeHtml(d.created_at)
+              + '</div>'
+              + '</div>';
+          }
+        } else {
+          const stage = (r.stage || '').toLowerCase();
+          if (stage.includes('prt pending') || stage.includes('srt required')) {
+            html = '<div class="returns-expand-prompt">No dispute linked — tap to raise dispute'
+              + '<button onclick="raiseDisputeFromReturn(\'' + returnId + '\')">Raise dispute</button></div>';
+          } else {
+            html = '<div class="returns-expand-link"><div class="row"><span>No linked dispute.</span></div></div>';
+          }
+        }
+        const target = document.getElementById('ret-exp-' + returnId);
+        if (target) target.innerHTML = html;
+      })();
+    }
+    function raiseDisputeFromReturn(returnId) {
+      const r = _allReturns.find(x => x.id === returnId);
+      if (!r) return;
+      // Pre-fill the dispute modal
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+      // Open the modal without auto-populate (no notification)
+      const m = document.getElementById('dispute-modal');
+      if (!m) return;
+      ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'].forEach(fid => {
+        const el = document.getElementById(fid); if (!el) return;
+        el.value = ''; el.classList.remove('needs-attention');
+      });
+      if (r.po_number) set('disp-po', r.po_number);
+      if (r.amazon_invoice) set('disp-invoice', r.amazon_invoice);
+      if (r.total_cost_aed) set('disp-amount', r.total_cost_aed);
+      m.classList.add('open');
+    }
+    function goToDispute(dispNumber) {
+      const btn = document.querySelector('.tab-btn[onclick*="disputes"]');
+      if (btn) btn.click();
+      setTimeout(() => {
+        const rows = document.querySelectorAll('#disp-list tbody tr');
+        for (const tr of rows) {
+          if (tr.textContent.includes(dispNumber)) {
+            tr.scrollIntoView({behavior:'smooth', block:'center'});
+            tr.style.background = '#FEF3C7';
+            setTimeout(() => { tr.style.background = ''; }, 2000);
+            break;
+          }
+        }
+      }, 300);
+    }
+    
+    // ----- Update 7: Toggle dispute expand row (Linked return) -----
+    function toggleDisputeExpand(disputeNumber, rowEl) {
+      const next = rowEl.nextElementSibling;
+      if (next && next.classList.contains('disp-expand-row')) { next.remove(); rowEl.querySelector('.disp-chevron')?.classList.remove('open'); return; }
+      rowEl.querySelector('.disp-chevron')?.classList.add('open');
+      const exp = document.createElement('tr');
+      exp.className = 'disp-expand-row';
+      const td = document.createElement('td');
+      td.colSpan = 13;
+      td.innerHTML = '<div id="disp-exp-' + disputeNumber + '"></div>';
+      exp.appendChild(td);
+      rowEl.parentNode.insertBefore(exp, rowEl.nextSibling);
+      (async () => {
+        const { data, error } = await sb.from('returns').select('*').eq('dispute_id_ref', disputeNumber).limit(1);
+        const target = document.getElementById('disp-exp-' + disputeNumber);
+        if (!target) return;
+        if (error || !data || !data.length) { target.innerHTML = ''; return; }
+        const r = data[0];
+        target.innerHTML = '<div class="linked-return-box">'
+          + '<div class="linked-return-title">Linked return</div>'
+          + '<div class="linked-return-grid">'
+          + '<div><strong>Return ID</strong>' + (r.return_id_ref || '—') + '</div>'
+          + '<div><strong>VRET number</strong>' + (r.vret_number || '—') + '</div>'
+          + '<div><strong>Model/SKU</strong>' + (r.model_sku || '—') + '</div>'
+          + '<div><strong>Warehouse</strong>' + (r.warehouse || '—') + '</div>'
+          + '<div><strong>SRT number</strong>' + (r.srt_number || '—') + '</div>'
+          + '<div><strong>PRT number</strong>' + (r.prt_number || '—') + '</div>'
+          + '<div><strong>Date received</strong>' + fmtRetDate(r.date_received) + '</div>'
+          + '<div><strong>Stage</strong>' + (r.stage || '—') + '</div>'
+          + '</div></div>';
+      })();
+    }
+    
+    // ===== Auto-load returns when Returns tab is shown =====
+    (function() {
+      const orig = window.switchTab;
+      window.switchTab = function(name, btn) {
+        orig(name, btn);
+        if (name === 'returns' && !window._returnsLoadedOnce) {
+          window._returnsLoadedOnce = true;
+          loadReturns();
+        }
+      };
+    })();
+
+    // Update 7 wiring: delegated click listener on disp-list rows
+    (function() {
+      let _wired = false;
+      const orig = window.renderDisputes;
+      window._renderDisputesOrig = orig;
+      function ensureWired() {
+        if (_wired) return;
+        const host = document.getElementById('disp-list');
+        if (!host) return;
+        host.addEventListener('click', function(e) {
+          const tr = e.target.closest('tr');
+          if (!tr || !tr.parentElement || tr.parentElement.tagName !== 'TBODY') return;
+          // Skip clicks on links / inputs / buttons inside the row
+          if (e.target.closest('input, button, .inline-edit, a, .pencil')) return;
+          // Extract the dispute_number from the first cell
+          const first = tr.querySelector('td');
+          if (!first) return;
+          const dn = (first.textContent || '').trim().split(/\s+/)[0];
+          if (!/^DSPT/.test(dn)) return;
+          if (typeof toggleDisputeExpand === 'function') toggleDisputeExpand(dn, tr);
+        });
+        _wired = true;
+      }
+      // Initial wire after a moment and also after switching to Disputes tab
+      const obs = new MutationObserver(() => ensureWired());
+      document.addEventListener('DOMContentLoaded', ensureWired);
+      setTimeout(ensureWired, 1000);
+      setTimeout(ensureWired, 3000);
+      // Patch switchTab so we re-attempt to wire when entering disputes
+      const orig2 = window.switchTab;
+      window.switchTab = function(name, btn) {
+        orig2(name, btn);
+        if (name === 'disputes') setTimeout(ensureWired, 200);
+      };
+    })();
 </script>
 </body>
 </html>
