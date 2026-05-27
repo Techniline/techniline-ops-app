@@ -530,6 +530,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     <div class="topbar-left">
       <div class="topbar-logo">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <div id="auth-banner" style="display:none;background:#FEF2F2;color:#DC2626;padding:12px 24px;font-size:13px;border-bottom:1px solid #FECACA;">Session expired — <a href="#" onclick="handleSignOut()" style="color:#DC2626;font-weight:600;">sign in again</a>a></div>
       </div>
       <div>
         <div class="topbar-brand">Techniline Ops</div>
@@ -1098,6 +1099,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
 (async () => {
         try {
           const raw = localStorage.getItem('sb-xtvjzpmmuryaoluhynvl-auth-token');
+              if (event === 'SIGNED_OUT') { currentUser = null; document.getElementById('auth-banner').style.display = 'none'; document.getElementById('app-screen').style.display = 'none'; document.getElementById('login-screen').style.display = 'flex'; }
           if (raw) {
             const tok = JSON.parse(raw);
             const expiresAt = (tok.expires_at || 0) * 1000;
