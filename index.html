@@ -1957,17 +1957,7 @@ async function saveInline(id, kind) {
   const dispute = allDisputes.find(d => d.id === id);
   if (dispute) dispute[col] = val || null;
 
-  // SRT-triggered return_processed linkage
-  if (kind === 'srt' && val && dispute) {
-    const refOr = [];
-    if (dispute.dispute_number) refOr.push('ref_number.eq.' + dispute.dispute_number);
-    if (dispute.tle_invoice_number) refOr.push('invoice_ref.eq.' + dispute.tle_invoice_number);
-    if (refOr.length) {
-      try {
-        await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString(), note: 'SRT raised — linked to dispute ' + (dispute.dispute_number || '') }).eq('type','return_processed').or(refOr.join(','));
-      } catch(e) { /* non-fatal */ }
-    }
-  }
+  // (return_processed auto-linkage removed — returns require manual Log return details)
 
   // Replace edit input with display + tick
   const wrap = document.getElementById(kind + '-wrap-' + id);
@@ -2026,32 +2016,7 @@ async function saveDisputeTicket(disputeId, kind) {
   // Update local copy
   const local = allDisputes.find(x => x.id === disputeId);
   if (local) local[col] = value;
-  // If it's an SRT, try to mark a matching return_processed expected_action as actioned
-  if (kind === 'srt' && local) {
-    const invoice = local.tle_invoice_number;
-    const dsptNum = local.dispute_number;
-    if (invoice) {
-      try {
-        const matches = await sb.from('expected_actions')
-          .select('id,ref_number,invoice_ref')
-          .eq('type', 'return_processed')
-          .eq('status', 'open')
-          .or(`ref_number.eq.${invoice},invoice_ref.eq.${invoice}`);
-        const ids = (matches.data || []).map(r => r.id);
-        if (ids.length > 0) {
-          await sb.from('expected_actions').update({
-            status: 'actioned',
-            actioned_at: new Date().toISOString(),
-            actioned_note: `SRT raised — linked to dispute ${dsptNum || ''}`.trim()
-          }).in('id', ids);
-          showToast(`SRT saved · linked ${ids.length} return${ids.length>1?'s':''} as actioned`);
-          await loadNotifications();
-          await loadKPIs();
-          return;
-        }
-      } catch(e) { /* silent */ }
-    }
-  }
+  // (return_processed auto-linkage removed — returns require manual Log return details)
   showToast((kind === 'srt' ? 'SRT' : 'PRT') + ' number saved');
 }
 
