@@ -2052,7 +2052,7 @@ function renderDisputes(rows) {
 
     const main = '<tr data-created-at="' + (d.created_at||'') + '" data-dispute-type="' + (d.dispute_type||'') + '" data-srt="' + (d.srt_number||'') + '" data-tle="' + (d.tle_invoice_number||'') + '" data-id="' + d.id + '">'
       + '<td><span class="dispute-id-cell" onclick="toggleDisputeExpand(\'' + d.id + '\')">' + (d.dispute_number || '(no DSPT)') + '</span></td>'
-      + '<td><span class="disp-pill ' + k + '">' + disputeStatusLabel(k) + '</span></td>'
+      + '<td><span class="disp-pill ' + k + '">' + disputeStatusLabel(k) + '</span>' + (d.credit_closed === true ? ('<span class="credit-pill credit-pill-closed">Credit received — AED ' + (Number(d.credit_amount_aed||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})) + '</span>' + (d.credit_transaction_ref ? '<div class="credit-ref">' + d.credit_transaction_ref + '</div>' : '')) : (d.credit_amount_aed != null ? ('<span class="credit-pill credit-pill-partial">Partially settled — AED ' + (Number(d.credit_amount_aed||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})) + ' received</span>' + (d.credit_transaction_ref ? '<div class="credit-ref">' + d.credit_transaction_ref + '</div>' : '')) : '')) + '</td>'
       + '<td class="mono">' + (d.tle_invoice_number || '—') + '</td>'
       + '<td class="mono">' + (d.po_number || '—') + '</td>'
       + '<td class="mono">' + (d.payment_number || '—') + '</td>'
@@ -3202,6 +3202,12 @@ function showToast(msg){
 .rt-btn { flex:1; padding:14px; background:#fff; border:2px solid #E2E8F0; border-radius:10px; cursor:pointer; font-weight:600; color:#475467; }
 .rt-btn.active { border-color:#0F2744; background:#0F2744; color:#fff; }
 .modal-overlay.active { display:flex; align-items:center; justify-content:center; position:fixed; inset:0; background:rgba(15,39,68,0.5); z-index:9999; }
+</style>
+<style id="credit-pill-css">
+.credit-pill { display:inline-block; margin-left:8px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; }
+.credit-pill-closed { background:#ECFDF5; color:#065F46; border:1px solid #34D399; }
+.credit-pill-partial { background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; }
+.credit-ref { font-family:'DM Mono', monospace; font-size:10px; color:#94A3B8; margin-top:2px; }
 </style>
 </body>
 </html>
