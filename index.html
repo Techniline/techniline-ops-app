@@ -403,7 +403,12 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
   .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .outcome-grid { grid-template-columns: 1fr; }
 }
-</style>
+
+    .notif-filter-bar { display:flex; gap:8px; margin:12px 0 8px 0; align-items:center; }
+    .notif-window-btn { background:#fff; border:1px solid #E4E7EC; color:#475467; padding:6px 14px; border-radius:999px; cursor:pointer; font-size:13px; font-weight:500; transition:all .15s; }
+    .notif-window-btn:hover { border-color:#0F2744; }
+    .notif-window-btn.active { background:#0F2744; color:#fff; border-color:#0F2744; }
+  </style>
 </head>
 <body>
 
@@ -490,6 +495,10 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
         <div class="sum-card"><div class="sum-card-val danger" id="sum-claims">—</div><div class="sum-card-label">AED at risk</div></div>
         <div class="sum-card"><div class="sum-card-val warning" id="sum-cancels">—</div><div class="sum-card-label">Cancellations</div></div>
         <div class="sum-card"><div class="sum-card-val success" id="sum-done">—</div><div class="sum-card-label">Done today</div></div>
+      </div>
+      <div class="notif-filter-bar" id="notif-filter-bar">
+        <button type="button" class="notif-window-btn active" id="notif-window-30d" onclick="setNotifWindow('30d')">Last 30 days</button>
+        <button type="button" class="notif-window-btn" id="notif-window-all" onclick="setNotifWindow('all')">Show all</button>
       </div>
       <div class="notif-list" id="notif-list"><div class="loading-state">Loading notifications…</div></div>
     </div>
@@ -1006,10 +1015,28 @@ async function loadNotifications() {
     return;
   }
   allNotifications = data;
+      window.allNotifications = data;
   renderNotifications(data);
 }
 
-function renderNotifications(data) {
+function setNotifWindow(win) {
+      window.notifWindow = win;
+      document.querySelectorAll('.notif-window-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById('notif-window-' + win);
+      if (activeBtn) activeBtn.classList.add('active');
+      if (window.allNotifications) renderNotifications(window.allNotifications);
+    }
+
+    function renderNotifications(data) {
+      // Apply notification time window filter (default: last 30 days)
+      if (window.notifWindow === '30d' || window.notifWindow === undefined) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        data = (data || []).filter(n => {
+          const ts = n.email_received_at ? new Date(n.email_received_at) : null;
+          return ts && ts >= cutoff;
+        });
+      }
   const open = data.filter(n => n.status === 'open');
   const done = data.filter(n => n.status === 'actioned');
   const count = document.getElementById('notif-count');
