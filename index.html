@@ -3781,7 +3781,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       }
       rowEl.querySelector('.disp-chevron')?.classList.add('open');
       // Find dispute object
-      const dispRow = (window._allDisputes || []).find(x => String(x.dispute_number) === String(disputeNumber)) || {};
+      const dispRow = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.dispute_number) === String(disputeNumber)) || {};
       const exp = document.createElement('tr');
       exp.className = 'disp-expand-row';
       const td = document.createElement('td');
@@ -3832,7 +3832,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       } else {
         s2 += '<div class="linked-returns-list">';
         retIds.forEach(function(rid){
-          const r = (window._allReturns || []).find(x => String(x.return_id) === String(rid));
+          const r = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => String(x.return_id) === String(rid));
           if (r) {
             const stageS = String(r.stage||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
             const rsKey = (r.status || 'open').toLowerCase();
@@ -3893,7 +3893,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
     }
 
     function handleReturnPillClick(returnId, sourceDispute, srcEl) {
-      const ret = (window._allReturns || []).find(x => String(x.return_id) === String(returnId));
+      const ret = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => String(x.return_id) === String(returnId));
       if (ret) {
         // Found in tracker — navigate to Returns tab and flash
         const btn = document.getElementById('tab-returns-btn') || Array.from(document.querySelectorAll('.tab-btn,button')).find(b => /returns/i.test(b.textContent || ''));
@@ -3923,7 +3923,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         overlay.className = 'modal-overlay';
         document.body.appendChild(overlay);
       }
-      const disp = (window._allDisputes || []).find(x => String(x.dispute_number) === String(sourceDispute)) || {};
+      const disp = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.dispute_number) === String(sourceDispute)) || {};
       overlay.style.display = 'flex';
       overlay.innerHTML = '<div class="modal-box modal-box-sm">'
         + '<div class="modal-header">'
@@ -4346,7 +4346,7 @@ function showToast(msg){
           const { data: dispRow } = await sb.from('disputes').select('dispute_number, po_number, tle_invoice_number, invoice_amount_aed').eq('dispute_number', val).limit(1);
           if (dispRow && dispRow.length) {
             const d = dispRow[0];
-            const r = (window._allReturns || []).find(x => x.id === returnId);
+            const r = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => x.id === returnId);
             const patch = {};
             if (r && !r.tle_invoice_number && d.tle_invoice_number) patch.tle_invoice_number = d.tle_invoice_number;
             if (r && !r.po_number && d.po_number) patch.po_number = d.po_number;
@@ -4376,7 +4376,7 @@ function renderReturnIdsPills(returnIdsField) {
 
 function jumpToReturn(returnId) {
   // Check in-memory cache first
-  const ret = (window._allReturns || []).find(x => String(x.return_id) === String(returnId));
+  const ret = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => String(x.return_id) === String(returnId));
   const btn = document.getElementById('tab-returns-btn') || Array.from(document.querySelectorAll('.tab-btn')).find(b => /returns/i.test(b.textContent));
   if (!ret) {
     // Not in tracker - show modal
