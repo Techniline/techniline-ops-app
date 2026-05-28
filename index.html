@@ -1044,7 +1044,9 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 .lr-id-pill:hover { background: var(--accent-blue); color: var(--white); transform: translateY(-1px); }
 .lr-id-pill-missing { background: var(--amber-light); color: var(--amber); border-color: #FCD34D; }
 .lr-id-pill-missing:hover { background: var(--amber); color: var(--white); }
-.lr-missing-badge {
+.lr-missing-actions { margin-top: 10px; display: flex; gap: 8px; }
+    .lr-missing-actions .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .lr-missing-badge {
   background: var(--amber-light); color: var(--amber); border: 1px solid #FCD34D;
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
   padding: 3px 8px; border-radius: 6px;
@@ -3850,6 +3852,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
                 +   '<div class="lr-cell"><div class="lr-label">TLE invoice</div><div class="lr-val mono">' + (r.tle_invoice_number || '—') + '</div></div>'
                 +   '<div class="lr-cell"><div class="lr-label">SRT</div><div class="lr-val mono">' + (r.srt_number || '—') + '</div></div>'
                 +   '<div class="lr-cell"><div class="lr-label">PRT</div><div class="lr-val mono">' + (r.prt_number || '—') + '</div></div>'
+                +   '<div class="lr-cell"><div class="lr-label">Stage</div><div class="lr-val">' + (r.stage || '—') + '</div></div>'
                 + '</div>'
                 + '</div>';
           } else {
@@ -3859,6 +3862,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
                 +   '<span class="lr-missing-badge">Not in tracker</span>'
                 + '</div>'
                 + '<div class="lr-missing-note">This return ID appears in the dispute but has not been added to the Returns tracker yet.</div>'
+                + '<div class="lr-missing-actions"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openAddReturnModal({ return_id: \''+String(rid).replace(/'/g,"\\'")+'\', dispute_number: \''+disputeNumber+'\', tle_invoice_number: '+JSON.stringify(disp.tle_invoice_number||'')+', po_number: '+JSON.stringify(disp.po_number||'')+' })">+ Add this return</button></div>'
                 + '</div>';
           }
         });
