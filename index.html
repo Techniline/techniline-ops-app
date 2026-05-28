@@ -892,6 +892,98 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 }
 .copy-btn:hover { background: var(--gray-light) !important; color: var(--navy) !important; }
 /* ===== END PREMIUM REDESIGN ===== */
+
+/* ===== RETURNS FULL TABLE — premium ===== */
+.returns-table, table.returns-table.premium-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  font-size: 13px;
+  margin-top: 16px;
+}
+.returns-table thead th {
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray) !important;
+  font-weight: 700;
+  padding: 12px 14px !important;
+  background: var(--bg) !important;
+  border-bottom: 1px solid var(--border);
+  border-top: 0; border-left: 0; border-right: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+.returns-table thead th.num { text-align: right; }
+.returns-table tbody td {
+  padding: 14px !important;
+  border-bottom: 1px solid var(--border);
+  border-top: 0; border-left: 0; border-right: 0;
+  color: var(--navy);
+  vertical-align: middle;
+  min-height: 48px;
+  height: 48px;
+  white-space: nowrap;
+}
+.returns-table tbody tr {
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+.returns-table tbody tr:hover td {
+  background: var(--bg) !important;
+}
+.returns-table tbody tr:last-child td { border-bottom: 0; }
+.returns-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.returns-table td.mono, .returns-table .mono {
+  font-family: 'DM Mono', 'Roboto Mono', ui-monospace, monospace !important;
+}
+.returns-table .col-rid { font-family: 'DM Mono', monospace; color: var(--navy); font-weight: 600; }
+.returns-table .aed-pfx { color: var(--gray); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; font-weight: 500; }
+.returns-table .muted { color: #C7CDD6; }
+.returns-table .ret-copy-btn {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--gray) !important;
+  padding: 2px 6px !important;
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  margin-left: 6px;
+  cursor: pointer;
+}
+.returns-table .ret-copy-btn:hover { background: var(--gray-light) !important; color: var(--navy) !important; }
+.disp-pill-link {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px;
+  background: var(--accent-blue-light);
+  color: var(--accent-blue) !important;
+  border: 1px solid #BFDBFE;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.disp-pill-link:hover {
+  background: var(--accent-blue) !important;
+  color: var(--white) !important;
+  border-color: var(--accent-blue) !important;
+  transform: translateY(-1px);
+}
+.age-ok { background: var(--green-light); color: var(--green); }
+@media (max-width: 900px) {
+  .returns-table { display: block; overflow-x: auto; }
+  .returns-table thead th.col-date,
+  .returns-table tbody td.col-date {
+    position: sticky; left: 0; background: var(--white); z-index: 1;
+    border-right: 1px solid var(--border);
+  }
+  .returns-table thead th.col-date { background: var(--bg); }
+}
 </style>
 </head>
 <body>
@@ -3360,37 +3452,79 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       if (_returnsFilter === 'needs') rows = rows.filter(r => !r.is_complete);
       else if (_returnsFilter === 'complete') rows = rows.filter(r => r.is_complete);
       else if (_returnsFilter === 'historical') rows = rows.filter(r => (r.source || 'historical') === 'historical');
-      else if (_returnsFilter === 'new') rows = rows.filter(r => r.source === 'new');
-      if (rows.length === 0) {
+      else if (_returnsFilter === 'live') rows = rows.filter(r => r.source === 'live');
+      if (!rows.length) {
         host.innerHTML = '<div class="empty-state"><div class="empty-title">No returns to show</div><div class="empty-sub">Returns will appear here once vendor returns notifications are logged.</div></div>';
         return;
       }
-      const head = '<table class="returns-table"><thead><tr>'
-         + '<th>Date</th><th>Return ID</th><th>VRET</th><th>Model/SKU</th><th>PO #</th><th>TLE Invoice</th><th>Invoice Date</th>'
-         + '<th class="num">Qty</th><th class="num">Total AED</th><th class="num">Recovery AED</th>'
-         + '<th>Stage</th><th>SRT</th><th>PRT</th><th>Dispute ID</th><th>Status</th><th>Age</th></tr></thead>';
+      // Slug helper for stage class
+      const stageSlug = function(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); };
+      const stageLabel = function(s){ return String(s||'').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); };
+      const fmtMoney = function(v){ if (v == null || v === '') return '<span class="muted">—</span>'; return '<span class="aed-pfx">AED</span> ' + Number(v).toLocaleString('en-AE',{minimumFractionDigits:2}); };
+      const fmtDispDate2 = function(d){ if(!d) return '—'; const dt = new Date(d); if (isNaN(dt.getTime())) return d; const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return String(dt.getDate()).padStart(2,'0') + ' ' + months[dt.getMonth()] + ' ' + dt.getFullYear(); };
+      const head = '<table class="returns-table premium-table"><thead><tr>'
+         + '<th class="col-date">Date</th>'
+         + '<th class="col-rid">Return ID</th>'
+         + '<th>VRET</th>'
+         + '<th>Model/SKU</th>'
+         + '<th>PO #</th>'
+         + '<th>TLE Invoice</th>'
+         + '<th>Invoice Date</th>'
+         + '<th class="num">Qty</th>'
+         + '<th class="num">Total</th>'
+         + '<th class="num">Recovery</th>'
+         + '<th>Stage</th>'
+         + '<th>SRT</th>'
+         + '<th>PRT</th>'
+         + '<th>Dispute ID</th>'
+         + '<th>Status</th>'
+         + '<th>Age</th></tr></thead>';
       const body = '<tbody>' + rows.map(r => {
-        const ageHtml = ageBadgeHtml(r.date_received);
-        const disputeCell = r.dispute_id_ref ? '<span class="dispute-link" onclick="goToDispute(\'' + r.dispute_id_ref + '\')">' + r.dispute_id_ref + '</span>' : '—';
-        return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '" id="ret-row-' + r.id + '">'
-          + '<td>' + fmtRetDate(r.date_received) + '</td>'
-          + '<td class="mono ret-id-cell">' + (r.return_id ? '<span class="ret-id-text">' + r.return_id + '</span><button class="ret-copy-btn" onclick="event.stopPropagation(); copyReturnId(event, \'' + (r.return_id+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '—') + '</td>'
-          + '<td>' + (r.vret_number || '—') + '</td>'
-          + '<td>' + (r.model_sku || '—') + '</td>'
-          + '<td>' + (r.po_number || '—') + '</td>'
-          + '<td>' + (r.tle_invoice_number || r.amazon_invoice || '—') + '</td>'
-          + '<td>' + fmtRetDate(r.invoice_date) + '</td>'
-          + '<td class="num">' + (r.qty != null ? r.qty : '—') + '</td>'
-          + '<td class="num">' + (r.total_cost_aed != null ? Number(r.total_cost_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
-          + '<td class="num">' + (r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
-          + '<td>' + (r.stage || '—') + '</td>'
-          + '<td>' + (r.srt_number || '—') + '</td>'
-          + '<td>' + (r.prt_number || '—') + '</td>'
+        const ageDays = r.date_received ? Math.floor((Date.now() - new Date(r.date_received).getTime())/86400000) : null;
+        let ageHtml = '—';
+        if (ageDays != null) {
+          if (ageDays >= 90) ageHtml = '<span class="pill age-pulse">‼ ' + ageDays + 'd</span>';
+          else if (ageDays >= 60) ageHtml = '<span class="pill age-red">🔴 ' + ageDays + 'd</span>';
+          else if (ageDays >= 30) ageHtml = '<span class="pill age-amber">⚠ ' + ageDays + 'd</span>';
+          else ageHtml = '<span class="pill age-ok">' + ageDays + 'd</span>';
+        }
+        // Dispute ID: prefer dispute_id_ref (text DSPT...) then dispute_id (UUID FK)
+        const dispRef = r.dispute_id_ref || r.dispute_id || null;
+        const disputeCell = dispRef
+          ? '<span class="disp-pill-link" onclick="event.stopPropagation(); goToDispute(\'' + String(dispRef).replace(/'/g,"\\'") + '\')">' + dispRef + '</span>'
+          : '<span class="muted">—</span>';
+        // Status pill
+        const statusKey = (r.status || 'open').toLowerCase();
+        const statusLabels = { open: 'Open', pending_dispute: '⏳ Pending', closed: '✓ Closed' };
+        const statusCell = '<span class="pill ret-status ret-status-' + statusKey + '">' + (statusLabels[statusKey] || (r.status||'—')) + '</span>';
+        // Stage pill
+        const stageVal = r.stage || '';
+        const stageCell = stageVal
+          ? '<span class="pill stage-pill stage-' + stageSlug(stageVal) + '">' + stageLabel(stageVal) + '</span>'
+          : '<span class="muted">—</span>';
+        // Return ID cell
+        const ridCell = r.return_id
+          ? '<span class="ret-id-text">' + r.return_id + '</span><button class="ret-copy-btn" onclick="event.stopPropagation(); copyReturnId(event, \'' + (r.return_id+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>'
+          : '<span class="muted">—</span>';
+        return '<tr class="ret-row" onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '" id="ret-row-' + r.id + '">'
+          + '<td class="col-date">' + fmtDispDate2(r.date_received) + '</td>'
+          + '<td class="mono ret-id-cell col-rid">' + ridCell + '</td>'
+          + '<td class="mono">' + (r.vret_number || '<span class="muted">—</span>') + '</td>'
+          + '<td>' + (r.model_sku || '<span class="muted">—</span>') + '</td>'
+          + '<td class="mono">' + (r.po_number || '<span class="muted">—</span>') + '</td>'
+          + '<td class="mono">' + (r.tle_invoice_number || r.amazon_invoice || '<span class="muted">—</span>') + '</td>'
+          + '<td>' + fmtDispDate2(r.invoice_date) + '</td>'
+          + '<td class="num">' + (r.qty != null ? r.qty : '<span class="muted">—</span>') + '</td>'
+          + '<td class="num mono">' + fmtMoney(r.total_cost_aed) + '</td>'
+          + '<td class="num mono">' + fmtMoney(r.recovery_amt_aed) + '</td>'
+          + '<td>' + stageCell + '</td>'
+          + '<td class="mono">' + (r.srt_number || '<span class="muted">—</span>') + '</td>'
+          + '<td class="mono">' + (r.prt_number || '<span class="muted">—</span>') + '</td>'
           + '<td>' + disputeCell + '</td>'
-          + '<td>' + (r.status || '—') + '</td>'
+          + '<td>' + statusCell + '</td>'
           + '<td>' + ageHtml + '</td>'
           + '</tr>';
-      }).join('') + '</tbody></table>';
+      }).join('') + '</tbody>';
       host.innerHTML = head + body;
     }
     async function saveReturnField(returnId, field, inputId) {
