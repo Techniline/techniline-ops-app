@@ -65,7 +65,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 
 /* ── App Shell ── */
 #app-screen { display: none; height: 100vh; flex-direction: column; }
-.topbar { height: 60px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+.topbar { height: 60px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0;  position: sticky; top: 0; z-index: 101; background: #fff; }
 .topbar-left { display: flex; align-items: center; gap: 12px; }
 .topbar-logo { width: 32px; height: 32px; background: var(--navy); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 .topbar-logo svg { width: 18px; height: 18px; fill: none; stroke: white; stroke-width: 2.2; }
@@ -81,7 +81,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .signout-btn:hover { background: var(--red-light); color: var(--red); }
 
 /* ── Tabs ── */
-.tab-bar { background: var(--white); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; flex-shrink: 0; }
+.tab-bar { background: var(--white); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; flex-shrink: 0;  position: sticky; top: 0; z-index: 100; background: #fff; }
 .tab-btn { display: flex; align-items: center; gap: 7px; padding: 14px 18px; font-size: 13px; font-weight: 400; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; transition: all 0.15s; white-space: nowrap; font-family: 'DM Sans', sans-serif; letter-spacing: 0.01em; }
 .tab-btn:hover { color: var(--text-secondary); }
 .tab-btn.active { color: var(--navy); font-weight: 600; border-bottom-color: var(--navy); }
@@ -113,9 +113,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .ticket-save { font-size: 11px; padding: 6px 12px; border: 1px solid var(--navy); background: white; color: var(--navy); border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; }
     .ticket-save:hover { background: var(--navy); color: white; }
     .ticket-ok { color: var(--green); font-size: 16px; font-weight: 700; }
-    .disp-table-wrap { overflow-x: auto; border: 1px solid #E2E8F0; border-radius: var(--radius-md); background: white; }
+    .disp-table-wrap { overflow-x: auto; border: 1px solid #E2E8F0; border-radius: var(--radius-md); background: white;  max-height: calc(100vh - 240px); overflow-y: auto; position: relative; }
     .disp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .disp-table thead th { background: #0F2744; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; position: sticky; top: 0; white-space: nowrap; }
+    .disp-table thead th { background: #0F2744; color: white; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; position: sticky; top: 0; white-space: nowrap;  z-index: 10; }
     .disp-table thead th .sort-ind { opacity: 0.6; margin-left: 4px; font-size: 9px; }
     .disp-table tbody td { padding: 10px 12px; border-top: 1px solid #E2E8F0; vertical-align: middle; }
     .disp-table tbody tr:nth-child(4n+3) { background: #F8FAFC; }
@@ -463,9 +463,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .return-inline-fix input { padding:6px 10px; border:1px solid #FBBF24; border-radius:6px; font-size:13px; min-width:160px; }
     .return-inline-fix button { padding:6px 14px; background:#0F2744; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
     .return-inline-fix button:hover { background:#1B3A5C; }
-    .returns-table-wrap { overflow-x:auto; }
+    .returns-table-wrap { overflow-x:auto;  max-height: calc(100vh - 240px); overflow-y: auto; position: relative; }
     .returns-table { width:100%; border-collapse:collapse; font-size:13px; min-width:1200px; }
-    .returns-table thead { position:sticky; top:0; background:#0F2744; z-index:2; }
+    .returns-table thead { position:sticky; top:0; background:#0F2744; z-index:2;  z-index: 5; }
     .returns-table th { padding:12px 10px; color:#fff; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; user-select:none; }
     .returns-table tbody tr { border-bottom:1px solid #E2E8F0; cursor:pointer; }
     .returns-table tbody tr:nth-child(even) { background:#F8FAFC; }
@@ -1279,6 +1279,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
           <input type="date" class="date-input-sm" id="disp-export-from" />
           <span style="color:var(--text-muted);font-size:12px">to</span>
           <input type="date" class="date-input-sm" id="disp-export-to" />
+          <button class="export-btn" style="background:#0F2744;color:#fff;border-color:#0F2744" onclick="openDisputeModal()">+ Raise dispute</button>
           <button class="export-btn" onclick="exportDisputesPDF()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Download disputes PDF
@@ -1759,7 +1760,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('pane-' + name).classList.add('active');
-  btn.classList.add('active');
+  if (btn && btn.classList) { btn.classList.add('active'); } else { var _tb = document.getElementById('pane-' + name) ? document.querySelector('.tab-btn[onclick*="' + name + '"]') : null; if (_tb) _tb.classList.add('active'); }
 }
 
 // ── Notifications ──────────────────────────────────────
@@ -2087,60 +2088,29 @@ async function submitPOAction() {
 }
 
 // ── Dispute Modal ──────────────────────────────────────
-function openDisputeModal(id) {
-  currentDisputeActionId = id;
-  // Find the notification in the loaded list to auto-populate
-  const n = (window.allNotifications || []).find(x => x.id === id) || {};
-  // Reset all inputs first
-  ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'].forEach(fid => {
-    const el = document.getElementById(fid);
-    if (!el) return;
-    el.value = '';
-    el.classList.remove('needs-attention');
-  });
-  // Auto-fill dispute number if ref_number is a DSPT
-  if (n.ref_number && /^DSPT/i.test(n.ref_number)) {
-    document.getElementById('disp-number').value = n.ref_number;
-  }
-  // Auto-fill TLE invoice from invoice_ref (if it looks like a WS number)
-  if (n.invoice_ref && /WS/i.test(n.invoice_ref)) {
-    document.getElementById('disp-invoice').value = n.invoice_ref;
-  }
-  // Auto-fill PO number
-  if (n.po_number) {
-    document.getElementById('disp-po').value = n.po_number;
-  }
-  // Auto-fill amount if > 50 (avoid garbage values)
-  if (n.aed_amount && Number(n.aed_amount) > 50) {
-    document.getElementById('disp-amount').value = Number(n.aed_amount).toFixed(2);
-  }
-  // Mark empty required fields with amber + show banner if any are empty
-  const requiredIds = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'];
-  let anyEmpty = false;
-  requiredIds.forEach(fid => {
-    const el = document.getElementById(fid);
-    if (!el) return;
-    if (!el.value || !String(el.value).trim()) { el.classList.add('needs-attention'); anyEmpty = true; }
-  });
-  document.getElementById('disp-autofill-banner').style.display = anyEmpty ? 'flex' : 'none';
-  // Live-clear amber as user fills each input
-  requiredIds.forEach(fid => {
-    const el = document.getElementById(fid);
-    if (!el || el.dataset._wired) return;
-    el.dataset._wired = '1';
-    const evt = el.tagName === 'SELECT' ? 'change' : 'input';
-    el.addEventListener(evt, () => {
-      if (el.value && String(el.value).trim()) el.classList.remove('needs-attention');
-      else el.classList.add('needs-attention');
-      const stillEmpty = requiredIds.some(id2 => {
-        const e2 = document.getElementById(id2);
-        return e2 && (!e2.value || !String(e2.value).trim());
-      });
-      document.getElementById('disp-autofill-banner').style.display = stillEmpty ? 'flex' : 'none';
-    });
-  });
-  document.getElementById('dispute-modal').classList.add('open');
-}
+        function openDisputeModal(id = null) {
+          currentDisputeActionId = id || null;
+          // Clear all real modal fields first
+          ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-comment'].forEach(function(fid){
+            var el = document.getElementById(fid);
+            if (el) { el.value = ''; el.classList.remove('needs-attention'); }
+          });
+          var recEl = document.getElementById('disp-recommendation') || document.getElementById('disp-rec');
+          if (recEl) recEl.value = '';
+          // If opened from a notification, prefill from its data
+          if (id) {
+            var n = (window.allNotifications || []).find(function(x){ return x.id === id; });
+            if (n) {
+              if (n.ref_number && /DSPT/i.test(n.ref_number)) { var dn = document.getElementById('disp-number'); if (dn) dn.value = n.ref_number; }
+              if (n.invoice_ref && /WS/i.test(n.invoice_ref)) { var di = document.getElementById('disp-invoice'); if (di) di.value = n.invoice_ref; }
+              if (n.aed_amount != null) { var da = document.getElementById('disp-amount'); if (da) da.value = n.aed_amount; }
+              if (n.po_number) { var dp = document.getElementById('disp-po'); if (dp) dp.value = n.po_number; }
+              // FIX 4: pre-set recommendation to 'dispute' for shortage claims
+              if (n.type === 'shortage_claim' && recEl) recEl.value = 'dispute';
+            }
+          }
+          document.getElementById('dispute-modal').classList.add('open');
+        }
 
 async function submitDispute() {
   const fields = ['disp-number','disp-invoice','disp-po','disp-date','disp-amount','disp-payment','disp-rec','disp-comment'];
@@ -2172,6 +2142,7 @@ async function submitDispute() {
   if (error) { alert('Error: ' + error.message); return; }
   await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentDisputeActionId);
   closeModal('dispute-modal');
+        try { await loadDisputes(); switchTab('disputes'); } catch(e) { console.warn('refresh after dispute insert', e); }
   showToast('Submitted for Vihan\'s approval');
   await loadNotifications();
 }
@@ -2213,6 +2184,7 @@ async function submitReturn() {
   if (error) { alert('Error: ' + error.message); return; }
   await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentReturnActionId);
   closeModal('return-modal');
+        try { await loadReturns(); switchTab('returns'); } catch(e) { console.warn('refresh after return insert', e); }
   showToast('Return logged successfully');
   await loadNotifications();
 }
@@ -2922,6 +2894,10 @@ async function chaseDispute(id) {
 async function markDisputeResolved(id) {
   if (!confirm('Mark this dispute as resolved?')) return;
   await sb.from('disputes').update({ dispute_status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+          try {
+            const _dn = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => x.id === id);
+            if (_dn && _dn.dispute_number) await propagateDisputeToReturns(_dn.dispute_number, true);
+          } catch(e) { console.warn('dispute->returns propagate skip', e); }
   await loadDisputes();
 }
 
@@ -3656,12 +3632,46 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       }).join('') + '</tbody>';
       host.innerHTML = head + body;
     }
+        // === Cross-tab propagation helpers (added) ===
+        async function propagateReturnToDispute(returnRow) {
+          try {
+            if (!returnRow || !returnRow.dispute_id_ref) return;
+            const want = {};
+            if (returnRow.srt_number) want.srt_number = returnRow.srt_number;
+            if (returnRow.prt_number) want.prt_number = returnRow.prt_number;
+            if (returnRow.po_number) want.po_number = returnRow.po_number;
+            if (returnRow.tle_invoice_number) want.tle_invoice_number = returnRow.tle_invoice_number;
+            if (Object.keys(want).length === 0) return;
+            const { data: disp } = await sb.from('disputes').select('srt_number, prt_number, po_number, tle_invoice_number').eq('dispute_number', returnRow.dispute_id_ref).single();
+            if (!disp) return;
+            const safe = {};
+            if (want.srt_number && !disp.srt_number) safe.srt_number = want.srt_number;
+            if (want.prt_number && !disp.prt_number) safe.prt_number = want.prt_number;
+            if (want.po_number && !disp.po_number) safe.po_number = want.po_number;
+            if (want.tle_invoice_number && !disp.tle_invoice_number) safe.tle_invoice_number = want.tle_invoice_number;
+            if (Object.keys(safe).length > 0) { await sb.from('disputes').update(safe).eq('dispute_number', returnRow.dispute_id_ref); }
+          } catch (e) { console.warn('propagateReturnToDispute failed', e); }
+        }
+        async function propagateDisputeToReturns(disputeNumber, closeFlag) {
+          try {
+            if (!disputeNumber) return;
+            if (closeFlag) {
+              await sb.from('returns').update({ status: 'closed', is_complete: true }).eq('dispute_id_ref', disputeNumber).eq('status', 'pending_dispute');
+            }
+          } catch (e) { console.warn('propagateDisputeToReturns failed', e); }
+        }
+
     async function saveReturnField(returnId, field, inputId) {
       const inp = document.getElementById(inputId);
       const value = inp ? (inp.value || '').trim() : '';
       if (!value) { alert('Please enter a value.'); return; }
       const updates = {}; updates[field] = value;
       const { error } = await sb.from('returns').update(updates).eq('id', returnId);
+            try {
+              const _rr = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => x.id === returnId);
+              const _merged = Object.assign({}, _rr || {}, updates);
+              await propagateReturnToDispute(_merged);
+            } catch(e) { console.warn('return->dispute propagate skip', e); }
       if (error) { alert('Save failed: ' + error.message); return; }
       // Update local copy
       const r = _allReturns.find(x => x.id === returnId);
@@ -3757,21 +3767,20 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       if (r.total_cost_aed) set('disp-amount', r.total_cost_aed);
       m.classList.add('open');
     }
-    function goToDispute(dispNumber) {
-      const btn = document.querySelector('.tab-btn[onclick*="disputes"]');
-      if (btn) btn.click();
-      setTimeout(() => {
-        const rows = document.querySelectorAll('#disp-list tbody tr');
-        for (const tr of rows) {
-          if (tr.textContent.includes(dispNumber)) {
-            tr.scrollIntoView({behavior:'smooth', block:'center'});
-            tr.style.background = '#FEF3C7';
-            setTimeout(() => { tr.style.background = ''; }, 2000);
-            break;
-          }
+        function goToDispute(disputeNumber) {
+          try {
+            var btn = document.getElementById('tab-disputes-btn') || Array.from(document.querySelectorAll('.tab-btn,button')).find(function(b){ return /dispute/i.test((b.textContent||'')) && /onclick/i.test(b.outerHTML); });
+            if (btn && btn.click) { btn.click(); } else { switchTab('disputes'); }
+          } catch(e) { try { switchTab('disputes'); } catch(_){} }
+          setTimeout(function(){
+            try {
+              var rows = document.querySelectorAll('.disp-table tbody tr');
+              var target = null;
+              rows.forEach(function(r){ if ((r.textContent||'').indexOf(disputeNumber) >= 0 && !target) target = r; });
+              if (target) { target.scrollIntoView({behavior:'smooth', block:'center'}); if (typeof flashHighlight === 'function') flashHighlight(target); }
+            } catch(e) { console.warn('goToDispute highlight', e); }
+          }, 350);
         }
-      }, 300);
-    }
     
     // ----- Update 7: Toggle dispute expand row (Linked return) -----
     function toggleDisputeExpand(disputeNumber, rowEl) {
@@ -4309,6 +4318,23 @@ async function saveNewReturn(){
   try {
     const { data, error } = await sb.from('returns').insert(record).select().single();
     if (error) { alert('Save failed: ' + error.message); return; }
+        try {
+          if (record && record.dispute_id_ref) {
+            const _want = {};
+            if (record.po_number) _want.po_number = record.po_number;
+            if (record.tle_invoice_number) _want.tle_invoice_number = record.tle_invoice_number;
+            if (Object.keys(_want).length) {
+              const { data: _d } = await sb.from('disputes').select('po_number, tle_invoice_number').eq('dispute_number', record.dispute_id_ref).single();
+              if (_d) {
+                const _safe = {};
+                if (_want.po_number && !_d.po_number) _safe.po_number = _want.po_number;
+                if (_want.tle_invoice_number && !_d.tle_invoice_number) _safe.tle_invoice_number = _want.tle_invoice_number;
+                if (Object.keys(_safe).length) await sb.from('disputes').update(_safe).eq('dispute_number', record.dispute_id_ref);
+              }
+            }
+          }
+        } catch(e) { console.warn('newReturn->dispute propagate skip', e); }
+        try { await loadReturns(); switchTab('returns'); } catch(e) { console.warn('refresh after new return', e); }
     // If dispute_id_ref provided, backfill dispute row
     if (dispId) {
       const { data: dispRow } = await sb.from('disputes').select('id, po_number, tle_invoice_number').eq('dispute_number', dispId).limit(1);
@@ -4711,4 +4737,3 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
 <div id="escalate-modal-host"></div>
 </body>
 </html>
-
