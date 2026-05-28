@@ -541,7 +541,358 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .disp-row-expandable { cursor:pointer; }
     .disp-chevron { display:inline-block; transition:transform .15s; }
     .disp-chevron.open { transform:rotate(90deg); }
-  </style>
+  
+/* ===== PREMIUM REDESIGN — ClickUp/Monday/Linear style ===== */
+:root {
+  --navy: #0F2744;
+  --navy-mid: #1B3A5C;
+  --accent-blue: #2563EB;
+  --accent-blue-light: #EFF6FF;
+  --teal: #0D9488;
+  --teal-light: #F0FDFA;
+  --amber: #D97706;
+  --amber-light: #FEF3C7;
+  --red: #DC2626;
+  --red-light: #FEF2F2;
+  --green: #059669;
+  --green-light: #ECFDF5;
+  --purple: #7C3AED;
+  --purple-light: #F5F3FF;
+  --pink: #DB2777;
+  --pink-light: #FDF2F8;
+  --orange: #EA580C;
+  --orange-light: #FFF7ED;
+  --gray: #6B7280;
+  --gray-light: #F3F4F6;
+  --border: #E5E7EB;
+  --bg: #F9FAFB;
+  --white: #FFFFFF;
+  --shadow-sm: 0 1px 2px rgba(15,39,68,0.04);
+  --shadow-md: 0 4px 12px rgba(15,39,68,0.08);
+  --shadow-lg: 0 10px 30px rgba(15,39,68,0.12);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+}
+html, body { background: var(--bg) !important; font-family: 'DM Sans', system-ui, sans-serif !important; color: var(--navy); }
+* { -webkit-font-smoothing: antialiased; }
+
+/* ===== TOP BAR ===== */
+.topbar, header.topbar, .topbar-wrap, .app-topbar {
+  height: 60px !important;
+  background: var(--white) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: none !important;
+  padding: 0 24px !important;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.topbar .brand, .topbar-brand, .app-brand {
+  font-size: 16px !important; font-weight: 700 !important; color: var(--navy) !important;
+  letter-spacing: -0.3px;
+}
+.topbar .brand-icon, .app-brand-icon {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--navy);
+  display: inline-flex; align-items: center; justify-content: center; margin-right: 10px;
+}
+
+/* ===== TAB BAR ===== */
+.tab-bar, nav.tabs, .tabs-row {
+  background: var(--white) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 0 24px !important;
+}
+.tab-bar button, .tab, .tabs-row button {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--gray) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2.5px solid transparent !important;
+  padding: 14px 18px !important;
+  border-radius: 0 !important;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-bar button.active, .tab.active, .tabs-row button.active {
+  color: var(--navy) !important;
+  font-weight: 700 !important;
+  border-bottom-color: var(--navy) !important;
+}
+.tab-bar button:hover, .tab:hover { color: var(--navy) !important; }
+.tab-badge, .notif-badge {
+  background: var(--navy) !important; color: var(--white) !important;
+  min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 6px;
+}
+
+/* ===== SEARCH BAR ===== */
+.gs-input, .search-input, input[placeholder*="Search"] {
+  border-radius: 999px !important;
+  background: var(--gray-light) !important;
+  border: 1px solid transparent !important;
+  padding: 8px 36px 8px 36px !important;
+  font-size: 13px !important;
+  width: 280px !important;
+  transition: all 0.15s;
+}
+.gs-input:focus, .search-input:focus, input[placeholder*="Search"]:focus {
+  background: var(--white) !important;
+  border-color: var(--navy) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 4px rgba(15,39,68,0.06) !important;
+}
+
+/* ===== SUMMARY BAR / KPI CARDS ===== */
+.summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.summary-card, .kpi-card, .stat-card {
+  background: var(--white) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 18px 20px !important;
+  box-shadow: var(--shadow-sm) !important;
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.summary-card:hover, .kpi-card:hover { box-shadow: var(--shadow-md) !important; }
+.summary-card .num, .summary-card .value, .kpi-value, .stat-card .value {
+  font-size: 32px !important; font-weight: 700 !important; line-height: 1.1; letter-spacing: -0.5px;
+  font-family: 'DM Sans', sans-serif !important; color: var(--navy);
+}
+.summary-card .label, .kpi-label, .stat-card .label {
+  font-size: 10px !important; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gray) !important; font-weight: 600 !important; margin-top: 6px;
+}
+.summary-card.navy .num, .summary-card.total .num { color: var(--navy) !important; }
+.summary-card.red .num, .summary-card.danger .num { color: var(--red) !important; }
+.summary-card.amber .num, .summary-card.warn .num { color: var(--amber) !important; }
+.summary-card.green .num, .summary-card.success .num { color: var(--green) !important; }
+.summary-card.blue .num { color: var(--accent-blue) !important; }
+.summary-card.purple .num { color: var(--purple) !important; }
+.kpi-dot { position: absolute; top: 16px; right: 16px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 4px currentColor; opacity: 0.6; }
+
+/* ===== PILLS — Universal styling ===== */
+.pill, .type-pill, .disp-status, .stage-pill, .recovery, .age-pill, .ret-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 11px !important; font-weight: 600 !important;
+  letter-spacing: 0.02em; white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* Type pills (notifications) */
+.type-pill.blue { background: var(--accent-blue-light) !important; color: var(--accent-blue) !important; border-color: #BFDBFE !important; }
+.type-pill.orange { background: var(--orange-light) !important; color: var(--orange) !important; border-color: #FED7AA !important; }
+.type-pill.red { background: var(--red-light) !important; color: var(--red) !important; border-color: #FCA5A5 !important; }
+.type-pill.purple { background: var(--purple-light) !important; color: var(--purple) !important; border-color: #DDD6FE !important; }
+.type-pill.teal { background: var(--teal-light) !important; color: var(--teal) !important; border-color: #5EEAD4 !important; }
+.type-pill.amber { background: var(--amber-light) !important; color: var(--amber) !important; border-color: #FCD34D !important; }
+.type-pill.green { background: var(--green-light) !important; color: var(--green) !important; border-color: #6EE7B7 !important; }
+.type-pill.gray { background: var(--gray-light) !important; color: var(--gray) !important; border-color: var(--border) !important; }
+.type-pill.navy { background: rgba(15,39,68,0.06) !important; color: var(--navy) !important; border-color: rgba(15,39,68,0.15) !important; }
+
+/* Dispute status pills */
+.disp-status { min-width: 120px; justify-content: center; padding: 6px 12px; font-size: 12px !important; }
+.disp-status-open, .disp-status.open { background: var(--white) !important; color: var(--navy) !important; border-color: var(--navy) !important; }
+.disp-status-awaiting_amazon, .disp-status.awaiting_amazon, .disp-status-awaiting, .disp-status.awaiting {
+  background: var(--purple-light) !important; color: var(--purple) !important; border-color: #DDD6FE !important; }
+.disp-status-approved, .disp-status.approved, .disp-status-amazon_approved {
+  background: var(--green-light) !important; color: var(--green) !important; border-color: #6EE7B7 !important; }
+.disp-status-rejected, .disp-status.rejected, .disp-status-amazon_rejected {
+  background: var(--red-light) !important; color: var(--red) !important; border-color: #FCA5A5 !important; }
+.disp-status-partial, .disp-status.partial, .disp-status-amazon_partial {
+  background: var(--amber-light) !important; color: var(--amber) !important; border-color: #FCD34D !important; }
+.disp-status-resolved, .disp-status.resolved {
+  background: var(--teal-light) !important; color: var(--teal) !important; border-color: #5EEAD4 !important; }
+.disp-status-escalated, .disp-status.escalated {
+  background: var(--orange-light) !important; color: var(--orange) !important; border-color: #FED7AA !important; }
+
+/* Return status pills */
+.ret-status-open, .ret-status.open { background: var(--gray-light) !important; color: var(--gray) !important; }
+.ret-status-pending_dispute, .ret-status.pending_dispute, .ret-status.pending {
+  background: var(--accent-blue-light) !important; color: var(--accent-blue) !important; border-color: #BFDBFE !important; }
+.ret-status-closed, .ret-status.closed {
+  background: var(--green-light) !important; color: var(--green) !important; border-color: #6EE7B7 !important; }
+
+/* Stage badges */
+.stage-pill, .stage-badge { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.stage-srt-required, .stage-srt_required { background: var(--red-light) !important; color: var(--red) !important; }
+.stage-srt-raised, .stage-srt_raised { background: var(--amber-light) !important; color: var(--amber) !important; }
+.stage-prt-pending, .stage-prt_pending { background: var(--orange-light) !important; color: var(--orange) !important; }
+.stage-prt-received, .stage-prt_received { background: var(--accent-blue-light) !important; color: var(--accent-blue) !important; }
+.stage-dispute-raised, .stage-dispute_raised { background: var(--purple-light) !important; color: var(--purple) !important; }
+.stage-resolved { background: var(--green-light) !important; color: var(--green) !important; }
+.stage-received { background: var(--teal-light) !important; color: var(--teal) !important; }
+
+/* Recovery probability */
+.recovery-high { background: var(--green-light) !important; color: var(--green) !important; font-weight: 700 !important; border-color: #6EE7B7 !important; }
+.recovery-medium { background: var(--amber-light) !important; color: var(--amber) !important; border-color: #FCD34D !important; }
+.recovery-low { background: var(--red-light) !important; color: var(--red) !important; border-color: #FCA5A5 !important; }
+.recovery-high::before { content: "↑ "; font-weight: 700; }
+.recovery-medium::before { content: "→ "; font-weight: 700; }
+.recovery-low::before { content: "↓ "; font-weight: 700; }
+
+/* Age warning badges */
+.age-warning, .age-amber { background: var(--amber-light) !important; color: var(--amber) !important; }
+.age-warning::before, .age-amber::before { content: "⚠ "; }
+.age-red, .age-critical { background: var(--red-light) !important; color: var(--red) !important; }
+.age-pulse, .age-90plus { background: var(--red-light) !important; color: var(--red) !important; animation: agePulse 2s infinite ease-in-out; }
+@keyframes agePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); } 50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); } }
+
+/* ===== NOTIFICATION CARDS ===== */
+.notif-card {
+  background: var(--white) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm) !important;
+  overflow: hidden;
+  transition: box-shadow 0.2s, transform 0.2s;
+  margin-bottom: 12px;
+}
+.notif-card:hover { box-shadow: var(--shadow-md) !important; transform: translateY(-1px); }
+.notif-inner { padding: 16px 20px !important; display: flex; gap: 14px; }
+.notif-accent-bar { width: 4px !important; border-radius: 2px; flex-shrink: 0; align-self: stretch; }
+.notif-accent-bar.blue { background: var(--accent-blue) !important; }
+.notif-accent-bar.orange { background: var(--orange) !important; }
+.notif-accent-bar.red { background: var(--red) !important; }
+.notif-accent-bar.purple { background: var(--purple) !important; }
+.notif-accent-bar.teal { background: var(--teal) !important; }
+.notif-accent-bar.amber { background: var(--amber) !important; }
+.notif-accent-bar.green { background: var(--green) !important; }
+.notif-accent-bar.gray { background: var(--gray) !important; }
+.notif-accent-bar.navy { background: var(--navy) !important; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-top-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.notif-time { font-size: 11px; color: var(--gray); }
+.notif-title { font-size: 15px !important; font-weight: 700 !important; color: var(--navy); margin-bottom: 4px; letter-spacing: -0.2px; }
+.notif-detail-line { font-size: 13px; color: var(--gray); margin-bottom: 8px; }
+
+/* ===== BUTTONS ===== */
+.btn, button.btn, .button {
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 13px !important; font-weight: 600 !important;
+  padding: 9px 18px !important; border-radius: var(--radius-sm) !important;
+  border: 1px solid transparent !important; cursor: pointer;
+  transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary, .btn.primary, button.primary {
+  background: var(--navy) !important; color: var(--white) !important; border-color: var(--navy) !important;
+}
+.btn-primary:hover, .btn.primary:hover { background: var(--navy-mid) !important; }
+.btn-secondary, .btn.secondary, button.secondary {
+  background: var(--white) !important; color: var(--navy) !important; border-color: var(--border) !important;
+}
+.btn-secondary:hover { border-color: var(--navy) !important; background: var(--gray-light) !important; }
+.btn-ghost { background: transparent !important; color: var(--gray) !important; border: 0 !important; }
+.btn-ghost:hover { background: var(--gray-light) !important; color: var(--navy) !important; }
+.btn-danger { background: var(--red) !important; color: var(--white) !important; border-color: var(--red) !important; }
+.btn-success { background: var(--green) !important; color: var(--white) !important; border-color: var(--green) !important; }
+
+/* ===== DISPUTE TABLE ===== */
+.disp-table, table.disputes {
+  width: 100%; border-collapse: collapse; background: var(--white);
+  border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.disp-table th, table.disputes th {
+  font-size: 10px !important; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gray) !important; font-weight: 700; padding: 12px 16px !important;
+  background: var(--bg) !important; border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.disp-table td, table.disputes td {
+  padding: 14px 16px !important; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--navy); vertical-align: middle;
+}
+.disp-table tr:hover td, table.disputes tr:hover td { background: var(--bg) !important; }
+.mono, .disp-amt, .disp-gap, .ret-id, .rc-id-val {
+  font-family: 'DM Mono', 'Roboto Mono', monospace !important;
+}
+.disp-amt, .disp-gap { text-align: right; }
+.disp-gap.positive, .disp-gap-positive { color: var(--red) !important; font-weight: 700; }
+.disp-gap.zero, .disp-gap-zero { color: var(--green) !important; }
+
+/* ===== RETURN COMPLETION CARDS ===== */
+.ret-card, .rc-card, .ret-needs-card, .ret-pending-card, .ret-closed-card {
+  background: var(--white) !important;
+  border: 1px solid var(--border) !important;
+  border-left-width: 4px !important;
+  border-radius: var(--radius-md) !important;
+  padding: 18px 20px !important;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+}
+.ret-card:hover { box-shadow: var(--shadow-md); }
+.ret-needs, .ret-needs-card, .ret-card.needs { border-left-color: var(--amber) !important; }
+.ret-pending, .ret-pending-card, .ret-card.pending { border-left-color: var(--accent-blue) !important; }
+.ret-closed, .ret-closed-card, .ret-card.closed { border-left-color: var(--green) !important; }
+.rc-id-val, .ret-id-large {
+  font-family: 'DM Mono', monospace !important; font-size: 16px !important;
+  font-weight: 700 !important; color: var(--navy) !important; letter-spacing: -0.2px;
+}
+.rc-label, .ret-field-label {
+  font-size: 10px !important; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gray) !important; font-weight: 600; display: block; margin-bottom: 4px;
+}
+.rc-val, .ret-field-val { font-size: 13px; color: var(--navy); font-weight: 500; }
+
+/* Section headers in returns queue */
+.ret-section-header, .ret-needs-header, .ret-pending-header, .ret-closed-header {
+  font-size: 14px !important; font-weight: 700 !important; letter-spacing: -0.2px;
+  padding: 12px 16px; border-radius: var(--radius-sm); margin: 16px 0 12px;
+}
+.ret-needs-header { background: var(--amber-light); color: var(--amber); border: 1px solid #FCD34D; }
+.ret-pending-header { background: var(--accent-blue-light); color: var(--accent-blue); border: 1px solid #BFDBFE; }
+.ret-closed-header { background: var(--green-light); color: var(--green); border: 1px solid #6EE7B7; }
+
+/* ===== MODALS ===== */
+.modal-overlay, .overlay, .dialog-overlay {
+  background: rgba(15,39,68,0.5) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+.modal, .dialog, .modal-box {
+  background: var(--white) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  max-width: 520px;
+  border: 0 !important;
+}
+.modal-header, .dialog-header { padding: 20px 24px !important; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 16px; color: var(--navy); }
+.modal-body, .dialog-body { padding: 24px !important; }
+.modal-footer, .dialog-footer { padding: 16px 24px !important; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ===== PRIORITY CARDS ===== */
+.priority-card, .priority-row {
+  background: var(--white) !important;
+  border: 1px solid var(--border) !important;
+  border-left-width: 4px !important;
+  border-radius: var(--radius-md) !important;
+  padding: 16px 20px !important;
+  margin-bottom: 10px;
+}
+.priority-card.overdue, .priority-row.overdue { border-left-color: var(--red) !important; }
+.priority-card.at-risk, .priority-row.at-risk { border-left-color: var(--amber) !important; }
+.priority-card.on-track, .priority-row.on-track { border-left-color: var(--green) !important; }
+.priority-badge.overdue { background: var(--red-light); color: var(--red); }
+.priority-badge.at-risk { background: var(--amber-light); color: var(--amber); }
+.priority-badge.on-track { background: var(--green-light); color: var(--green); }
+
+/* ===== HEADINGS / TYPOGRAPHY ===== */
+h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
+.section-label, .uppercase-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray); font-weight: 600; }
+
+/* Tighten container spacing */
+.container, main, .main-content { padding: 20px 24px !important; }
+
+/* Copy button styling */
+.copy-btn, button.copy-btn {
+  background: transparent !important; border: 1px solid var(--border) !important;
+  color: var(--gray) !important; padding: 4px 8px !important; border-radius: 6px !important;
+  font-size: 11px !important; cursor: pointer; margin-left: 8px;
+}
+.copy-btn:hover { background: var(--gray-light) !important; color: var(--navy) !important; }
+/* ===== END PREMIUM REDESIGN ===== */
+</style>
 </head>
 <body>
 
@@ -2897,7 +3248,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
             const needsPrt = mf.indexOf('prt_number') !== -1;
             const needsDispute = !r.dispute_id_ref && (calc.missingFields.indexOf('dispute_id_ref') !== -1);
             html += '<div class="returns-completion-card" data-return-id="' + r.id + '">'
-              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id_ref) + '\')" title="Copy">⎘</button>' : '') + (window.__hasDispItemMatch && window.__hasDispItemMatch(r.return_id_ref) ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + escapeId(r.return_id_ref) + '\')">Linked to dispute</span>' : '') + '</div>'
+              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id || '—') + '</span>' + (r.return_id ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id) + '\')" title="Copy">⎘</button>' : '') + (window.__hasDispItemMatch && window.__hasDispItemMatch(r.return_id) ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + escapeId(r.return_id) + '\')">Linked to dispute</span>' : '') + '</div>'
               + '<div class="rc-top">'
               + '  <div class="rc-fields">'
               + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
@@ -2945,7 +3296,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
           pendingList.forEach(function(r){
             const stage = r.stage || '—';
             html += '<div class="returns-completion-card pending" data-return-id="' + r.id + '" style="border-left:4px solid #3B82F6;background:#F8FAFC;">'
-              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id_ref) + '\')" title="Copy">⎘</button>' : '') + '<span class="stage-pill" style="background:#DBEAFE;color:#1E3A8A;margin-left:auto;">Waiting on Amazon</span></div>'
+              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id || '—') + '</span>' + (r.return_id ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id) + '\')" title="Copy">⎘</button>' : '') + '<span class="stage-pill" style="background:#DBEAFE;color:#1E3A8A;margin-left:auto;">Waiting on Amazon</span></div>'
               + '<div class="rc-top">'
               + '  <div class="rc-fields">'
               + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
@@ -2967,7 +3318,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
             + '<div style="padding:8px 16px 16px;max-height:480px;overflow-y:auto;">';
           closedList.slice(0, 200).forEach(function(r){
             html += '<div style="display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid #DCFCE7;font-family:DM Mono,monospace;font-size:12px;color:#374151;">'
-              + '<span style="font-weight:600;color:#0F2744;min-width:160px;">' + (r.return_id_ref || r.id || '—') + '</span>'
+              + '<span style="font-weight:600;color:#0F2744;min-width:160px;">' + (r.return_id || '—') + '</span>'
               + '<span style="min-width:120px;">' + (r.vret_number || '—') + '</span>'
               + '<span style="min-width:90px;">' + (r.po_number || '—') + '</span>'
               + '<span style="min-width:140px;">' + (r.tle_invoice_number || '—') + '</span>'
@@ -3023,7 +3374,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         const disputeCell = r.dispute_id_ref ? '<span class="dispute-link" onclick="goToDispute(\'' + r.dispute_id_ref + '\')">' + r.dispute_id_ref + '</span>' : '—';
         return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '" id="ret-row-' + r.id + '">'
           + '<td>' + fmtRetDate(r.date_received) + '</td>'
-          + '<td class="mono ret-id-cell">' + (r.return_id_ref ? '<span class="ret-id-text">' + r.return_id_ref + '</span><button class="ret-copy-btn" onclick="event.stopPropagation(); copyReturnId(event, \'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '—') + '</td>'
+          + '<td class="mono ret-id-cell">' + (r.return_id ? '<span class="ret-id-text">' + r.return_id + '</span><button class="ret-copy-btn" onclick="event.stopPropagation(); copyReturnId(event, \'' + (r.return_id+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '—') + '</td>'
           + '<td>' + (r.vret_number || '—') + '</td>'
           + '<td>' + (r.model_sku || '—') + '</td>'
           + '<td>' + (r.po_number || '—') + '</td>'
@@ -3181,7 +3532,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
           html += '<div class="linked-return-box">'
             + '<div class="linked-return-title">Linked return</div>'
             + '<div class="linked-return-grid">'
-            + '<div><strong>Return ID</strong>' + (r.return_id_ref || '—') + '</div>'
+            + '<div><strong>Return ID</strong>' + (r.return_id || '—') + '</div>'
             + '<div><strong>VRET number</strong>' + (r.vret_number || '—') + '</div>'
             + '<div><strong>Model/SKU</strong>' + (r.model_sku || '—') + '</div>'
             + '<div><strong>Warehouse</strong>' + (r.warehouse || '—') + '</div>'
@@ -3681,13 +4032,13 @@ async function runGlobalSearch(q) {
       queries.push(sb.from('returns').select('*').eq('po_number', upper).limit(5));
       queries.push(sb.from('expected_actions').select('*').eq('ref_number', upper).limit(5));
     } else if (isReturnId) {
-      queries.push(sb.from('returns').select('*').eq('return_id_ref', Q).limit(5));
+      queries.push(sb.from('returns').select('*').eq('return_id', Q).limit(5));
       queries.push(sb.from('dispute_items').select('*').eq('return_id', Q).limit(5));
     } else if (isAmazonInv) {
       queries.push(sb.from('returns').select('*').ilike('amazon_invoice', '%' + Q + '%').limit(5));
     } else {
       queries.push(sb.from('disputes').select('*').or('dispute_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,raise_reason.ilike.%' + Q + '%').limit(5));
-      queries.push(sb.from('returns').select('*').or('return_id_ref.ilike.%' + Q + '%,vret_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,model_sku.ilike.%' + Q + '%').limit(5));
+      queries.push(sb.from('returns').select('*').or('return_id.ilike.%' + Q + '%,vret_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,model_sku.ilike.%' + Q + '%').limit(5));
       queries.push(sb.from('expected_actions').select('*').or('ref_number.ilike.%' + Q + '%,description.ilike.%' + Q + '%').limit(5));
     }
     const results = await Promise.all(queries.map(p => p.then(r => r).catch(e => ({data: [], error: e}))));
@@ -3706,7 +4057,7 @@ function renderGlobalSearchResults(results, hints) {
     const d = (r && r.data) ? r.data : [];
     d.forEach(row => {
       if (row.dispute_number && row.dispute_status !== undefined) disputes.push(row);
-      else if (row.return_id_ref !== undefined || row.vret_number !== undefined) returns.push(row);
+      else if (row.return_id !== undefined || row.vret_number !== undefined) returns.push(row);
       else if (row.line_status !== undefined || (row.return_id && row.dispute_number)) dispItems.push(row);
       else if (row.ref_number !== undefined || row.action_type !== undefined) expActs.push(row);
     });
@@ -3731,8 +4082,8 @@ function renderGlobalSearchResults(results, hints) {
       const st = (r.status || '').toLowerCase();
       const cls = st === 'closed' ? 'green' : (r.is_complete ? 'navy' : 'amber');
       const amt = r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) + ' AED' : '';
-      html += '<div class="gs-result" onclick="goToSearchResult(\'return\', \'' + r.id + '\', \'' + (r.return_id_ref||'').replace(/\'/g,"\\'") + '\')">'
-        + '<div class="gs-result-main"><div class="gs-result-ref">' + (r.return_id_ref || r.vret_number || '—') + '</div>'
+      html += '<div class="gs-result" onclick="goToSearchResult(\'return\', \'' + r.id + '\', \'' + (r.return_id||'').replace(/\'/g,"\\'") + '\')">'
+        + '<div class="gs-result-main"><div class="gs-result-ref">' + (r.return_id || r.vret_number || '—') + '</div>'
         + '<div class="gs-result-sub">' + (r.po_number ? r.po_number + ' · ' : '') + (r.model_sku || '') + '</div></div>'
         + '<span class="gs-pill ' + cls + '">' + (r.status || (r.is_complete?'complete':'open')) + '</span>'
         + (amt ? '<span class="gs-result-amt">' + amt + '</span>' : '') + '</div>';
