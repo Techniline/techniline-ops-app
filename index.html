@@ -3328,6 +3328,9 @@ function showToast(msg){
     };
   }
 
+})();
+
+
 // ============== Global search + helpers ==============
 function renderReturnIdsPills(returnIdsField) {
   if (!returnIdsField) return '<span style="color:var(--text-muted)">—</span>';
@@ -3526,8 +3529,6 @@ document.addEventListener('click', function(e) {
   const wrap = document.querySelector('.global-search-wrap');
   if (wrap && !wrap.contains(e.target)) closeGlobalSearchPanel();
 });
-
-})();
 </script>
 
 <style id="add-return-modal-css">
