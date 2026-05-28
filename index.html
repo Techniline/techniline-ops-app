@@ -1032,6 +1032,11 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { lock: (name, acquireTimeout, fn) => fn() } });
 
+// ── Team user IDs ─────────────────────────────────────────────────────────
+const VIHAN_ID    = 'c4abda49-13e9-41fd-acae-88acd4aa7fcb'; // manager
+const MARICEL_ID  = 'cbb81b27-8756-4f2d-bfe0-04211c27092c'; // staff (e-ops)
+const AARON_ID    = '227fdb27-80b5-4040-ab14-4bb945068af7'; // staff (purchasing)
+
 // ── State ──────────────────────────────────────────────
 let currentUser = null;
 let currentUserProfile = null;
@@ -1267,6 +1272,9 @@ function buildNotifCard(n) {
     detailBox = n.email_subject || '';
   } else if (n.type === 'return_processed') {
     title = `Return processed — ${n.ref_number || '—'}`;
+    if (n.ref_number && !/^RETURN-UNKNOWN-/.test(n.ref_number)) {
+      title += ` <span class="vc-lookup">Look this up in Vendor Central → Returns</span>`;
+    }
     detailLine = `${aedValid ? aedDisplay + ' refund · ' : ''}Log SRT/PRT reference`;
     detailBox = n.email_subject || '';
   } else if (n.type === 'dispute_update') {
@@ -1284,7 +1292,7 @@ function buildNotifCard(n) {
   } else if (n.type === 'vendor_po') {
     actions = `<button class="btn-navy" onclick="openPOModal('${n.id}','${n.ref_number}')">Action PO ${n.ref_number}</button><span class="sla-pill warning">2 days to confirm</span>`;
   } else if (n.type === 'shortage_claim') {
-    actions = `<button class="btn-navy" onclick="raiseDisputeFromClaim('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="acceptDeduction('${n.id}')">Accept</button><span class="sla-pill urgent">Act within 2 days</span>`;
+    actions = `<button class="btn-navy" onclick="raiseDisputeFromClaim('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="openAcceptForm('${n.id}', ${parseFloat(n.aed_amount)||0})">Accept</button><button class="btn-outline" style="border-color:var(--amber);color:var(--amber)" onclick="openEscalateModal('${n.id}', '${n.ref_number||''}', ${parseFloat(n.aed_amount)||0})">Escalate</button><span class="sla-pill urgent">Act within 2 days</span><div id="accept-form-${n.id}" class="accept-form-host"></div>`;
   } else if (n.type === 'po_cancellation') {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Confirmed — will not ship')">Confirmed — will not ship</button><button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif('${n.id}','Already shipped — escalating')">Already shipped — escalate</button>`;
   } else if (n.type === 'remittance') {
@@ -1322,11 +1330,145 @@ async function actionNotif(id, note) {
   await loadNotifications();
 }
 
-async function acceptDeduction(id) {
-  const reason = prompt('Confirm acceptance reason (required):');
-  if (!reason) return;
-  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
-  showToast('Deduction accepted — recorded');
+function openAcceptForm(id, defaultAmount) {
+  const host = document.getElementById('accept-form-' + id);
+  if (!host) return;
+  if (host.dataset.open === '1') { host.innerHTML = ''; host.dataset.open = '0'; return; }
+  host.dataset.open = '1';
+  const amt = Number(defaultAmount || 0).toFixed(2);
+  host.innerHTML = '<div class="accept-form">'
+    + '<div class="accept-form-title">Accept deduction</div>'
+    + '<div class="accept-form-row"><label>Reason</label>'
+    +   '<select id="accept-reason-' + id + '">'
+    +     '<option value="Shortage confirmed internally">Shortage confirmed internally</option>'
+    +     '<option value="ASN error confirmed">ASN error confirmed</option>'
+    +     '<option value="Agreed co-op deduction">Agreed co-op deduction</option>'
+    +     '<option value="Duplicate claim — accept">Duplicate claim — accept</option>'
+    +     '<option value="Other">Other (specify)</option>'
+    +   '</select></div>'
+    + '<div class="accept-form-row" id="accept-other-row-' + id + '" style="display:none"><label>Specify</label>'
+    +   '<input type="text" id="accept-other-' + id + '" placeholder="Reason details"></div>'
+    + '<div class="accept-form-row"><label>Amount accepted (AED)</label>'
+    +   '<input type="number" step="0.01" id="accept-amount-' + id + '" value="' + amt + '"></div>'
+    + '<div class="accept-form-actions">'
+    +   '<button class="btn-navy" onclick="submitAcceptDeduction(\'' + id + '\')">Confirm acceptance</button>'
+    +   '<button class="btn-outline" onclick="closeAcceptForm(\'' + id + '\')">Cancel</button>'
+    + '</div></div>';
+  const sel = document.getElementById('accept-reason-' + id);
+  sel.addEventListener('change', () => {
+    document.getElementById('accept-other-row-' + id).style.display = sel.value === 'Other' ? 'flex' : 'none';
+  });
+}
+function closeAcceptForm(id) {
+  const host = document.getElementById('accept-form-' + id);
+  if (host) { host.innerHTML = ''; host.dataset.open = '0'; }
+}
+async function submitAcceptDeduction(id) {
+  const sel = document.getElementById('accept-reason-' + id);
+  let reason = sel ? sel.value : '';
+  if (reason === 'Other') {
+    const other = (document.getElementById('accept-other-' + id) || {}).value;
+    if (!other || other.trim().length < 4) { alert('Please specify the acceptance reason.'); return; }
+    reason = 'Other — ' + other.trim();
+  }
+  const amtEl = document.getElementById('accept-amount-' + id);
+  const amount = parseFloat((amtEl && amtEl.value) || '0') || 0;
+  const nowIso = new Date().toISOString();
+  // 1. Update expected_actions
+  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: nowIso }).eq('id', id);
+  // 2. Look up linked dispute (if any)
+  try {
+    const { data: disps } = await sb.from('disputes').select('id, dispute_number').eq('expected_action_id', id);
+    if (disps && disps.length) {
+      for (const d of disps) {
+        await sb.from('disputes').update({
+          maricel_recommendation: 'accept',
+          dispute_status: 'resolved',
+          resolution_comment: reason,
+          credit_amount_aed: amount,
+        }).eq('id', d.id);
+      }
+    }
+  } catch (e) { console.warn('dispute update skipped', e); }
+  // 3. Insert submissions record
+  try {
+    const userResp = await sb.auth.getUser();
+    const uid = (userResp && userResp.data && userResp.data.user) ? userResp.data.user.id : null;
+    await sb.from('submissions').insert({
+      evidence_text: 'Deduction accepted — ' + reason + ' — AED ' + amount.toFixed(2),
+      submitted_by: uid,
+    });
+  } catch (e) { console.warn('submissions insert skipped', e); }
+  showToast('Deduction accepted — AED ' + amount.toFixed(2) + ' recorded');
+  await loadNotifications();
+}
+// Backwards compatibility wrapper
+async function acceptDeduction(id) { openAcceptForm(id, 0); }
+
+// ── Escalate to Vihan ─────────────────────────────────────────────────────
+function openEscalateModal(id, refNumber, aedAmount) {
+  const host = document.getElementById('escalate-modal-host');
+  if (!host) return;
+  const amt = Number(aedAmount || 0).toFixed(2);
+  const template = 'We are unable to identify supporting records for this deduction in Vendor Central and request supporting documentation, return reference linkage, and guidance on dispute resolution.';
+  host.innerHTML = '<div class="modal-backdrop" onclick="closeEscalateModal()"></div>'
+    + '<div class="modal-card escalate-modal">'
+    +   '<div class="modal-head"><div class="modal-title">Escalate to Vihan</div><button class="modal-close" onclick="closeEscalateModal()">×</button></div>'
+    +   '<div class="modal-body">'
+    +     '<div class="esc-row"><label>Reference</label><input type="text" id="esc-ref" value="' + (refNumber || '') + '"></div>'
+    +     '<div class="esc-row"><label>Amount AED</label><input type="number" step="0.01" id="esc-amt" value="' + amt + '"></div>'
+    +     '<div class="esc-row"><label>Issue description</label><textarea id="esc-desc" rows="4">' + template + '</textarea></div>'
+    +     '<div class="esc-row"><label>Urgency</label><select id="esc-urgency"><option value="High">High</option><option value="Medium" selected>Medium</option><option value="Low">Low</option></select></div>'
+    +     '<div class="esc-checks"><div class="esc-checks-title">What I have already verified:</div>'
+    +       '<label><input type="checkbox" id="esc-c1"> Searched Vendor Central for matching deduction</label>'
+    +       '<label><input type="checkbox" id="esc-c2"> Cross-referenced against TLE invoice records</label>'
+    +       '<label><input type="checkbox" id="esc-c3"> Checked for related shipment / ASN</label>'
+    +       '<label><input type="checkbox" id="esc-c4"> Reviewed similar past disputes</label>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="modal-actions">'
+    +     '<button class="btn-navy" onclick="submitEscalation(\'' + id + '\')">Escalate</button>'
+    +     '<button class="btn-outline" onclick="closeEscalateModal()">Cancel</button>'
+    +   '</div>'
+    + '</div>';
+  host.classList.add('open');
+}
+function closeEscalateModal() {
+  const host = document.getElementById('escalate-modal-host');
+  if (host) { host.classList.remove('open'); host.innerHTML = ''; }
+}
+async function submitEscalation(id) {
+  const ref = (document.getElementById('esc-ref') || {}).value || '';
+  const amt = parseFloat((document.getElementById('esc-amt') || {}).value || '0') || 0;
+  const desc = (document.getElementById('esc-desc') || {}).value || '';
+  const urgency = (document.getElementById('esc-urgency') || {}).value || 'Medium';
+  const checks = [];
+  if ((document.getElementById('esc-c1') || {}).checked) checks.push('VC searched');
+  if ((document.getElementById('esc-c2') || {}).checked) checks.push('TLE invoice checked');
+  if ((document.getElementById('esc-c3') || {}).checked) checks.push('Shipment/ASN checked');
+  if ((document.getElementById('esc-c4') || {}).checked) checks.push('Past disputes reviewed');
+  const today = new Date();
+  const dueDate = new Date(today.getTime() + 2 * 86400000);
+  const fmt = (d) => d.toISOString().slice(0,10);
+  const fullDesc = desc + (checks.length ? '\n\nAlready verified: ' + checks.join(', ') : '') + '\n\nUrgency: ' + urgency + '\nAmount: AED ' + amt.toFixed(2);
+  // 1. Update expected_actions status
+  await sb.from('expected_actions').update({ status: 'escalated', actioned_at: new Date().toISOString() }).eq('id', id);
+  // 2. Insert priorities row
+  try {
+    const userResp = await sb.auth.getUser();
+    const createdBy = (userResp && userResp.data && userResp.data.user) ? userResp.data.user.id : MARICEL_ID;
+    await sb.from('priorities').insert({
+      title: 'Escalation — ' + ref + ' — AED ' + amt.toFixed(2),
+      description: fullDesc,
+      assigned_to: VIHAN_ID,
+      created_by: createdBy,
+      status: 'on_track',
+      start_date: fmt(today),
+      due_date: fmt(dueDate),
+    });
+  } catch (e) { console.warn('priorities insert skipped', e); }
+  showToast('Escalated to Vihan — priority created');
+  closeEscalateModal();
   await loadNotifications();
 }
 
@@ -2680,6 +2822,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
             const needsDispute = !r.dispute_id_ref;
             const needsPrt = isTypeB && !r.prt_number;
             html += '<div class="returns-completion-card" data-return-id="' + r.id + '">'
+              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '') + (window.__hasDispItemMatch && window.__hasDispItemMatch(r.return_id_ref) ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')">Linked to dispute</span>' : '') + '</div>'
               + '<div class="rc-top">'
               + '  <div class="rc-fields">'
               + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
@@ -2761,7 +2904,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         const disputeCell = r.dispute_id_ref ? '<span class="dispute-link" onclick="goToDispute(\'' + r.dispute_id_ref + '\')">' + r.dispute_id_ref + '</span>' : '—';
         return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '" id="ret-row-' + r.id + '">'
           + '<td>' + fmtRetDate(r.date_received) + '</td>'
-          + '<td class="mono">' + (r.return_id_ref || '—') + '</td>'
+          + '<td class="mono ret-id-cell">' + (r.return_id_ref ? '<span class="ret-id-text">' + r.return_id_ref + '</span><button class="ret-copy-btn" onclick="event.stopPropagation(); copyReturnId(event, \'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '—') + '</td>'
           + '<td>' + (r.vret_number || '—') + '</td>'
           + '<td>' + (r.model_sku || '—') + '</td>'
           + '<td>' + (r.po_number || '—') + '</td>'
@@ -3536,6 +3679,59 @@ document.addEventListener('click', function(e) {
   const wrap = document.querySelector('.global-search-wrap');
   if (wrap && !wrap.contains(e.target)) closeGlobalSearchPanel();
 });
+
+
+// ── Return ID copy + dispute_items linking helpers ──────────────────────
+window.__dispItemReturnIds = new Set();
+async function loadDispItemReturnIds() {
+  try {
+    const { data } = await sb.from('dispute_items').select('return_id, dispute_number');
+    if (data) {
+      window.__dispItemMap = {};
+      data.forEach(r => {
+        if (r.return_id) {
+          window.__dispItemReturnIds.add(String(r.return_id));
+          window.__dispItemMap[String(r.return_id)] = r.dispute_number;
+        }
+      });
+    }
+  } catch (e) { console.warn('dispute_items load skipped', e); }
+}
+window.__hasDispItemMatch = function(rid) {
+  if (!rid) return false;
+  return window.__dispItemReturnIds.has(String(rid));
+};
+function jumpToDispItemDispute(rid) {
+  const disp = (window.__dispItemMap || {})[String(rid)];
+  if (!disp) return;
+  const btn = document.getElementById('tab-disputes-btn') || Array.from(document.querySelectorAll('.tab-btn')).find(b => /disputes/i.test(b.textContent));
+  if (btn) btn.click();
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#disputes-table-host tr');
+    let target = null;
+    rows.forEach(r => { if ((r.textContent || '').indexOf(disp) !== -1 && !target) target = r; });
+    if (target && typeof flashHighlight === 'function') flashHighlight(target);
+  }, 350);
+}
+function copyReturnId(e, rid) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  if (!rid) return;
+  const tgtBtn = e && e.currentTarget;
+  const doCopy = navigator.clipboard && navigator.clipboard.writeText
+    ? navigator.clipboard.writeText(String(rid))
+    : (() => { const ta = document.createElement('textarea'); ta.value = rid; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(_){} document.body.removeChild(ta); return Promise.resolve(); })();
+  doCopy.then(() => {
+    if (tgtBtn) {
+      const orig = tgtBtn.innerHTML;
+      tgtBtn.innerHTML = '✓';
+      tgtBtn.classList.add('copied');
+      setTimeout(() => { tgtBtn.innerHTML = orig; tgtBtn.classList.remove('copied'); }, 1400);
+    }
+    if (typeof showToast === 'function') showToast('Copied ' + rid);
+  });
+}
+// Load dispute_items on startup
+setTimeout(() => { loadDispItemReturnIds(); }, 800);
 </script>
 
 <style id="add-return-modal-css">
@@ -3570,6 +3766,47 @@ document.addEventListener('click', function(e) {
 .credit-pill-partial { background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; }
 .credit-ref { font-family:'DM Mono', monospace; font-size:10px; color:#94A3B8; margin-top:2px; }
 </style>
+<style id="ops-final-fixes-css">
+.accept-form-host { width:100%; }
+.accept-form { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; margin-top:12px; font-family:'DM Sans', sans-serif; }
+.accept-form-title { font-weight:700; color:#0F2744; margin-bottom:10px; }
+.accept-form-row { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+.accept-form-row label { font-size:12px; font-weight:600; color:#475467; min-width:180px; }
+.accept-form-row select, .accept-form-row input { flex:1; padding:7px 10px; border:1px solid #CBD5E1; border-radius:6px; font-size:13px; font-family:'DM Sans', sans-serif; }
+.accept-form-actions { display:flex; gap:10px; margin-top:10px; }
+#escalate-modal-host { display:none; }
+#escalate-modal-host.open { display:block; }
+#escalate-modal-host .modal-backdrop { position:fixed; inset:0; background:rgba(15,39,68,0.55); z-index:9998; }
+.escalate-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:560px; max-width:92vw; max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(15,39,68,0.4); z-index:9999; font-family:'DM Sans', sans-serif; }
+.escalate-modal .modal-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid #E2E8F0; }
+.escalate-modal .modal-title { font-weight:700; color:#0F2744; font-size:16px; }
+.escalate-modal .modal-close { background:none; border:none; font-size:24px; color:#94A3B8; cursor:pointer; line-height:1; }
+.escalate-modal .modal-body { padding:18px 20px; }
+.esc-row { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.esc-row label { font-size:12px; font-weight:600; color:#475467; }
+.esc-row input, .esc-row select, .esc-row textarea { padding:8px 10px; border:1px solid #CBD5E1; border-radius:7px; font-size:13px; font-family:'DM Sans', sans-serif; }
+.esc-row textarea { resize:vertical; }
+.esc-checks { background:#F8FAFC; padding:12px 14px; border-radius:8px; }
+.esc-checks-title { font-size:12px; font-weight:600; color:#475467; margin-bottom:8px; }
+.esc-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:#0F2744; margin-bottom:6px; cursor:pointer; }
+.escalate-modal .modal-actions { display:flex; gap:10px; padding:14px 20px 20px 20px; border-top:1px solid #E2E8F0; }
+.escalated-badge { display:inline-block; padding:4px 10px; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:999px; font-size:11px; font-weight:600; margin-left:8px; }
+.rc-id-bar { display:flex; align-items:center; gap:12px; padding:12px 16px; background:#F8FAFC; border-bottom:1px solid #E2E8F0; flex-wrap:wrap; }
+.rc-id-label { font-size:11px; font-weight:700; color:#475467; letter-spacing:0.5px; text-transform:uppercase; }
+.rc-id-val { font-family:'DM Mono', monospace; font-size:18px; font-weight:600; color:#0F2744; letter-spacing:0.3px; }
+.rc-copy-btn { background:none; border:1px solid #CBD5E1; border-radius:6px; padding:3px 8px; cursor:pointer; color:#475467; font-size:13px; line-height:1; }
+.rc-copy-btn:hover { background:#0F2744; color:#fff; border-color:#0F2744; }
+.rc-copy-btn.copied { background:#10B981; color:#fff; border-color:#10B981; }
+.rc-disp-link { font-size:11px; font-weight:600; color:#0F2744; background:#EEF2F6; padding:3px 10px; border-radius:999px; cursor:pointer; border:1px solid #CBD5E1; }
+.rc-disp-link:hover { background:#0F2744; color:#fff; }
+.ret-id-cell { white-space:nowrap; }
+.ret-id-text { font-family:'DM Mono', monospace; }
+.ret-copy-btn { background:none; border:1px solid #CBD5E1; border-radius:5px; padding:1px 6px; margin-left:6px; cursor:pointer; color:#475467; font-size:11px; line-height:1; vertical-align:middle; }
+.ret-copy-btn:hover { background:#0F2744; color:#fff; border-color:#0F2744; }
+.ret-copy-btn.copied { background:#10B981; color:#fff; border-color:#10B981; }
+.vc-lookup { display:inline-block; font-size:11px; font-weight:500; color:#0F2744; background:#EEF2F6; padding:2px 8px; border-radius:999px; margin-left:8px; }
+</style>
+<div id="escalate-modal-host"></div>
 </body>
 </html>
 
