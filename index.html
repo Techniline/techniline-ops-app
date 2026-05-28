@@ -4681,15 +4681,16 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
     var pane=document.querySelector(".tab-pane.active");
     if(!pane) return;
     var name=pane.id.replace("pane-","");
-    document.querySelectorAll(".sb-item").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-tab")===name); });
+    document.querySelectorAll(".sb-item").forEach(function(b){ var on=(b.getAttribute("data-tab")===name); if(b.classList.contains("active")!==on) b.classList.toggle("active", on); });
   }
   function syncBadge(){
     var src=document.getElementById("notif-count");
     var dst=document.getElementById("sb-notif-badge");
     if(!src||!dst) return;
     var v=(src.textContent||"").trim();
-    dst.textContent=v;
-    dst.classList.toggle("show", v && v!=="0");
+    if(dst.textContent!==v) dst.textContent=v;
+    var show=!!(v && v!=="0");
+    if(dst.classList.contains("show")!==show) dst.classList.toggle("show", show);
   }
   function syncUser(){
     var av=document.getElementById("sb-user-avatar"), nm=document.getElementById("sb-user-name");
@@ -4706,9 +4707,12 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
     var app=document.getElementById("app-screen");
     if(app){ app.classList.add("app-grid"); try{ if(localStorage.getItem("tl_sb_collapsed")==="1") app.classList.add("sb-collapsed"); }catch(_){} }
     syncActive(); syncBadge(); syncUser();
-    var paneHost=document.querySelector(".tab-content-area")||document.body;
-    var mo=new MutationObserver(function(){ syncActive(); syncBadge(); });
-    mo.observe(document.body,{subtree:true,attributes:true,attributeFilter:["class"],childList:true,characterData:true});
+        var _syncing=false;
+    function safeSync(){ if(_syncing) return; _syncing=true; try{ syncActive(); syncBadge(); }catch(_){} _syncing=false; }
+    var mo=new MutationObserver(function(){ if(_syncing) return; safeSync(); });
+    var host=document.getElementById("app-screen")||document.body;
+    mo.observe(host,{subtree:true,attributes:true,attributeFilter:["class"]});
+    var nc=document.getElementById("notif-count"); if(nc){ var mo2=new MutationObserver(function(){ if(_syncing) return; safeSync(); }); mo2.observe(nc,{childList:true,characterData:true,subtree:true}); }
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
 })();
