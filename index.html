@@ -2053,6 +2053,7 @@ function renderDisputes(rows) {
 
   const head = '<thead><tr>'
     + '<th onclick="sortDisputes(\'dispute_number\')">Dispute ID' + sortInd('dispute_number') + '</th>'
+    + '<th>Return IDs</th>'
     + '<th onclick="sortDisputes(\'status\')">Status' + sortInd('status') + '</th>'
     + '<th onclick="sortDisputes(\'tle_invoice\')">TLE Invoice' + sortInd('tle_invoice') + '</th>'
     + '<th onclick="sortDisputes(\'po_number\')">PO No' + sortInd('po_number') + '</th>'
@@ -2063,7 +2064,6 @@ function renderDisputes(rows) {
     + '<th onclick="sortDisputes(\'date_raised\')">Date raised' + sortInd('date_raised') + '</th>'
     + '<th onclick="sortDisputes(\'srt\')">SRT' + sortInd('srt') + '</th>'
     + '<th onclick="sortDisputes(\'prt\')">PRT' + sortInd('prt') + '</th>'
-    + '<th>Return IDs</th>'
     + '<th>Actions</th>'
     + '</tr></thead>';
 
@@ -2109,6 +2109,7 @@ function renderDisputes(rows) {
 
     const main = '<tr data-created-at="' + (d.created_at||'') + '" data-dispute-type="' + (d.dispute_type||'') + '" data-srt="' + (d.srt_number||'') + '" data-tle="' + (d.tle_invoice_number||'') + '" data-id="' + d.id + '">'
       + '<td><span class="dispute-id-cell" onclick="toggleDisputeExpand(\'' + d.id + '\')">' + (d.dispute_number || '(no DSPT)') + '</span></td>'
+      + '<td>' + renderReturnIdsPills(d.return_ids) + '</td>'
       + '<td><span class="disp-pill ' + k + '">' + disputeStatusLabel(k) + '</span>' + (d.credit_closed === true ? ('<span class="credit-pill credit-pill-closed">Credit received — AED ' + (Number(d.credit_amount_aed||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})) + '</span>' + (d.credit_transaction_ref ? '<div class="credit-ref">' + d.credit_transaction_ref + '</div>' : '')) : (d.credit_amount_aed != null ? ('<span class="credit-pill credit-pill-partial">Partially settled — AED ' + (Number(d.credit_amount_aed||0).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2})) + ' received</span>' + (d.credit_transaction_ref ? '<div class="credit-ref">' + d.credit_transaction_ref + '</div>' : '')) : '')) + '</td>'
       + '<td class="mono">' + (d.tle_invoice_number || '—') + '</td>'
       + '<td class="mono">' + (d.po_number || '—') + '</td>'
@@ -2119,7 +2120,6 @@ function renderDisputes(rows) {
       + '<td class="mono">' + dateStr + '</td>'
       + '<td>' + srtCell + '</td>'
       + '<td>' + prtCell + '</td>'
-      + '<td>' + renderReturnIdsPills(d.return_ids) + '</td>'
       + '<td>' + actions + '</td>'
       + '</tr>';
 
@@ -2653,7 +2653,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       const total = _allReturns.length;
       const totCost = _allReturns.reduce((s,r) => s + (parseFloat(r.total_cost_aed) || 0), 0);
       const totRec  = _allReturns.reduce((s,r) => s + (parseFloat(r.recovery_amt_aed) || 0), 0);
-      const incomplete = _allReturns.filter(r => !r.is_complete);
+      const incomplete = _allReturns.filter(r => !r.is_complete).slice().sort((a,b) => String(a.date_received||'').localeCompare(String(b.date_received||'')));
       const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
       setText('ret-total', total);
       setText('ret-cost', totCost.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}));
