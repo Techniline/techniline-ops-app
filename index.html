@@ -3781,7 +3781,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       }
       rowEl.querySelector('.disp-chevron')?.classList.add('open');
       // Find dispute object
-      const dispRow = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.dispute_number) === String(disputeNumber)) || {};
+      const dispRow = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.id) === String(disputeNumber) || String(x.dispute_number) === String(disputeNumber)) || {};
       const exp = document.createElement('tr');
       exp.className = 'disp-expand-row';
       const td = document.createElement('td');
@@ -3792,7 +3792,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       // Render the panel
       renderDisputeExpanded(dispRow, disputeNumber);
       // Async-load linked dispute_items for line items section
-      loadDisputeItems(disputeNumber);
+      loadDisputeItems(dispRow.dispute_number || disputeNumber);
     }
 
     function renderDisputeExpanded(disp, disputeNumber) {
@@ -3866,9 +3866,9 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       }
       s2 += '</div>';
       // SECTION 3 — Line items placeholder, loadDisputeItems will fill #disp-items-<n>
-      const s3 = '<div class="disp-panel-section" id="disp-items-section-' + disputeNumber + '">'
+      const s3 = '<div class="disp-panel-section" id="disp-items-section-' + (disp.dispute_number || disputeNumber) + '">'
         + '<div class="disp-section-title">Dispute line items</div>'
-        + '<div id="disp-items-' + disputeNumber + '"><div class="disp-section-empty">Loading…</div></div>'
+        + '<div id="disp-items-' + (disp.dispute_number || disputeNumber) + '"><div class="disp-section-empty">Loading…</div></div>'
         + '</div>';
       // SECTION 4 — Timeline
       const events = [
@@ -3923,7 +3923,7 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         overlay.className = 'modal-overlay';
         document.body.appendChild(overlay);
       }
-      const disp = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.dispute_number) === String(sourceDispute)) || {};
+      const disp = (typeof allDisputes !== 'undefined' ? allDisputes : []).find(x => String(x.id) === String(sourceDispute) || String(x.dispute_number) === String(sourceDispute)) || {};
       overlay.style.display = 'flex';
       overlay.innerHTML = '<div class="modal-box modal-box-sm">'
         + '<div class="modal-header">'
