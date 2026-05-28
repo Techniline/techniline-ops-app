@@ -2690,6 +2690,13 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
               + '    <div class="rc-field"><div class="rc-label">Stage</div><div class="rc-val"><span class="stage-pill">' + stage + '</span>' + ageHtml + '</div></div>'
               + '  </div>'
               + '</div>'
+              + (function(){
+                  const fmap = { srt_number:'Enter SRT number', dispute_id:'Enter Dispute ID', dispute_id_ref:'Enter Dispute ID', prt_number:'Enter PRT number', vret_number:'Enter VRET number', tle_invoice_number:'Enter TLE invoice', po_number:'Enter PO number', model_sku:'Enter SKU', amazon_invoice:'Enter Amazon invoice', date_received:'Enter date received', stage:'Set stage', owner:'Assign owner' };
+                  const mf = Array.isArray(r.missing_fields) ? r.missing_fields : [];
+                  if (!mf.length) return '';
+                  const tags = mf.map(function(f){ const label = fmap[f] || ('Enter ' + String(f).replace(/_/g,' ')); return '<span class="rc-missing-tag">' + label + '</span>'; }).join('');
+                  return '<div class="rc-missing-tags">' + tags + '</div>';
+                })()
               + '<div class="rc-inputs">';
             if (needsSrt) {
               html += '<div class="rc-input-row amber">'
@@ -3543,6 +3550,8 @@ document.addEventListener('click', function(e) {
 .returns-completion-card .rc-input-row label { font-size:12px; color:#92400E; font-weight:600; min-width:200px; }
 .returns-completion-card .rc-input-row input { flex:1; padding:6px 10px; border:1px solid #FCD34D; border-radius:6px; font-size:13px; }
 .returns-completion-card .rc-input-row button { padding:6px 14px; background:#0F2744; color:#fff; border:none; border-radius:6px; font-weight:600; cursor:pointer; font-size:12px; }
+.returns-completion-card .rc-missing-tags { display:flex; flex-wrap:wrap; gap:6px; padding:8px 12px 0 12px; margin-bottom:6px; }
+.rc-missing-tag { display:inline-block; padding:3px 10px; background:#FFFBEB; color:#92400E; border:1px solid #FCD34D; border-radius:999px; font-size:11px; font-weight:600; line-height:1.4; font-family:'DM Sans', sans-serif; }
 .stage-pill { display:inline-block; padding:2px 10px; background:#EEF2F6; color:#475467; border-radius:999px; font-size:11px; font-weight:600; }
 .form-section { margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid #F1F5F9; }
 .form-section:last-child { border-bottom:none; }
