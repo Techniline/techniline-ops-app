@@ -506,6 +506,35 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
     .btn-mini { font-size:11px; padding:5px 10px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; cursor:pointer; font-family:inherit; font-weight:600; }
     .btn-mini.green { background:#16A34A; color:#fff; border-color:#16A34A; }
     .btn-mini.red { background:#DC2626; color:#fff; border-color:#DC2626; }
+    /* Global search bar */
+    .global-search-wrap { position:relative; }
+    .global-search-input { width:280px; padding:7px 56px 7px 32px; border:1px solid #1B3A5C; background:rgba(255,255,255,0.06); color:#fff; border-radius:8px; font-family:inherit; font-size:13px; outline:none; }
+    .global-search-input::placeholder { color:#94A3B8; }
+    .global-search-input:focus { background:rgba(255,255,255,0.12); border-color:#3B82F6; }
+    .global-search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:#94A3B8; pointer-events:none; }
+    .global-search-kbd { position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:10px; color:#94A3B8; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; pointer-events:none; font-family:inherit; letter-spacing:0.5px; }
+    .global-search-panel { position:absolute; top:calc(100% + 6px); right:0; width:420px; max-height:520px; overflow-y:auto; background:#fff; border:1px solid #E2E8F0; border-radius:10px; box-shadow:0 10px 30px rgba(15,39,68,0.18); z-index:9999; padding:8px 0; }
+    .gs-group-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:#64748B; padding:8px 14px 4px; }
+    .gs-empty { padding:18px 14px; color:#64748B; font-size:13px; text-align:center; }
+    .gs-loading { padding:14px; color:#64748B; font-size:12px; text-align:center; }
+    .gs-result { padding:8px 14px; cursor:pointer; border-top:1px solid #F1F5F9; display:flex; align-items:center; gap:10px; }
+    .gs-result:hover { background:#EFF6FF; }
+    .gs-result-main { flex:1; min-width:0; }
+    .gs-result-ref { font-family:'DM Mono', monospace; font-size:12px; font-weight:600; color:#0F2744; }
+    .gs-result-sub { font-size:11px; color:#64748B; margin-top:2px; }
+    .gs-result-amt { font-size:12px; color:#0F2744; font-weight:600; white-space:nowrap; }
+    .gs-pill { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:0.3px; }
+    .gs-pill.green { background:#DCFCE7; color:#166534; }
+    .gs-pill.red { background:#FEE2E2; color:#991B1B; }
+    .gs-pill.amber { background:#FEF3C7; color:#92400E; }
+    .gs-pill.navy { background:#E2E8F0; color:#0F2744; }
+    .search-highlight { outline:3px solid #3B82F6 !important; outline-offset:2px; transition:outline 0.3s; }
+    /* Return ID pills in disputes table */
+    .return-id-pill { display:inline-block; background:#E2E8F0; color:#0F2744; font-family:'DM Mono', monospace; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; margin:2px 3px 2px 0; cursor:pointer; }
+    .return-id-pill:hover { background:#0F2744; color:#fff; }
+    /* Returns table monospace + horizontal scroll already supported via .returns-table-wrap */
+    .returns-table .mono { font-family:'DM Mono', monospace; font-size:12px; }
+
     .linked-return-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; color:#64748B; margin-bottom:8px; }
     .linked-return-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px 18px; font-size:12px; }
     .linked-return-grid div strong { display:block; color:#0F2744; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; }
@@ -556,6 +585,12 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       </div>
     </div>
     <div class="topbar-right">
+      <div class="global-search-wrap">
+        <svg class="global-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="global-search" class="global-search-input" placeholder="Search disputes, returns, POs, invoices…" autocomplete="off" oninput="onGlobalSearchInput(event)" onkeydown="onGlobalSearchKey(event)" onfocus="if(this.value)showGlobalSearchResults()" />
+        <span class="global-search-kbd">Ctrl K</span>
+        <div class="global-search-panel" id="global-search-panel" style="display:none"></div>
+      </div>
       <div class="topbar-date" id="topbar-date"></div>
       <div class="topbar-user">
         <div class="user-avatar" id="user-avatar">MC</div>
@@ -2028,6 +2063,7 @@ function renderDisputes(rows) {
     + '<th onclick="sortDisputes(\'date_raised\')">Date raised' + sortInd('date_raised') + '</th>'
     + '<th onclick="sortDisputes(\'srt\')">SRT' + sortInd('srt') + '</th>'
     + '<th onclick="sortDisputes(\'prt\')">PRT' + sortInd('prt') + '</th>'
+    + '<th>Return IDs</th>'
     + '<th>Actions</th>'
     + '</tr></thead>';
 
@@ -2083,10 +2119,11 @@ function renderDisputes(rows) {
       + '<td class="mono">' + dateStr + '</td>'
       + '<td>' + srtCell + '</td>'
       + '<td>' + prtCell + '</td>'
+      + '<td>' + renderReturnIdsPills(d.return_ids) + '</td>'
       + '<td>' + actions + '</td>'
       + '</tr>';
 
-    const expand = '<tr id="exp-' + d.id + '" class="expand-row" style="display:none"><td colspan="12"><div class="disp-expand">'
+    const expand = '<tr id="exp-' + d.id + '" class="expand-row" style="display:none"><td colspan="13"><div class="disp-expand">'
       + '<div class="row">'
       + '<div><div class="label">Dispute type</div><div class="val">' + (d.dispute_type || '—') + '</div></div>'
       + '<div><div class="label">Maricel recommendation</div><div class="val">' + (d.maricel_recommendation || '—') + '</div></div>'
@@ -2709,19 +2746,21 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         return;
       }
       const head = '<table class="returns-table"><thead><tr>'
-        + '<th>Date</th><th>VRET</th><th>Return ID</th><th>Model/SKU</th><th>PO #</th><th>TLE Invoice</th>'
-        + '<th class="num">Qty</th><th class="num">Total AED</th><th class="num">Recovery AED</th>'
-        + '<th>Stage</th><th>SRT</th><th>PRT</th><th>Dispute ID</th><th>Status</th><th>Source</th><th>Age</th></tr></thead>';
+      const head = '<table class="returns-table"><thead><tr>'
+         + '<th>Date</th><th>Return ID</th><th>VRET</th><th>Model/SKU</th><th>PO #</th><th>TLE Invoice</th><th>Invoice Date</th>'
+         + '<th class="num">Qty</th><th class="num">Total AED</th><th class="num">Recovery AED</th>'
+         + '<th>Stage</th><th>SRT</th><th>PRT</th><th>Dispute ID</th><th>Status</th><th>Age</th></tr></thead>';
       const body = '<tbody>' + rows.map(r => {
         const ageHtml = ageBadgeHtml(r.date_received);
         const disputeCell = r.dispute_id_ref ? '<span class="dispute-link" onclick="goToDispute(\'' + r.dispute_id_ref + '\')">' + r.dispute_id_ref + '</span>' : '—';
-        return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '">'
+        return '<tr onclick="toggleReturnExpand(\'' + r.id + '\', this)" data-rid="' + r.id + '" id="ret-row-' + r.id + '">'
           + '<td>' + fmtRetDate(r.date_received) + '</td>'
+          + '<td class="mono">' + (r.return_id_ref || '—') + '</td>'
           + '<td>' + (r.vret_number || '—') + '</td>'
-          + '<td>' + (r.return_id_ref || '—') + '</td>'
           + '<td>' + (r.model_sku || '—') + '</td>'
           + '<td>' + (r.po_number || '—') + '</td>'
-          + '<td>' + (r.amazon_invoice || '—') + '</td>'
+          + '<td>' + (r.tle_invoice_number || r.amazon_invoice || '—') + '</td>'
+          + '<td>' + fmtRetDate(r.invoice_date) + '</td>'
           + '<td class="num">' + (r.qty != null ? r.qty : '—') + '</td>'
           + '<td class="num">' + (r.total_cost_aed != null ? Number(r.total_cost_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
           + '<td class="num">' + (r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) : '—') + '</td>'
@@ -2730,7 +2769,6 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
           + '<td>' + (r.prt_number || '—') + '</td>'
           + '<td>' + disputeCell + '</td>'
           + '<td>' + (r.status || '—') + '</td>'
-          + '<td>' + (r.source || 'historical') + '</td>'
           + '<td>' + ageHtml + '</td>'
           + '</tr>';
       }).join('') + '</tbody></table>';
@@ -3290,6 +3328,206 @@ function showToast(msg){
       }
     };
   }
+
+// ============== Global search + helpers ==============
+function renderReturnIdsPills(returnIdsField) {
+  if (!returnIdsField) return '<span style="color:var(--text-muted)">—</span>';
+  const ids = String(returnIdsField).split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+  if (!ids.length) return '<span style="color:var(--text-muted)">—</span>';
+  return ids.map(id => '<span class="return-id-pill" onclick="event.stopPropagation(); jumpToReturn(\'' + id.replace(/'/g, "\\'") + '\')">' + id + '</span>').join('');
+}
+
+function jumpToReturn(returnId) {
+  const btn = document.getElementById('tab-returns-btn') || Array.from(document.querySelectorAll('.tab-btn')).find(b => /returns/i.test(b.textContent));
+  if (btn) btn.click();
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#returns-table-host tr[data-rid]');
+    let target = null;
+    rows.forEach(r => {
+      const txt = r.textContent || '';
+      if (txt.indexOf(returnId) >= 0) target = r;
+    });
+    if (target) flashHighlight(target);
+  }, 350);
+}
+
+function flashHighlight(el) {
+  if (!el) return;
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.classList.add('search-highlight');
+  setTimeout(() => el.classList.remove('search-highlight'), 2200);
+}
+
+let __gsTimer = null;
+function onGlobalSearchInput(e) {
+  const q = (e.target.value || '').trim();
+  if (__gsTimer) clearTimeout(__gsTimer);
+  if (!q) { closeGlobalSearchPanel(); return; }
+  __gsTimer = setTimeout(() => runGlobalSearch(q), 400);
+}
+
+function onGlobalSearchKey(e) {
+  if (e.key === 'Enter') {
+    const q = (e.target.value || '').trim();
+    if (q) runGlobalSearch(q);
+  } else if (e.key === 'Escape') {
+    closeGlobalSearchPanel();
+    e.target.blur();
+  }
+}
+
+function showGlobalSearchResults() {
+  const p = document.getElementById('global-search-panel');
+  if (p) p.style.display = 'block';
+}
+
+function closeGlobalSearchPanel() {
+  const p = document.getElementById('global-search-panel');
+  if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+}
+
+async function runGlobalSearch(q) {
+  const panel = document.getElementById('global-search-panel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="gs-loading">Searching…</div>';
+  const Q = q.trim();
+  const upper = Q.toUpperCase();
+  const isDspt = upper.startsWith('DSPT');
+  const isWs = upper.startsWith('WS');
+  const isPo8 = /^[A-Z0-9]{8}$/.test(upper);
+  const isReturnId = /^\d{10,}$/.test(Q);
+  const isAmazonInv = Q.startsWith('7500');
+  const queries = [];
+  try {
+    if (isDspt) {
+      queries.push(sb.from('disputes').select('*').ilike('dispute_number', '%' + Q + '%').limit(5));
+    } else if (isWs) {
+      queries.push(sb.from('disputes').select('*').ilike('tle_invoice_number', '%' + Q + '%').limit(5));
+      queries.push(sb.from('returns').select('*').ilike('tle_invoice_number', '%' + Q + '%').limit(5));
+    } else if (isPo8) {
+      queries.push(sb.from('disputes').select('*').eq('po_number', upper).limit(5));
+      queries.push(sb.from('returns').select('*').eq('po_number', upper).limit(5));
+      queries.push(sb.from('expected_actions').select('*').eq('ref_number', upper).limit(5));
+    } else if (isReturnId) {
+      queries.push(sb.from('returns').select('*').eq('return_id_ref', Q).limit(5));
+      queries.push(sb.from('dispute_items').select('*').eq('return_id', Q).limit(5));
+    } else if (isAmazonInv) {
+      queries.push(sb.from('returns').select('*').ilike('amazon_invoice', '%' + Q + '%').limit(5));
+    } else {
+      queries.push(sb.from('disputes').select('*').or('dispute_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,raise_reason.ilike.%' + Q + '%').limit(5));
+      queries.push(sb.from('returns').select('*').or('return_id_ref.ilike.%' + Q + '%,vret_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,model_sku.ilike.%' + Q + '%').limit(5));
+      queries.push(sb.from('expected_actions').select('*').or('ref_number.ilike.%' + Q + '%,description.ilike.%' + Q + '%').limit(5));
+    }
+    const results = await Promise.all(queries.map(p => p.then(r => r).catch(e => ({data: [], error: e}))));
+    renderGlobalSearchResults(results, {isDspt, isWs, isPo8, isReturnId, isAmazonInv});
+  } catch(e) {
+    panel.innerHTML = '<div class="gs-empty">Search failed</div>';
+  }
+}
+
+function renderGlobalSearchResults(results, hints) {
+  const panel = document.getElementById('global-search-panel');
+  if (!panel) return;
+  // Bucket results into disputes / returns / dispute_items / expected_actions
+  const disputes = [], returns = [], dispItems = [], expActs = [];
+  results.forEach(r => {
+    const d = (r && r.data) ? r.data : [];
+    d.forEach(row => {
+      if (row.dispute_number && row.dispute_status !== undefined) disputes.push(row);
+      else if (row.return_id_ref !== undefined || row.vret_number !== undefined) returns.push(row);
+      else if (row.line_status !== undefined || (row.return_id && row.dispute_number)) dispItems.push(row);
+      else if (row.ref_number !== undefined || row.action_type !== undefined) expActs.push(row);
+    });
+  });
+  let html = '';
+  if (disputes.length) {
+    html += '<div class="gs-group-title">Disputes</div>';
+    disputes.slice(0,5).forEach(d => {
+      const st = (d.dispute_status || '').toLowerCase();
+      const cls = st.includes('approved') || st === 'resolved' ? 'green' : (st.includes('rejected') ? 'red' : (st.includes('partial') ? 'amber' : 'navy'));
+      const amt = d.invoice_amount_aed != null ? Number(d.invoice_amount_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) + ' AED' : '';
+      html += '<div class="gs-result" onclick="goToSearchResult(\'dispute\', \'' + (d.dispute_number||'').replace(/\'/g,"\\'") + '\')">'
+        + '<div class="gs-result-main"><div class="gs-result-ref">' + (d.dispute_number || '—') + '</div>'
+        + '<div class="gs-result-sub">' + (d.tle_invoice_number || '') + (d.po_number ? ' · ' + d.po_number : '') + '</div></div>'
+        + '<span class="gs-pill ' + cls + '">' + (d.dispute_status || 'open') + '</span>'
+        + (amt ? '<span class="gs-result-amt">' + amt + '</span>' : '') + '</div>';
+    });
+  }
+  if (returns.length) {
+    html += '<div class="gs-group-title">Returns</div>';
+    returns.slice(0,5).forEach(r => {
+      const st = (r.status || '').toLowerCase();
+      const cls = st === 'closed' ? 'green' : (r.is_complete ? 'navy' : 'amber');
+      const amt = r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) + ' AED' : '';
+      html += '<div class="gs-result" onclick="goToSearchResult(\'return\', \'' + r.id + '\', \'' + (r.return_id_ref||'').replace(/\'/g,"\\'") + '\')">'
+        + '<div class="gs-result-main"><div class="gs-result-ref">' + (r.return_id_ref || r.vret_number || '—') + '</div>'
+        + '<div class="gs-result-sub">' + (r.po_number ? r.po_number + ' · ' : '') + (r.model_sku || '') + '</div></div>'
+        + '<span class="gs-pill ' + cls + '">' + (r.status || (r.is_complete?'complete':'open')) + '</span>'
+        + (amt ? '<span class="gs-result-amt">' + amt + '</span>' : '') + '</div>';
+    });
+  }
+  if (dispItems.length) {
+    html += '<div class="gs-group-title">Dispute line items</div>';
+    dispItems.slice(0,5).forEach(it => {
+      const st = (it.line_status || 'pending').toLowerCase();
+      const cls = st === 'approved' ? 'green' : (st === 'rejected' ? 'red' : 'amber');
+      html += '<div class="gs-result" onclick="goToSearchResult(\'dispute\', \'' + (it.dispute_number||'').replace(/\'/g,"\\'") + '\')">'
+        + '<div class="gs-result-main"><div class="gs-result-ref">' + (it.return_id || '—') + '</div>'
+        + '<div class="gs-result-sub">' + (it.dispute_number || '') + '</div></div>'
+        + '<span class="gs-pill ' + cls + '">' + st + '</span></div>';
+    });
+  }
+  if (expActs.length) {
+    html += '<div class="gs-group-title">Notifications / Actions</div>';
+    expActs.slice(0,5).forEach(a => {
+      html += '<div class="gs-result" onclick="goToSearchResult(\'notif\', \'' + (a.id||'') + '\')">'
+        + '<div class="gs-result-main"><div class="gs-result-ref">' + (a.ref_number || a.action_type || '—') + '</div>'
+        + '<div class="gs-result-sub">' + (a.description || a.action_type || '') + '</div></div></div>';
+    });
+  }
+  if (!html) html = '<div class="gs-empty">No matches</div>';
+  panel.innerHTML = html;
+}
+
+function goToSearchResult(kind, refOrId, returnIdRef) {
+  closeGlobalSearchPanel();
+  const sel = (txt) => Array.from(document.querySelectorAll('.tab-btn')).find(b => new RegExp(txt, 'i').test(b.textContent));
+  if (kind === 'dispute') {
+    const b = sel('disputes'); if (b) b.click();
+    setTimeout(() => {
+      const rows = document.querySelectorAll('#disp-list tr[data-id], #disp-list tr');
+      let target = null;
+      rows.forEach(r => { if ((r.textContent||'').indexOf(refOrId) >= 0 && !target) target = r; });
+      if (target) flashHighlight(target);
+    }, 350);
+  } else if (kind === 'return') {
+    const b = sel('returns'); if (b) b.click();
+    setTimeout(() => {
+      const row = document.getElementById('ret-row-' + refOrId);
+      if (row) flashHighlight(row);
+      else if (returnIdRef) jumpToReturn(returnIdRef);
+    }, 350);
+  } else if (kind === 'notif') {
+    const b = sel('notifications'); if (b) b.click();
+  }
+}
+
+// Ctrl+K / Cmd+K shortcut
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    const input = document.getElementById('global-search');
+    if (input) { input.focus(); input.select(); }
+  }
+});
+
+// Click-outside to close
+document.addEventListener('click', function(e) {
+  const wrap = document.querySelector('.global-search-wrap');
+  if (wrap && !wrap.contains(e.target)) closeGlobalSearchPanel();
+});
+
 })();
 </script>
 
