@@ -757,9 +757,9 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
       <div class="tab-pane" id="pane-returns">
         <div class="summary-bar">
           <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
-          <div class="sum-card"><div class="sum-card-val" id="ret-cost">—</div><div class="sum-card-label">Total cost AED</div></div>
-          <div class="sum-card"><div class="sum-card-val success" id="ret-recovered">—</div><div class="sum-card-label">Total recovered AED</div></div>
-          <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs attention</div></div>
+          <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs action</div></div>
+          <div class="sum-card"><div class="sum-card-val" style="color:#B45309;" id="ret-pending">—</div><div class="sum-card-label">Waiting on Amazon</div></div>
+          <div class="sum-card"><div class="sum-card-val success" id="ret-closed">—</div><div class="sum-card-label">Closed</div></div>
         </div>
         <div id="returns-completion-area"></div>
         <div class="returns-tab-header" style="display:flex; justify-content:flex-end; margin-top:8px;"><button type="button" class="primary-btn add-return-btn" onclick="openAddReturnModal()" style="padding:10px 18px; background:#0F2744; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer;">+ Add return</button></div>
@@ -2790,39 +2790,114 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
         console.warn('loadReturns failed:', e);
       }
     }
+    function calculateReturnCompletion(ret) {
+      const hasSRT = !!ret.srt_number;
+      const hasPRT = !!ret.prt_number;
+      const hasDispute = !!ret.dispute_id_ref;
+      const reason = (ret.dispute_reason || ret.comments || '').toLowerCase();
+      const stage = (ret.stage || '').toLowerCase();
+      const isMissingItem = reason.includes('not received') || reason.includes('missing') ||
+                            reason.includes('not physically') || stage.includes('srt required');
+      const isDamaged = reason.includes('damage') || reason.includes('wrong item') ||
+                        reason.includes('defective') || reason.includes('packaging');
+      const isOverstock = reason.includes('overstock') || reason.includes('agreed') ||
+                          reason.includes('planned');
+      const isSellable = stage.includes('sellable') || reason.includes('sellable');
+      let isComplete = false;
+      let missingFields = [];
+      let closeStatus = 'open';
+      if (isMissingItem) {
+        if (hasSRT) {
+          isComplete = true;
+          closeStatus = hasDispute ? 'pending_dispute' : 'closed';
+        } else {
+          missingFields.push('srt_number');
+        }
+      } else if (isDamaged) {
+        if (hasSRT && hasPRT) {
+          isComplete = true;
+          closeStatus = hasDispute ? 'pending_dispute' : 'closed';
+        } else {
+          if (!hasSRT) missingFields.push('srt_number');
+          if (!hasPRT) missingFields.push('prt_number');
+        }
+      } else if (isOverstock || isSellable) {
+        if (hasSRT) {
+          isComplete = true;
+          closeStatus = 'closed';
+        } else {
+          missingFields.push('srt_number');
+        }
+      } else {
+        if (hasSRT) {
+          isComplete = true;
+          closeStatus = hasDispute ? 'pending_dispute' : 'closed';
+        } else {
+          missingFields.push('srt_number');
+          if (hasDispute) missingFields.push('prt_number');
+        }
+      }
+      return { isComplete: isComplete, missingFields: missingFields, closeStatus: closeStatus };
+    }
     function renderReturns() {
       // Summary
+      // Recompute status for each return using calculateReturnCompletion (defensive — DB should already have correct status)
+      _allReturns.forEach(function(r) {
+        try {
+          const calc = calculateReturnCompletion(r);
+          if (!r.status || (r.status !== 'pending_dispute' && r.status !== 'closed' && r.status !== 'open')) {
+            r.status = calc.closeStatus;
+          }
+          if (typeof r.is_complete !== 'boolean') r.is_complete = calc.isComplete;
+        } catch(e) {}
+      });
       const total = _allReturns.length;
       const totCost = _allReturns.reduce((s,r) => s + (parseFloat(r.total_cost_aed) || 0), 0);
       const totRec  = _allReturns.reduce((s,r) => s + (parseFloat(r.recovery_amt_aed) || 0), 0);
-      const incomplete = _allReturns.filter(r => !r.is_complete).slice().sort((a,b) => String(a.date_received||'').localeCompare(String(b.date_received||'')));
+      const needsList = _allReturns.filter(function(r){ return !r.is_complete; }).slice().sort(function(a,b){ return String(a.date_received||'').localeCompare(String(b.date_received||'')); });
+      const pendingList = _allReturns.filter(function(r){ return r.is_complete && r.status === 'pending_dispute'; }).slice().sort(function(a,b){ return String(b.date_received||'').localeCompare(String(a.date_received||'')); });
+      const closedList = _allReturns.filter(function(r){ return r.is_complete && r.status === 'closed'; }).slice().sort(function(a,b){ return String(b.date_received||'').localeCompare(String(a.date_received||'')); });
+      const incomplete = needsList; // kept for back-compat with downstream code
       const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
       setText('ret-total', total);
-      setText('ret-cost', totCost.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}));
-      setText('ret-recovered', totRec.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}));
-      setText('ret-needs', incomplete.length);
-      const badge = document.getElementById('returns-count');
+      setText('ret-needs', needsList.length);
+      setText('ret-pending', pendingList.length);
+      setText('ret-closed', closedList.length);
+      const badge = document.getElementById('returns-count-badge');
       if (badge) {
-        badge.textContent = incomplete.length;
-        badge.style.display = incomplete.length > 0 ? 'inline-flex' : 'none';
+        badge.textContent = needsList.length;
+        badge.style.display = needsList.length > 0 ? 'inline-flex' : 'none';
       }
-      // Completion queue (PART B)
+      // Completion queue (PART B) — three sections
       const compArea = document.getElementById('returns-completion-area');
       if (compArea) {
-        if (incomplete.length === 0) {
-          compArea.innerHTML = '';
-        } else {
-          let html = '<div class="returns-completion-bar">' + incomplete.length + ' returns need your attention</div>';
-          incomplete.forEach(r => {
-            const fmt = (s) => s ? String(s) : '<span style="color:#94A3B8;">—</span>';
+        const fmt = (s) => s ? String(s) : '<span style="color:#94A3B8;">—</span>';
+        function escapeId(v) { return (v+'').replace(/'/g, "\\'"); }
+        function disputeStatusBadge(disputeRef) {
+          try {
+            if (!disputeRef || !Array.isArray(window._allDisputes)) return '';
+            const dsp = window._allDisputes.find(function(d){ return d.dispute_number === disputeRef; });
+            if (!dsp) return '';
+            const st = (dsp.dispute_status || dsp.dispute_status_text || '').toString();
+            if (!st) return '';
+            return '<span class="rc-disp-status">Dispute: ' + st + '</span>';
+          } catch(e) { return ''; }
+        }
+        let html = '';
+
+        // --- Section 1: Needs action (amber) ---
+        if (needsList.length > 0) {
+          html += '<div class="returns-completion-bar" style="background:#FEF3C7;color:#92400E;border-left:4px solid #F59E0B;">Needs your action — ' + needsList.length + ' returns missing SRT or PRT</div>';
+          needsList.forEach(function(r){
             const ageHtml = (typeof ageBadgeHtml === 'function') ? ageBadgeHtml(r.date_received) : '';
-            const stage = r.stage || 'New';
-            const isTypeB = r.return_type === 'type_b';
-            const needsSrt = !r.srt_number;
-            const needsDispute = !r.dispute_id_ref;
-            const needsPrt = isTypeB && !r.prt_number;
+            const stage = r.stage || '—';
+            const calc = calculateReturnCompletion(r);
+            const mf = calc.missingFields;
+            const needsSrt = mf.indexOf('srt_number') !== -1;
+            const needsPrt = mf.indexOf('prt_number') !== -1;
+            const needsDispute = !r.dispute_id_ref && (calc.missingFields.indexOf('dispute_id_ref') !== -1);
             html += '<div class="returns-completion-card" data-return-id="' + r.id + '">'
-              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')" title="Copy">⎘</button>' : '') + (window.__hasDispItemMatch && window.__hasDispItemMatch(r.return_id_ref) ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + (r.return_id_ref+'').replace(/'/g, "\\'") + '\')">Linked to dispute</span>' : '') + '</div>'
+              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id_ref) + '\')" title="Copy">⎘</button>' : '') + (window.__hasDispItemMatch && window.__hasDispItemMatch(r.return_id_ref) ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + escapeId(r.return_id_ref) + '\')">Linked to dispute</span>' : '') + '</div>'
               + '<div class="rc-top">'
               + '  <div class="rc-fields">'
               + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
@@ -2834,13 +2909,11 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
               + '  </div>'
               + '</div>'
               + (function(){
-                  const fmap = { srt_number:'Enter SRT number', dispute_id:'Enter Dispute ID', dispute_id_ref:'Enter Dispute ID', prt_number:'Enter PRT number', vret_number:'Enter VRET number', tle_invoice_number:'Enter TLE invoice', po_number:'Enter PO number', model_sku:'Enter SKU', amazon_invoice:'Enter Amazon invoice', date_received:'Enter date received', stage:'Set stage', owner:'Assign owner' };
-                  const mf = Array.isArray(r.missing_fields) ? r.missing_fields : [];
+                  const fmap = { srt_number:'Missing SRT', prt_number:'Missing PRT', dispute_id_ref:'Missing Dispute ID' };
                   if (!mf.length) return '';
-                  const tags = mf.map(function(f){ const label = fmap[f] || ('Enter ' + String(f).replace(/_/g,' ')); return '<span class="rc-missing-tag">' + label + '</span>'; }).join('');
+                  const tags = mf.map(function(f){ const lab = fmap[f] || f; return '<span class="rc-missing-tag">' + lab + '</span>'; }).join('');
                   return '<div class="rc-missing-tags">' + tags + '</div>';
-                })()
-              + '<div class="rc-inputs">';
+                })();
             if (needsSrt) {
               html += '<div class="rc-input-row amber">'
                 + '<label>Missing SRT number</label>'
@@ -2857,15 +2930,61 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
             }
             if (needsPrt) {
               html += '<div class="rc-input-row amber">'
-                + '<label>Missing PRT number (Type B)</label>'
+                + '<label>Missing PRT number</label>'
                 + '<input type="text" id="prt-' + r.id + '" placeholder="Enter PRT number">'
                 + '<button onclick="saveReturnField(\'' + r.id + '\', \'prt_number\', \'prt-' + r.id + '\')">Save</button>'
                 + '</div>';
             }
-            html += '</div></div>';
+            html += '</div>';
           });
-          compArea.innerHTML = html;
         }
+
+        // --- Section 2: Waiting on Amazon (blue) ---
+        if (pendingList.length > 0) {
+          html += '<div class="returns-completion-bar" style="background:#DBEAFE;color:#1E3A8A;border-left:4px solid #3B82F6;margin-top:18px;">Waiting on Amazon — ' + pendingList.length + ' returns complete, dispute pending</div>';
+          pendingList.forEach(function(r){
+            const stage = r.stage || '—';
+            html += '<div class="returns-completion-card pending" data-return-id="' + r.id + '" style="border-left:4px solid #3B82F6;background:#F8FAFC;">'
+              + '<div class="rc-id-bar"><span class="rc-id-label">Return ID</span><span class="rc-id-val">' + (r.return_id_ref || r.id || '—') + '</span>' + (r.return_id_ref ? '<button class="rc-copy-btn" onclick="copyReturnId(event, \'' + escapeId(r.return_id_ref) + '\')" title="Copy">⎘</button>' : '') + '<span class="stage-pill" style="background:#DBEAFE;color:#1E3A8A;margin-left:auto;">Waiting on Amazon</span></div>'
+              + '<div class="rc-top">'
+              + '  <div class="rc-fields">'
+              + '    <div class="rc-field"><div class="rc-label">Date</div><div class="rc-val">' + fmt(fmtRetDate(r.date_received)) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">VRET</div><div class="rc-val mono">' + fmt(r.vret_number) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">SKU</div><div class="rc-val mono">' + fmt(r.model_sku) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">PO</div><div class="rc-val mono">' + fmt(r.po_number) + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">Dispute</div><div class="rc-val mono">' + (r.dispute_id_ref ? '<span class="rc-disp-link" onclick="jumpToDispItemDispute(\'' + escapeId(r.dispute_id_ref) + '\')">' + r.dispute_id_ref + '</span>' : '—') + '</div></div>'
+              + '    <div class="rc-field"><div class="rc-label">Stage</div><div class="rc-val"><span class="stage-pill">' + stage + '</span> ' + disputeStatusBadge(r.dispute_id_ref) + '</div></div>'
+              + '  </div>'
+              + '</div>'
+              + '</div>';
+          });
+        }
+
+        // --- Section 3: Closed (collapsed accordion) ---
+        if (closedList.length > 0) {
+          html += '<details style="margin-top:18px;background:#F0FDF4;border-left:4px solid #16A34A;border-radius:8px;padding:0;">'
+            + '<summary style="padding:12px 16px;font-weight:600;color:#15803D;cursor:pointer;font-family:DM Sans,system-ui,sans-serif;">Closed returns — ' + closedList.length + ' complete (click to expand)</summary>'
+            + '<div style="padding:8px 16px 16px;max-height:480px;overflow-y:auto;">';
+          closedList.slice(0, 200).forEach(function(r){
+            html += '<div style="display:flex;gap:12px;align-items:center;padding:8px 10px;border-bottom:1px solid #DCFCE7;font-family:DM Mono,monospace;font-size:12px;color:#374151;">'
+              + '<span style="font-weight:600;color:#0F2744;min-width:160px;">' + (r.return_id_ref || r.id || '—') + '</span>'
+              + '<span style="min-width:120px;">' + (r.vret_number || '—') + '</span>'
+              + '<span style="min-width:90px;">' + (r.po_number || '—') + '</span>'
+              + '<span style="min-width:140px;">' + (r.tle_invoice_number || '—') + '</span>'
+              + '<span style="color:#94A3B8;">' + (r.date_received || '—') + '</span>'
+              + '<span style="margin-left:auto;color:#15803D;font-weight:600;">' + (r.stage || 'Resolved') + '</span>'
+              + '</div>';
+          });
+          if (closedList.length > 200) html += '<div style="padding:8px;color:#94A3B8;font-size:12px;">Showing first 200 of ' + closedList.length + ' closed returns</div>';
+          html += '</div></details>';
+        }
+
+        if (needsList.length === 0 && pendingList.length === 0) {
+          // All clear case
+          html = '<div class="returns-completion-bar" style="background:#DCFCE7;color:#15803D;border-left:4px solid #16A34A;">All returns complete ✓</div>' + html;
+        }
+
+        compArea.innerHTML = html;
       }
 
       // Full table (PART C)// Full table (PART C)
