@@ -4975,129 +4975,339 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
 </script>
 <script>
 (function(){
-if(window.__reconInstalled)return; window.__reconInstalled=true;
-function aed(n){n=Number(n)||0;return n.toLocaleString("en-AE",{minimumFractionDigits:2,maximumFractionDigits:2});}
-function daysSince(d){if(!d)return null;var t=new Date(d).getTime();if(isNaN(t))return null;return Math.floor((Date.now()-t)/86400000);}
-var RECON={inv:[],rem:[],disp:[],invFilter:"all",loaded:false};
-async function loadReconciliation(){
-  try{
-    var inv=await sb.from("invoices").select("invoice_number,invoice_date,amount_aed,po_number,payment_number,payment_status").order("invoice_date",{ascending:false});
-    var rem=await sb.from("remittances").select("remittance_ref,payment_date,gross_amount_aed,net_paid_aed,invoice_refs").order("payment_date",{ascending:false});
-    var disp=await sb.from("disputes").select("dispute_number,tle_invoice_number,invoice_amount_aed,dispute_status,gap_aed,payment_number,credit_amount_aed,credit_closed,po_number");
-    RECON.inv=(inv&&inv.data)||[];RECON.rem=(rem&&rem.data)||[];RECON.disp=(disp&&disp.data)||[];RECON.loaded=true;
-    renderReconSummary();renderReconFilters();renderReconInvoices();renderReconPayments();
-  }catch(e){console.error("loadReconciliation",e);}
-}
-window.loadReconciliation=loadReconciliation;
-function renderReconSummary(){
-  var totalInv=RECON.inv.reduce(function(s,r){return s+(Number(r.amount_aed)||0);},0);
-  var withPO=RECON.inv.filter(function(r){return r.po_number!=null&&r.po_number!=="";}).length;
-  var creditRec=RECON.disp.filter(function(d){return d.credit_closed===true;}).reduce(function(s,d){return s+(Number(d.credit_amount_aed)||0);},0);
-  var outstanding=RECON.disp.filter(function(d){return ["resolved","amazon_rejected"].indexOf(d.dispute_status)===-1;}).reduce(function(s,d){return s+(Number(d.gap_aed)||0);},0);
-  var el=document.getElementById("recon-summary");if(!el)return;
-  el.innerHTML=   "<div class=\"recon-stat teal\"><div class=\"rs-label\">Total invoiced AED</div><div class=\"rs-value\">"+aed(totalInv)+"</div></div>"  +"<div class=\"recon-stat navy\"><div class=\"rs-label\">Invoices with PO</div><div class=\"rs-value\">"+withPO+"</div></div>"  +"<div class=\"recon-stat green\"><div class=\"rs-label\">Dispute credits recovered</div><div class=\"rs-value\">"+aed(creditRec)+"</div></div>"  +"<div class=\"recon-stat amber\"><div class=\"rs-label\">Outstanding disputes</div><div class=\"rs-value\">"+aed(outstanding)+"</div></div>";
-}
-function renderReconFilters(){
-  var el=document.getElementById("recon-inv-filters");if(!el)return;
-  var chips=[["all","All"],["paid","Paid"],["unpaid","Unpaid"],["haspo","Has PO"],["nopo","No PO"]];
-  el.innerHTML=chips.map(function(c){return "<button class=\"recon-chip"+(RECON.invFilter===c[0]?" active":"")+"\" onclick=\"setReconFilter('"+c[0]+"')\">"+c[1]+"</button>";}).join("");
-}
-window.setReconFilter=function(f){RECON.invFilter=f;renderReconFilters();renderReconInvoices();};
-function filteredInvoices(){
-  return RECON.inv.filter(function(r){
-    var hasPO=r.po_number!=null&&r.po_number!=="";
-    var paid=r.payment_status==="paid";
-    switch(RECON.invFilter){case "paid":return paid;case "unpaid":return !paid;case "haspo":return hasPO;case "nopo":return !hasPO;default:return true;}
-  });
-}
-function renderReconInvoices(){
-  var host=document.getElementById("recon-inv-table");if(!host)return;
-  var rows=filteredInvoices();
-  if(!rows.length){host.innerHTML="<div class=\"recon-empty\">No invoices match this filter.</div>";return;}
-  var h="<table class=\"recon-tbl\"><thead><tr><th>Invoice #</th><th>Date</th><th>Amount AED</th><th>PO Number</th><th>Payment Ref</th><th>Status</th><th>Age</th></tr></thead><tbody>";
-  rows.forEach(function(r){
-    var paid=r.payment_status==="paid";
-    var hasPO=r.po_number!=null&&r.po_number!=="";
-    var age="";var ageCls="recon-age";
-    if(!paid){var d=daysSince(r.invoice_date);if(d!=null){age=d+"d";if(d>60)ageCls+=" overdue";}}
-    var poCell=hasPO?("<span>"+escapeHtmlR(r.po_number)+"</span>"):("<span class=\"recon-po-add\">+ Add PO</span>");
-    var payCell=(r.payment_number!=null&&r.payment_number!=="")?escapeHtmlR(r.payment_number):"<span class=\"recon-muted\">Awaiting payment</span>";
-    h+="<tr data-inv=\""+escapeHtmlR(r.invoice_number)+"\">"
-      +"<td class=\"recon-inv-num\">"+escapeHtmlR(r.invoice_number)+"</td>"
-      +"<td>"+(r.invoice_date||"")+"</td>"
-      +"<td>"+aed(r.amount_aed)+"</td>"
-      +"<td class=\"recon-po-cell\" data-col=\"po_number\" data-id=\""+escapeHtmlR(r.invoice_number)+"\">"+poCell+"</td>"
-      +"<td>"+payCell+"</td>"
-      +"<td><span class=\"recon-pill "+(paid?"paid":"unpaid")+"\">"+(paid?"Paid":"Unpaid")+"</span></td>"
-      +"<td class=\""+ageCls+"\">"+age+"</td></tr>";
-  });
-  h+="</tbody></table>";host.innerHTML=h;
-  wireReconPOEdit(host);
-}
-function wireReconPOEdit(host){
-  host.querySelectorAll(".recon-po-cell").forEach(function(cell){
-    cell.style.cursor="pointer";
-    cell.addEventListener("click",function(){
-      var id=cell.getAttribute("data-id");
-      if(typeof window.makeEditable==="function"){window.makeEditable(cell,"invoices","invoice_number",id,"po_number","text",null);}
-      else{simplePOEdit(cell,id);}
+  if (window.__reconInstalled) return;
+  window.__reconInstalled = true;
+  var RS = window.__reconState = { invoices: [], remittances: [], disputes: [], returns: [], remLines: [], filter: 'all', loaded: false };
+
+  function aed(n){ n = Number(n)||0; return n.toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function escapeHtmlR(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  window.escapeHtmlR = escapeHtmlR;
+  function daysSince(d){ if(!d) return null; var t=new Date(d).getTime(); if(isNaN(t)) return null; return Math.floor((Date.now()-t)/86400000); }
+
+  async function loadReconciliation(){
+    if (!window.sb){ return; }
+    try {
+      var inv = await sb.from('invoices').select('invoice_number,po_number,invoice_date,amount_aed,payment_number,payment_date,payment_status,deduction_status').order('invoice_date',{ascending:false});
+      RS.invoices = (inv && inv.data) ? inv.data : [];
+      var rem = await sb.from('remittances').select('remittance_ref,payment_date,gross_amount_aed,deductions_aed,net_paid_aed,invoice_refs,match_status,gap_aed').order('payment_date',{ascending:false});
+      RS.remittances = (rem && rem.data) ? rem.data : [];
+      var dsp = await sb.from('disputes').select('dispute_number,tle_invoice_number,invoice_amount_aed,dispute_status,gap_aed,payment_number,credit_amount_aed,credit_closed,po_number,srt_number,return_ids');
+      RS.disputes = (dsp && dsp.data) ? dsp.data : [];
+      var ret = await sb.from('returns').select('return_type,return_id,srt_number,prt_number,vret_number,tle_invoice_number,po_number,refund_aed,total_cost_aed,recovery_amt_aed,status,payment_number');
+      RS.returns = (ret && ret.data) ? ret.data : [];
+      var rl = await sb.from('remittance_lines').select('remittance_ref,invoice_number,invoice_date,description,transaction_type,invoice_amount_aed,amount_paid_aed,amount_remaining_aed,dspt_number,is_credit,matched_dispute,matched_return_id,matched_invoice');
+      RS.remLines = (rl && rl.data) ? rl.data : [];
+    } catch(e){ /* tolerate */ }
+    RS.loaded = true;
+    renderReconSummary();
+    renderReconFilters();
+    renderReconInvoices();
+    renderReconPayments();
+  }
+  window.loadReconciliation = loadReconciliation;
+
+  function renderReconSummary(){
+    var el = document.getElementById('recon-summary'); if(!el) return;
+    var invs = RS.invoices, disp = RS.disputes, rl = RS.remLines;
+    var totalInvoiced = invs.reduce(function(s,i){ return s + (Number(i.amount_aed)||0); }, 0);
+    var totalRemitted = invs.filter(function(i){ return i.payment_status==='remitted'; }).reduce(function(s,i){ return s + (Number(i.amount_aed)||0); }, 0);
+    var awaiting = invs.filter(function(i){ return i.payment_status==='awaiting_remittance'; }).reduce(function(s,i){ return s + (Number(i.amount_aed)||0); }, 0);
+    var netDeductions = rl.reduce(function(s,l){ var v=Number(l.amount_paid_aed)||0; return s + (v<0 ? v : 0); }, 0);
+    var creditsRecovered = disp.filter(function(d){ return d.credit_closed===true; }).reduce(function(s,d){ return s + (Number(d.credit_amount_aed)||0); }, 0);
+    var cards = [
+      { label:'Total invoiced', val: totalInvoiced, cls:'recon-navy', sub:'Gross Amazon owes you' },
+      { label:'Total remitted', val: totalRemitted, cls:'recon-teal', sub:'Appeared in payments' },
+      { label:'Awaiting remittance', val: awaiting, cls:'recon-amber', sub:'Not yet in any payment' },
+      { label:'Net deductions', val: netDeductions, cls:'recon-red', sub:'Taken back by Amazon' },
+      { label:'Dispute credits recovered', val: creditsRecovered, cls:'recon-green', sub:'Closed credits' }
+    ];
+    el.innerHTML = cards.map(function(c){
+      return '<div class="recon-stat '+c.cls+'">'+
+        '<div class="recon-stat-label">'+escapeHtmlR(c.label)+'</div>'+
+        '<div class="recon-stat-val">AED '+aed(c.val)+'</div>'+
+        '<div class="recon-stat-sub">'+escapeHtmlR(c.sub)+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  window.renderReconSummary = renderReconSummary;
+
+  function renderReconFilters(){
+    var el = document.getElementById('recon-inv-filters'); if(!el) return;
+    var chips = [['all','All'],['remitted','Remitted'],['awaiting','Awaiting'],['haspo','Has PO'],['nopo','No PO']];
+    el.innerHTML = chips.map(function(c){
+      var active = RS.filter===c[0] ? ' active' : '';
+      return '<button type="button" class="recon-chip'+active+'" data-f="'+c[0]+'">'+escapeHtmlR(c[1])+'</button>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.recon-chip'), function(b){
+      b.addEventListener('click', function(){ setReconFilter(b.getAttribute('data-f')); });
     });
-  });
-}
-function simplePOEdit(cell,id){
-  if(cell.querySelector("input"))return;
-  var cur=(cell.textContent||"").replace("+ Add PO","").trim();
-  cell.innerHTML="<input type=\"text\" value=\""+escapeHtmlR(cur)+"\" style=\"color:#1a1a1a;width:120px;\"> <button>Save</button>";
-  var inp=cell.querySelector("input"),btn=cell.querySelector("button");inp.focus();
-  btn.onclick=async function(){var v=inp.value.trim();try{await sb.from("invoices").update({po_number:v||null}).eq("invoice_number",id);}catch(e){console.error(e);}var rec=RECON.inv.find(function(x){return x.invoice_number===id;});if(rec)rec.po_number=v||null;renderReconInvoices();renderReconSummary();};
-}
-function escapeHtmlR(s){if(s==null)return "";return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
-function renderReconPayments(){
-  var host=document.getElementById("recon-pay-list");if(!host)return;
-  if(!RECON.rem.length){host.innerHTML="<div class=\"recon-empty\">No remittances found.</div>";return;}
-  var h="";
-  RECON.rem.forEach(function(p){
-    var ref=p.remittance_ref;
-    var linkedInv=RECON.inv.filter(function(i){return i.payment_number===ref;});
-    var linkedCred=RECON.disp.filter(function(d){return d.payment_number===ref;});
-    var sumInv=linkedInv.reduce(function(s,i){return s+(Number(i.amount_aed)||0);},0);
-    var sumCred=linkedCred.reduce(function(s,d){return s+(Number(d.credit_amount_aed)||0);},0);
-    var gross=Number(p.gross_amount_aed)||0;var net=sumInv+sumCred;
-    var lineCount=linkedInv.length+linkedCred.length;
-    var status,scls;
-    if(lineCount===0){status="Unreconciled";scls="unreconciled";}
-    else if(Math.abs(net-gross)<=5){status="Reconciled";scls="reconciled";}
-    else{status="Partial";scls="partial";}
-    h+="<div class=\"recon-pay-card\"><div class=\"recon-pay-top\">"
-      +"<div><span class=\"recon-pay-ref\">"+escapeHtmlR(ref)+"</span> <span class=\"recon-pay-meta\">"+(p.payment_date||"")+"</span></div>"
-      +"<div><span class=\"recon-pay-gross\">AED "+aed(gross)+"</span> <span class=\"recon-status "+scls+"\">"+status+"</span></div></div>";
-    if(linkedInv.length){h+="<div class=\"recon-sub\">Linked invoices</div><ul class=\"recon-linked\">"+linkedInv.map(function(i){return "<li><span class=\"ll-label\">"+escapeHtmlR(i.invoice_number)+"</span><span>AED "+aed(i.amount_aed)+"</span></li>";}).join("")+"</ul>";}
-    if(linkedCred.length){h+="<div class=\"recon-sub\">Dispute credits</div><ul class=\"recon-linked\">"+linkedCred.map(function(d){return "<li><span class=\"ll-label\">"+escapeHtmlR(d.dispute_number)+"</span><span>AED "+aed(d.credit_amount_aed)+"</span></li>";}).join("")+"</ul>";}
-    h+="<div class=\"recon-net\"><span class=\"ll-label\">Linked total vs gross</span><span>AED "+aed(net)+" / AED "+aed(gross)+"</span></div></div>";
-  });
-  host.innerHTML=h;
-}
-window.exportReconciliationPDF=function(){
-  var root=document.getElementById("recon-print-root");
-  if(!root){root=document.createElement("div");root.id="recon-print-root";document.body.appendChild(root);}
-  var now=new Date();var dstr=now.toISOString().slice(0,10);
-  var invPO=RECON.inv.filter(function(i){return i.po_number!=null&&i.po_number!=="";});
-  var html="<div class=\"rp-header\">Techniline Electronics LLC</div><div class=\"rp-sub\">Reconciliation report &middot; Generated "+dstr+"</div>";
-  html+="<div class=\"rp-h\">Invoice summary (with PO)</div><table class=\"rp-tbl\"><thead><tr><th>Invoice #</th><th>PO</th><th>Amount AED</th><th>Payment status</th></tr></thead><tbody>";
-  invPO.forEach(function(i){html+="<tr><td>"+escapeHtmlR(i.invoice_number)+"</td><td>"+escapeHtmlR(i.po_number)+"</td><td>"+aed(i.amount_aed)+"</td><td>"+escapeHtmlR(i.payment_status||"unpaid")+"</td></tr>";});
-  html+="</tbody></table>";
-  html+="<div class=\"rp-h\">Payment summary</div><table class=\"rp-tbl\"><thead><tr><th>Remittance</th><th>Date</th><th>Gross AED</th><th>Linked invoices</th></tr></thead><tbody>";
-  RECON.rem.forEach(function(p){var li=RECON.inv.filter(function(i){return i.payment_number===p.remittance_ref;}).map(function(i){return i.invoice_number;}).join(", ");html+="<tr><td>"+escapeHtmlR(p.remittance_ref)+"</td><td>"+(p.payment_date||"")+"</td><td>"+aed(p.gross_amount_aed)+"</td><td>"+escapeHtmlR(li)+"</td></tr>";});
-  html+="</tbody></table>";
-  var outs=RECON.disp.filter(function(d){return ["resolved","amazon_rejected"].indexOf(d.dispute_status)===-1;});
-  if(outs.length){html+="<div class=\"rp-h\">Outstanding disputes</div><table class=\"rp-tbl\"><thead><tr><th>Dispute #</th><th>Invoice</th><th>Gap AED</th><th>Status</th></tr></thead><tbody>";
-  outs.forEach(function(d){html+="<tr class=\"rp-amber\"><td>"+escapeHtmlR(d.dispute_number)+"</td><td>"+escapeHtmlR(d.tle_invoice_number||"")+"</td><td>"+aed(d.gap_aed)+"</td><td>"+escapeHtmlR(d.dispute_status||"")+"</td></tr>";});html+="</tbody></table>";}
-  root.innerHTML=html;window.print();
-};
-if(typeof window.switchTab==="function"&&!window.__reconSwitchHooked){
-  window.__reconSwitchHooked=true;var _orig=window.switchTab;
-  window.switchTab=function(tab,el){var r=_orig.apply(this,arguments);if(tab==="reconciliation"){loadReconciliation();}return r;};
-}
+  }
+  window.renderReconFilters = renderReconFilters;
+
+  function setReconFilter(f){ RS.filter = f; renderReconFilters(); renderReconInvoices(); }
+  window.setReconFilter = setReconFilter;
+
+  function filteredInvoices(){
+    var f = RS.filter;
+    return RS.invoices.filter(function(i){
+      if(f==='all') return true;
+      if(f==='remitted') return i.payment_status==='remitted';
+      if(f==='awaiting') return i.payment_status==='awaiting_remittance';
+      if(f==='haspo') return !!i.po_number;
+      if(f==='nopo') return !i.po_number;
+      return true;
+    });
+  }
+  window.filteredInvoices = filteredInvoices;
+
+  function statusPill(inv){
+    var ded = inv.deduction_status;
+    if(ded==='disputed'){ return '<span class="recon-pill recon-pill-blue">Disputed deduction</span>'; }
+    if(inv.payment_status==='remitted'){ return '<span class="recon-pill recon-pill-green">Remitted</span>'; }
+    return '<span class="recon-pill recon-pill-amber">Awaiting remittance</span>';
+  }
+
+  function renderReconInvoices(){
+    var el = document.getElementById('recon-inv-table'); if(!el) return;
+    var rows = filteredInvoices();
+    var head = '<thead><tr>'+
+      '<th>Invoice #</th><th>Date</th><th>Amount AED</th><th>PO Number</th><th>Payment Ref</th><th>Status</th><th>Age</th>'+
+      '</tr></thead>';
+    var body = rows.map(function(i){
+      var inv = escapeHtmlR(i.invoice_number);
+      var po = i.po_number ? '<span class="recon-po">'+escapeHtmlR(i.po_number)+'</span>'
+        : '<span class="recon-addpo" data-inv="'+inv+'">+ Add PO</span>';
+      var payRef = i.payment_number ? escapeHtmlR(i.payment_number)
+        : '<span class="recon-muted">Awaiting payment</span>';
+      var ageHtml = '';
+      if(i.payment_status==='awaiting_remittance'){
+        var d = daysSince(i.invoice_date);
+        if(d!=null){
+          var over = d>60;
+          ageHtml = '<span class="recon-age'+(over?' recon-overdue':'')+'">'+d+' days'+(over?' awaiting remittance':'')+'</span>';
+        }
+      }
+      return '<tr>'+
+        '<td><span class="recon-invno">'+inv+'</span></td>'+
+        '<td>'+escapeHtmlR(i.invoice_date||'')+'</td>'+
+        '<td class="recon-amt">'+aed(i.amount_aed)+'</td>'+
+        '<td class="recon-pocell" data-inv="'+inv+'">'+po+'</td>'+
+        '<td>'+payRef+'</td>'+
+        '<td>'+statusPill(i)+'</td>'+
+        '<td>'+ageHtml+'</td>'+
+      '</tr>';
+    }).join('');
+    el.innerHTML = '<table class="recon-table">'+head+'<tbody>'+body+'</tbody></table>';
+    wireReconPOEdit(el);
+  }
+  window.renderReconInvoices = renderReconInvoices;
+
+  function wireReconPOEdit(scope){
+    Array.prototype.forEach.call(scope.querySelectorAll('.recon-addpo'), function(span){
+      span.addEventListener('click', function(){
+        var cell = span.closest('.recon-pocell');
+        var invNo = span.getAttribute('data-inv');
+        if(typeof window.makeEditable === 'function'){
+          try { window.makeEditable(cell, 'invoices', 'invoice_number', invNo, 'po_number', 'text'); return; } catch(e){}
+        }
+        simplePOEdit(cell, invNo);
+      });
+    });
+  }
+  window.wireReconPOEdit = wireReconPOEdit;
+
+  function simplePOEdit(cell, invNo){
+    var input = document.createElement('input');
+    input.type='text'; input.className='recon-po-input'; input.style.color='#1a1a1a';
+    cell.innerHTML=''; cell.appendChild(input); input.focus();
+    function commit(){
+      var v = input.value.trim();
+      if(v && window.sb){
+        window.sb.from('invoices').update({ po_number: v }).eq('invoice_number', invNo).then(function(){
+          var rec = RS.invoices.find(function(x){ return x.invoice_number===invNo; });
+          if(rec) rec.po_number = v;
+          renderReconInvoices();
+        });
+      } else { renderReconInvoices(); }
+    }
+    input.addEventListener('keydown', function(e){ if(e.key==='Enter') commit(); if(e.key==='Escape') renderReconInvoices(); });
+    input.addEventListener('blur', commit);
+  }
+  window.simplePOEdit = simplePOEdit;
+
+  function dedTypeClass(line){
+    var t = (line.transaction_type||line.description||'').toLowerCase();
+    if(/co-?op|contra|cogs/.test(t)) return 'coop';
+    if(/vret|return|distributor/.test(t)) return 'vret';
+    if(/shortage|claim/.test(t)) return 'shortage';
+    return 'other';
+  }
+
+  function dedBadge(line){
+    var type = dedTypeClass(line);
+    if(type==='coop'){
+      // Accepted if matches agreed terms; we have no terms table, so mark Review Required unless explicitly matched_dispute is set as accepted
+      return '<span class="recon-badge recon-badge-gray">Review Required</span>';
+    }
+    if(type==='vret'){
+      var ret = RS.returns.find(function(r){ return r.srt_number && (r.srt_number===line.matched_return_id || r.return_id===line.matched_return_id); });
+      var hasSrt = ret ? !!ret.srt_number : false;
+      return hasSrt ? '<span class="recon-badge recon-badge-green">Verified</span>'
+                    : '<span class="recon-badge recon-badge-amber">Needs Verification</span>';
+    }
+    if(type==='shortage'){
+      var dsp = RS.disputes.find(function(d){ return d.dispute_number===line.matched_dispute || d.dispute_number===line.dspt_number; });
+      if(dsp){
+        var st = (dsp.dispute_status||'').toLowerCase();
+        if(/accept/.test(st)) return '<span class="recon-badge recon-badge-gray">Accepted</span>';
+        return '<span class="recon-badge recon-badge-blue">Disputed</span>';
+      }
+      return '<span class="recon-badge recon-badge-red">Action Required</span>';
+    }
+    return '<span class="recon-badge recon-badge-gray">Review Required</span>';
+  }
+
+  function dedTypeLabel(line){
+    var type = dedTypeClass(line);
+    if(type==='coop') return 'Co-op / Contra COGS';
+    if(type==='vret') return 'Distributor returns / VRET';
+    if(type==='shortage') return 'Shortage claim';
+    return 'Other deduction';
+  }
+
+  function renderReconPayments(){
+    var el = document.getElementById('recon-pay-list'); if(!el) return;
+    if(!RS.remittances.length){ el.innerHTML = '<div class="recon-muted recon-empty">No remittances loaded yet.</div>'; return; }
+    el.innerHTML = RS.remittances.map(function(rem){
+      var ref = rem.remittance_ref;
+      var linesForRem = RS.remLines.filter(function(l){ return l.remittance_ref===ref; });
+      // GROUP 1: gross invoices (positive invoice lines OR invoices linked by payment_number)
+      var grossLines = linesForRem.filter(function(l){ return l.invoice_number && (Number(l.amount_paid_aed)||0) >= 0 && !l.is_credit; });
+      var grossInvoices = RS.invoices.filter(function(i){ return i.payment_number===ref; });
+      // GROUP 2: deductions (negative lines)
+      var dedLines = linesForRem.filter(function(l){ return (Number(l.amount_paid_aed)||0) < 0 && !l.is_credit; });
+      // GROUP 3: dispute credits (credit lines + disputes linked to this payment)
+      var creditDisputes = RS.disputes.filter(function(d){ return d.payment_number===ref; });
+
+      var grossSum = grossInvoices.reduce(function(s,i){ return s+(Number(i.amount_aed)||0); }, 0);
+      if(!grossInvoices.length && grossLines.length){ grossSum = grossLines.reduce(function(s,l){ return s+(Number(l.invoice_amount_aed)||Number(l.amount_paid_aed)||0); }, 0); }
+      var dedSum = dedLines.reduce(function(s,l){ return s+Math.abs(Number(l.amount_paid_aed)||0); }, 0);
+      var creditSum = creditDisputes.reduce(function(s,d){ return s+(Number(d.credit_amount_aed)||0); }, 0);
+      var net = grossSum - dedSum + creditSum;
+      var gross = Number(rem.gross_amount_aed)||0;
+      var diff = net - gross;
+      var hasLines = grossInvoices.length || grossLines.length || dedLines.length || creditDisputes.length;
+      var statusHtml;
+      if(!hasLines){ statusHtml = '<span class="recon-badge recon-badge-gray">Unreconciled — no lines</span>'; }
+      else if(Math.abs(diff) <= 5){ statusHtml = '<span class="recon-checkmark">&#10003; Reconciled</span>'; }
+      else { statusHtml = '<span class="recon-gap">&#9888; Reconciliation gap — AED '+aed(Math.abs(diff))+' unexplained</span>'; }
+
+      var g1 = '<div class="recon-grp"><div class="recon-grp-h">Group 1 — Gross invoices in this payment</div>'+
+        (grossInvoices.length ? grossInvoices.map(function(i){
+          return '<div class="recon-line recon-line-pos">'+
+            '<span class="recon-invno">'+escapeHtmlR(i.invoice_number)+'</span>'+
+            (i.po_number?'<span class="recon-po-inline">'+escapeHtmlR(i.po_number)+'</span>':'')+
+            '<span class="recon-line-date">'+escapeHtmlR(i.invoice_date||'')+'</span>'+
+            '<span class="recon-line-amt recon-pos">+'+aed(i.amount_aed)+'</span>'+
+          '</div>';
+        }).join('') : '<div class="recon-muted recon-empty-sm">No invoices linked.</div>')+
+      '</div>';
+
+      var g2 = '<div class="recon-grp"><div class="recon-grp-h">Group 2 — Deductions taken</div>'+
+        (dedLines.length ? dedLines.map(function(l){
+          return '<div class="recon-line recon-line-neg">'+
+            '<span class="recon-ded-type">'+escapeHtmlR(dedTypeLabel(l))+'</span>'+
+            '<span class="recon-line-desc">'+escapeHtmlR(l.description||'')+'</span>'+
+            dedBadge(l)+
+            '<span class="recon-line-amt recon-neg">-'+aed(Math.abs(Number(l.amount_paid_aed)||0))+'</span>'+
+          '</div>';
+        }).join('') : '<div class="recon-muted recon-empty-sm">No deductions.</div>')+
+      '</div>';
+
+      var g3 = '<div class="recon-grp"><div class="recon-grp-h">Group 3 — Dispute credits (R1)</div>'+
+        (creditDisputes.length ? creditDisputes.map(function(d){
+          return '<div class="recon-line recon-line-pos">'+
+            '<span class="recon-dspt-link" data-dspt="'+escapeHtmlR(d.dispute_number||'')+'">'+escapeHtmlR(d.dispute_number||'')+'</span>'+
+            '<span class="recon-credit-status">'+(d.credit_closed?'Credit closed':'Open')+'</span>'+
+            '<span class="recon-line-amt recon-pos">+'+aed(d.credit_amount_aed)+'</span>'+
+          '</div>';
+        }).join('') : '<div class="recon-muted recon-empty-sm">No dispute credits.</div>')+
+      '</div>';
+
+      var g4 = '<div class="recon-grp recon-grp-net"><div class="recon-grp-h">Group 4 — Net payment check</div>'+
+        '<div class="recon-net-row"><span>Gross invoices</span><span class="recon-pos">+'+aed(grossSum)+'</span></div>'+
+        '<div class="recon-net-row"><span>Deductions</span><span class="recon-neg">-'+aed(dedSum)+'</span></div>'+
+        '<div class="recon-net-row"><span>Dispute credits</span><span class="recon-pos">+'+aed(creditSum)+'</span></div>'+
+        '<div class="recon-net-row recon-net-calc"><span>Calculated net</span><span>AED '+aed(net)+'</span></div>'+
+        '<div class="recon-net-row recon-net-actual"><span>Actual payment (remittance)</span><span>AED '+aed(gross)+'</span></div>'+
+        '<div class="recon-net-status">'+statusHtml+'</div>'+
+      '</div>';
+
+      return '<div class="recon-pay-card">'+
+        '<div class="recon-pay-head">'+
+          '<span class="recon-pay-num">'+escapeHtmlR(ref||'(no ref)')+'</span>'+
+          '<span class="recon-pay-date">'+escapeHtmlR(rem.payment_date||'')+'</span>'+
+          '<span class="recon-pay-gross">AED '+aed(gross)+'</span>'+
+        '</div>'+ g1 + g2 + g3 + g4 +
+      '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(el.querySelectorAll('.recon-dspt-link'), function(a){
+      a.addEventListener('click', function(){
+        if(typeof window.switchTab==='function'){
+          var btn = document.querySelector('[data-tab="disputes"]');
+          try { window.switchTab('disputes', btn); } catch(e){ try{ window.switchTab('disputes'); }catch(_){} }
+        }
+      });
+    });
+  }
+  window.renderReconPayments = renderReconPayments;
+
+  function exportReconciliationPDF(){
+    var root = document.getElementById('recon-print-root');
+    if(!root){ root = document.createElement('div'); root.id='recon-print-root'; document.body.appendChild(root); }
+    var invsWithPO = RS.invoices.filter(function(i){ return !!i.po_number; });
+    var outstanding = RS.disputes.filter(function(d){ var st=(d.dispute_status||'').toLowerCase(); return st!=='resolved' && st!=='amazon_rejected'; });
+    var now = new Date();
+    var invRows = invsWithPO.map(function(i){
+      return '<tr><td>'+escapeHtmlR(i.invoice_number)+'</td><td>'+escapeHtmlR(i.po_number)+'</td><td>'+aed(i.amount_aed)+'</td><td>'+escapeHtmlR(i.payment_status||'')+'</td></tr>';
+    }).join('');
+    var payRows = RS.remittances.map(function(rem){
+      var linked = RS.invoices.filter(function(i){ return i.payment_number===rem.remittance_ref; });
+      var linkedStr = linked.map(function(i){ return escapeHtmlR(i.invoice_number); }).join(', ');
+      return '<tr><td>'+escapeHtmlR(rem.remittance_ref||'')+'</td><td>'+escapeHtmlR(rem.payment_date||'')+'</td><td>'+aed(rem.gross_amount_aed)+'</td><td>'+escapeHtmlR(linkedStr)+'</td></tr>';
+    }).join('');
+    var dspRows = outstanding.map(function(d){
+      return '<tr class="recon-print-amber"><td>'+escapeHtmlR(d.dispute_number||'')+'</td><td>'+escapeHtmlR(d.tle_invoice_number||'')+'</td><td>'+aed(d.gap_aed)+'</td><td>'+escapeHtmlR(d.dispute_status||'')+'</td></tr>';
+    }).join('');
+    root.innerHTML =
+      '<div class="recon-print-doc">'+
+      '<h1>Techniline Electronics LLC</h1>'+
+      '<div class="recon-print-sub">Reconciliation Report &middot; '+now.toISOString().slice(0,10)+'</div>'+
+      '<h2>Invoice summary (with PO)</h2>'+
+      '<table class="recon-print-table"><thead><tr><th>Invoice #</th><th>PO</th><th>Amount AED</th><th>Status</th></tr></thead><tbody>'+invRows+'</tbody></table>'+
+      '<h2>Payment summary</h2>'+
+      '<table class="recon-print-table"><thead><tr><th>Remittance</th><th>Date</th><th>Gross AED</th><th>Linked invoices</th></tr></thead><tbody>'+payRows+'</tbody></table>'+
+      '<h2>Outstanding disputes</h2>'+
+      '<table class="recon-print-table"><thead><tr><th>Dispute #</th><th>Invoice</th><th>Gap AED</th><th>Status</th></tr></thead><tbody>'+dspRows+'</tbody></table>'+
+      '</div>';
+    document.body.classList.add('recon-printing');
+    window.print();
+    setTimeout(function(){ document.body.classList.remove('recon-printing'); }, 500);
+  }
+  window.exportReconciliationPDF = exportReconciliationPDF;
+
+  // lazy-load hook on switchTab
+  if(!window.__reconSwitchHooked && typeof window.switchTab === 'function'){
+    window.__reconSwitchHooked = true;
+    var __origSwitchTab = window.switchTab;
+    window.switchTab = function(tab, el){
+      var r = __origSwitchTab.apply(this, arguments);
+      if(tab === 'reconciliation'){ loadReconciliation(); }
+      return r;
+    };
+  }
+
 })();
 </script>
 
@@ -5134,65 +5344,94 @@ if(typeof window.switchTab==="function"&&!window.__reconSwitchHooked){
 .credit-pill-partial { background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; }
 .credit-ref { font-family:'DM Mono', monospace; font-size:10px; color:#94A3B8; margin-top:2px; }
 </style>
-<style id="ops-final-fixes-css">
-.accept-form-host { width:100%; }
-.accept-form { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; margin-top:12px; font-family:'DM Sans', sans-serif; }
-.accept-form-title { font-weight:700; color:#009198; margin-bottom:10px; }
-.accept-form-row { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
-.accept-form-row label { font-size:12px; font-weight:600; color:#475467; min-width:180px; }
-.accept-form-row select, .accept-form-row input { flex:1; padding:7px 10px; border:1px solid #CBD5E1; border-radius:6px; font-size:13px; font-family:'DM Sans', sans-serif; }
-.accept-form-actions { display:flex; gap:10px; margin-top:10px; }
-#escalate-modal-host { display:none; }
-#escalate-modal-host.open { display:block; }
-#escalate-modal-host .modal-backdrop { position:fixed; inset:0; background:rgba(15,39,68,0.55); z-index:9998; }
-.escalate-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:560px; max-width:92vw; max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(15,39,68,0.4); z-index:9999; font-family:'DM Sans', sans-serif; }
-.escalate-modal .modal-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid #E2E8F0; }
-.escalate-modal .modal-title { font-weight:700; color:#009198; font-size:16px; }
-.escalate-modal .modal-close { background:none; border:none; font-size:24px; color:#94A3B8; cursor:pointer; line-height:1; }
-.escalate-modal .modal-body { padding:18px 20px; }
-.esc-row { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
-.esc-row label { font-size:12px; font-weight:600; color:#475467; }
-.esc-row input, .esc-row select, .esc-row textarea { padding:8px 10px; border:1px solid #CBD5E1; border-radius:7px; font-size:13px; font-family:'DM Sans', sans-serif; }
-.esc-row textarea { resize:vertical; }
-.esc-checks { background:#F8FAFC; padding:12px 14px; border-radius:8px; }
-.esc-checks-title { font-size:12px; font-weight:600; color:#475467; margin-bottom:8px; }
-.esc-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:#009198; margin-bottom:6px; cursor:pointer; }
-.escalate-modal .modal-actions { display:flex; gap:10px; padding:14px 20px 20px 20px; border-top:1px solid #E2E8F0; }
-.escalated-badge { display:inline-block; padding:4px 10px; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:999px; font-size:11px; font-weight:600; margin-left:8px; }
-.rc-id-bar { display:flex; align-items:center; gap:12px; padding:12px 16px; background:#F8FAFC; border-bottom:1px solid #E2E8F0; flex-wrap:wrap; }
-.rc-id-label { font-size:11px; font-weight:700; color:#475467; letter-spacing:0.5px; text-transform:uppercase; }
-.rc-id-val { font-family:'DM Mono', monospace; font-size:18px; font-weight:600; color:#009198; letter-spacing:0.3px; }
-.rc-copy-btn { background:none; border:1px solid #CBD5E1; border-radius:6px; padding:3px 8px; cursor:pointer; color:#475467; font-size:13px; line-height:1; }
-.rc-copy-btn:hover { background:#009198; color:#fff; border-color:#009198; }
-.rc-copy-btn.copied { background:#10B981; color:#fff; border-color:#10B981; }
-.rc-disp-link { font-size:11px; font-weight:600; color:#009198; background:#EEF2F6; padding:3px 10px; border-radius:999px; cursor:pointer; border:1px solid #CBD5E1; }
-.rc-disp-link:hover { background:#009198; color:#fff; }
-.ret-id-cell { white-space:nowrap; }
-.ret-id-text { font-family:'DM Mono', monospace; }
-.ret-copy-btn { background:none; border:1px solid #CBD5E1; border-radius:5px; padding:1px 6px; margin-left:6px; cursor:pointer; color:#475467; font-size:11px; line-height:1; vertical-align:middle; }
-.ret-copy-btn:hover { background:#009198; color:#fff; border-color:#009198; }
-.ret-copy-btn.copied { background:#10B981; color:#fff; border-color:#10B981; }
-.vc-lookup { display:inline-block; font-size:11px; font-weight:500; color:#009198; background:#EEF2F6; padding:2px 8px; border-radius:999px; margin-left:8px; }
+<style>
+/* Reconciliation netting model styles */
+#recon-summary{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:22px; }
+.recon-stat{ border-radius:12px; padding:16px 18px; color:#fff; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+.recon-stat-label{ font-size:12px; opacity:.9; font-weight:600; letter-spacing:.02em; }
+.recon-stat-val{ font-size:22px; font-weight:700; }
+.recon-stat-sub{ font-size:11px; opacity:.82; }
+.recon-navy{ background:#1e3a5f; }
+.recon-teal{ background:#0d8f8f; }
+.recon-amber{ background:#d99411; }
+.recon-red{ background:#c0392b; }
+.recon-green{ background:#1f9d55; }
+@media (max-width:1100px){ #recon-summary{ grid-template-columns:repeat(2,1fr); } }
 
-/* === FIX1: visible input text === */
-.global-search-input { color:#1a1a1a !important; }
-.global-search-input::placeholder { color:#a0aec0; }
-input[type='text'], input[type='search'], input[type='number'], input[type='date'], select, textarea { color:#1a1a1a; }
-.field-input, .modal-input, .date-input-sm { color:#1a1a1a !important; }
+#recon-inv-filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.recon-chip{ border:1px solid #d0d5dd; background:#fff; color:#344054; border-radius:18px; padding:6px 14px; font-size:13px; cursor:pointer; font-weight:500; }
+.recon-chip:hover{ background:#f2f4f7; }
+.recon-chip.active{ background:#0d8f8f; color:#fff; border-color:#0d8f8f; }
 
-/* === FIX2: universal inline cell editing === */
-.editable-cell { cursor:pointer; position:relative; }
-.editable-cell:hover::after { content:'\270E'; font-size:10px; color:#009198; margin-left:4px; opacity:0.7; }
-.editable-cell.empty { color:#009198; opacity:0.7; font-style:italic; }
-.editable-cell.empty::before { content:'+ '; }
-.cell-saved { animation: cellFlash 0.8s ease; }
-@keyframes cellFlash { 0%,100%{background:transparent} 30%{background:#E6F8F8} }
-.inline-edit-input { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:110px; max-width:180px; color:#1a1a1a; }
-.inline-edit-select { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:120px; color:#1a1a1a; }
-.inline-edit-save { margin-left:6px; padding:4px 10px; background:#009198; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; }
+.recon-table{ width:100%; border-collapse:collapse; font-size:13px; }
+.recon-table th{ text-align:left; padding:9px 10px; border-bottom:2px solid #e4e7ec; color:#475467; font-weight:600; font-size:12px; }
+.recon-table td{ padding:9px 10px; border-bottom:1px solid #f0f1f3; vertical-align:middle; }
+.recon-invno, .recon-po{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.recon-invno{ color:#0d8f8f; font-weight:600; }
+.recon-po{ color:#1e3a5f; }
+.recon-amt{ text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+.recon-muted{ color:#98a2b3; }
+.recon-addpo{ color:#d99411; cursor:pointer; font-weight:600; }
+.recon-addpo:hover{ text-decoration:underline; }
+.recon-po-input{ width:140px; padding:4px 6px; border:1px solid #0d8f8f; border-radius:5px; font-size:13px; color:#1a1a1a; }
+.recon-age{ font-size:12px; color:#667085; }
+.recon-overdue{ color:#c0392b; font-weight:700; }
 
-/* ===== Reconciliation tab (additive) ===== */
-.recon-wrap{padding:18px 22px;max-width:1500px;margin:0 auto;}.recon-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;}.recon-title{font-size:20px;font-weight:700;color:#0b1f3a;margin:0;}.recon-print-btn{display:inline-flex;align-items:center;gap:8px;background:#009198;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;}.recon-print-btn:hover{background:#007a80;}.recon-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}@media(max-width:900px){.recon-summary{grid-template-columns:repeat(2,1fr);}}.recon-stat{border-radius:12px;padding:16px 18px;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);}.recon-stat .rs-label{font-size:12px;opacity:.9;font-weight:500;margin-bottom:6px;letter-spacing:.02em;}.recon-stat .rs-value{font-size:24px;font-weight:700;line-height:1.1;}.recon-stat.teal{background:linear-gradient(135deg,#009198,#00b3bb);}.recon-stat.navy{background:linear-gradient(135deg,#0b1f3a,#1c3a63);}.recon-stat.green{background:linear-gradient(135deg,#1f9d55,#28b463);}.recon-stat.amber{background:linear-gradient(135deg,#d68910,#e8a13a);}.recon-section{margin-bottom:28px;}.recon-h3{font-size:15px;font-weight:700;color:#0b1f3a;margin:0 0 12px;}.recon-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}.recon-chip{border:1.5px solid #CCF0F1;background:#f8f7fc;color:#0b1f3a;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;}.recon-chip:hover{border-color:#009198;}.recon-chip.active{background:#009198;border-color:#009198;color:#fff;}.recon-table-host{overflow-x:auto;border:1px solid #e6e8ee;border-radius:10px;}.recon-tbl{width:100%;border-collapse:collapse;font-size:13px;}.recon-tbl th{position:sticky;top:0;background:#f4f6f9;color:#475569;text-align:left;font-weight:600;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid #e6e8ee;z-index:1;}.recon-tbl td{padding:10px 12px;border-bottom:1px solid #f0f1f5;color:#1a1a1a;vertical-align:middle;}.recon-tbl tr:hover td{background:#fafbfc;}.recon-inv-num{font-family:ui-monospace,Menlo,Consolas,monospace;color:#009198;font-weight:600;}.recon-pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}.recon-pill.paid{background:#e6f6ec;color:#1f9d55;}.recon-pill.unpaid{background:#fdf2e2;color:#b9770a;}.recon-po-add{color:#d68910;font-weight:600;cursor:pointer;}.recon-po-add:hover{text-decoration:underline;}.recon-muted{color:#9aa3b2;font-style:italic;}.recon-age{font-weight:600;}.recon-age.overdue{color:#dc2626;}.recon-pay-card{border:1px solid #e6e8ee;border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fff;}.recon-pay-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;}.recon-pay-ref{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:#0b1f3a;font-size:14px;}.recon-pay-meta{font-size:12px;color:#64748b;}.recon-pay-gross{font-size:15px;font-weight:700;color:#0b1f3a;}.recon-linked{font-size:12px;color:#334155;margin:4px 0 0 0;padding-left:0;list-style:none;}.recon-linked li{padding:3px 0;border-bottom:1px dashed #eef0f4;display:flex;justify-content:space-between;gap:12px;}.recon-linked .ll-label{color:#64748b;}.recon-sub{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#94a3b8;margin:10px 0 2px;}.recon-net{margin-top:10px;padding-top:8px;border-top:1px solid #e6e8ee;display:flex;justify-content:space-between;align-items:center;font-size:13px;}.recon-status{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}.recon-status.reconciled{background:#e6f6ec;color:#1f9d55;}.recon-status.partial{background:#fdf2e2;color:#b9770a;}.recon-status.unreconciled{background:#fdeaea;color:#dc2626;}.recon-empty{padding:18px;text-align:center;color:#9aa3b2;font-size:13px;}#recon-print-root{display:none;}@media print{body *{visibility:hidden;}#recon-print-root,#recon-print-root *{visibility:visible;}#recon-print-root{display:block!important;position:absolute;left:0;top:0;width:100%;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#000;}.rp-header{font-size:20px;font-weight:700;border-bottom:2px solid #009198;padding-bottom:8px;margin-bottom:4px;}.rp-sub{font-size:12px;color:#444;margin-bottom:18px;}.rp-h{font-size:14px;font-weight:700;margin:18px 0 6px;}.rp-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;}.rp-tbl th,.rp-tbl td{border:1px solid #bbb;padding:4px 6px;text-align:left;}.rp-tbl th{background:#eef2f6;}.rp-amber{background:#fff4e0;}}
+.recon-pill{ display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; }
+.recon-pill-green{ background:#e3f6ec; color:#1f7a44; }
+.recon-pill-amber{ background:#fdf1d8; color:#9a6a06; }
+.recon-pill-blue{ background:#e0ecfb; color:#1d4ed8; }
+
+.recon-pay-card{ border:1px solid #e4e7ec; border-radius:12px; padding:16px 18px; margin-bottom:16px; background:#fff; }
+.recon-pay-head{ display:flex; align-items:center; gap:16px; border-bottom:1px solid #eef0f3; padding-bottom:10px; margin-bottom:12px; }
+.recon-pay-num{ font-family:ui-monospace,monospace; font-weight:700; color:#1e3a5f; font-size:15px; }
+.recon-pay-date{ color:#667085; font-size:13px; }
+.recon-pay-gross{ margin-left:auto; font-weight:700; font-size:16px; color:#101828; }
+
+.recon-grp{ margin-bottom:12px; }
+.recon-grp-h{ font-size:12px; font-weight:700; color:#475467; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+.recon-line{ display:flex; align-items:center; gap:12px; padding:6px 10px; border-radius:7px; font-size:13px; }
+.recon-line-pos{ background:#f5fbf7; }
+.recon-line-neg{ background:#fdf4f3; }
+.recon-line .recon-line-amt{ margin-left:auto; font-variant-numeric:tabular-nums; font-weight:700; }
+.recon-pos{ color:#1f7a44; }
+.recon-neg{ color:#c0392b; }
+.recon-po-inline{ font-family:ui-monospace,monospace; color:#1e3a5f; font-size:12px; }
+.recon-line-date{ color:#667085; font-size:12px; }
+.recon-line-desc{ color:#475467; font-size:12px; }
+.recon-ded-type{ font-weight:600; color:#344054; }
+.recon-dspt-link{ font-family:ui-monospace,monospace; color:#0d8f8f; cursor:pointer; font-weight:600; }
+.recon-dspt-link:hover{ text-decoration:underline; }
+.recon-credit-status{ color:#667085; font-size:12px; }
+.recon-empty, .recon-empty-sm{ padding:8px 10px; font-size:12px; }
+
+.recon-badge{ display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600; }
+.recon-badge-green{ background:#e3f6ec; color:#1f7a44; }
+.recon-badge-amber{ background:#fdf1d8; color:#9a6a06; }
+.recon-badge-blue{ background:#e0ecfb; color:#1d4ed8; }
+.recon-badge-gray{ background:#eef0f3; color:#475467; }
+.recon-badge-red{ background:#fbe3e0; color:#c0392b; }
+
+.recon-grp-net{ background:#f9fafb; border-radius:8px; padding:12px 14px; }
+.recon-net-row{ display:flex; justify-content:space-between; padding:4px 0; font-size:13px; }
+.recon-net-calc{ border-top:1px solid #e4e7ec; margin-top:4px; padding-top:8px; font-weight:700; }
+.recon-net-actual{ font-weight:600; color:#475467; }
+.recon-net-status{ margin-top:10px; }
+.recon-checkmark{ color:#1f7a44; font-weight:700; }
+.recon-gap{ color:#c0392b; font-weight:700; }
+
+/* PDF / print report */
+#recon-print-root{ display:none; }
+.recon-print-doc h1{ font-size:22px; margin:0 0 2px; }
+.recon-print-sub{ color:#475467; font-size:13px; margin-bottom:18px; }
+.recon-print-doc h2{ font-size:15px; margin:18px 0 6px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+.recon-print-table{ width:100%; border-collapse:collapse; font-size:11px; }
+.recon-print-table th, .recon-print-table td{ border:1px solid #d0d5dd; padding:4px 6px; text-align:left; }
+.recon-print-amber{ background:#fdf1d8; }
+@media print{
+  body.recon-printing > *{ display:none !important; }
+  body.recon-printing #recon-print-root{ display:block !important; }
+}
 </style>
 <div id="escalate-modal-host"></div>
 </body>
