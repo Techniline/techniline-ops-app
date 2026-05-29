@@ -1190,7 +1190,8 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 
 <!-- App -->
 <div id="app-screen" class="app-grid" style="display:none; flex-direction:column; height:100vh;">
-<nav class="sidebar" id="app-sidebar"><div class="sb-top"><div class="sb-logo">T</div><div class="sb-brand">Techniline</div></div><button class="sb-toggle" id="sb-toggle-btn" onclick="window.__tlToggleSidebar&&window.__tlToggleSidebar()" title="Collapse"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><div class="sb-nav"><button class="sb-item" data-tab="notifications" onclick="switchTab('notifications', this)" title="Notifications"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="sb-label">Notifications</span><span class="sb-badge" id="sb-notif-badge"></span></button><button class="sb-item" data-tab="checklist" onclick="switchTab('checklist', this)" title="Checklist"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="sb-label">Checklist</span></button><button class="sb-item" data-tab="kpi" onclick="switchTab('kpi', this)" title="KPIs"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="sb-label">KPIs</span></button><button class="sb-item" data-tab="priorities" onclick="switchTab('priorities', this)" title="Priorities"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg><span class="sb-label">Priorities</span></button><button class="sb-item" data-tab="disputes" onclick="switchTab('disputes', this)" title="Disputes"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l3 6h-6z"/><path d="M7 21h10"/></svg><span class="sb-label">Disputes</span></button><button class="sb-item" data-tab="returns" onclick="switchTab('returns', this)" title="Returns"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg><span class="sb-label">Returns</span></button></div><div class="sb-user"><div class="sb-user-avatar" id="sb-user-avatar">U</div><div class="sb-user-info"><div class="sb-user-name" id="sb-user-name">User</div><div class="sb-user-role">Operations</div></div></div></nav>
+<nav class="sidebar" id="app-sidebar"><div class="sb-top"><div class="sb-logo">T</div><div class="sb-brand">Techniline</div></div><button class="sb-toggle" id="sb-toggle-btn" onclick="window.__tlToggleSidebar&&window.__tlToggleSidebar()" title="Collapse"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><div class="sb-nav"><button class="sb-item" data-tab="notifications" onclick="switchTab('notifications', this)" title="Notifications"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="sb-label">Notifications</span><span class="sb-badge" id="sb-notif-badge"></span></button><button class="sb-item" data-tab="checklist" onclick="switchTab('checklist', this)" title="Checklist"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="sb-label">Checklist</span></button><button class="sb-item" data-tab="kpi" onclick="switchTab('kpi', this)" title="KPIs"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="sb-label">KPIs</span></button><button class="sb-item" data-tab="priorities" onclick="switchTab('priorities', this)" title="Priorities"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg><span class="sb-label">Priorities</span></button><button class="sb-item" data-tab="disputes" onclick="switchTab('disputes', this)" title="Disputes"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l3 6h-6z"/><path d="M7 21h10"/></svg><span class="sb-label">Disputes</span></button><button class="sb-item" data-tab="reconciliation" onclick="switchTab('reconciliation', this)" title="Reconciliation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg><span class="sb-label">Reconciliation</span></button>
+<button class="sb-item" data-tab="returns" onclick="switchTab('returns', this)" title="Returns"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg><span class="sb-label">Returns</span></button></div><div class="sb-user"><div class="sb-user-avatar" id="sb-user-avatar">U</div><div class="sb-user-info"><div class="sb-user-name" id="sb-user-name">User</div><div class="sb-user-role">Operations</div></div></div></nav>
 
   <div class="topbar">
     <div class="topbar-left">
@@ -1372,7 +1373,8 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 
   
       <!-- Returns Tab -->
-      <div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
+      <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
+<div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
         <div class="summary-bar">
           <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
           <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs action</div></div>
@@ -4971,6 +4973,134 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
   else window.addEventListener('DOMContentLoaded', install);
 })();
 </script>
+<script>
+(function(){
+if(window.__reconInstalled)return; window.__reconInstalled=true;
+function aed(n){n=Number(n)||0;return n.toLocaleString("en-AE",{minimumFractionDigits:2,maximumFractionDigits:2});}
+function daysSince(d){if(!d)return null;var t=new Date(d).getTime();if(isNaN(t))return null;return Math.floor((Date.now()-t)/86400000);}
+var RECON={inv:[],rem:[],disp:[],invFilter:"all",loaded:false};
+async function loadReconciliation(){
+  try{
+    var inv=await sb.from("invoices").select("invoice_number,invoice_date,amount_aed,po_number,payment_number,payment_status").order("invoice_date",{ascending:false});
+    var rem=await sb.from("remittances").select("remittance_ref,payment_date,gross_amount_aed,net_paid_aed,invoice_refs").order("payment_date",{ascending:false});
+    var disp=await sb.from("disputes").select("dispute_number,tle_invoice_number,invoice_amount_aed,dispute_status,gap_aed,payment_number,credit_amount_aed,credit_closed,po_number");
+    RECON.inv=(inv&&inv.data)||[];RECON.rem=(rem&&rem.data)||[];RECON.disp=(disp&&disp.data)||[];RECON.loaded=true;
+    renderReconSummary();renderReconFilters();renderReconInvoices();renderReconPayments();
+  }catch(e){console.error("loadReconciliation",e);}
+}
+window.loadReconciliation=loadReconciliation;
+function renderReconSummary(){
+  var totalInv=RECON.inv.reduce(function(s,r){return s+(Number(r.amount_aed)||0);},0);
+  var withPO=RECON.inv.filter(function(r){return r.po_number!=null&&r.po_number!=="";}).length;
+  var creditRec=RECON.disp.filter(function(d){return d.credit_closed===true;}).reduce(function(s,d){return s+(Number(d.credit_amount_aed)||0);},0);
+  var outstanding=RECON.disp.filter(function(d){return ["resolved","amazon_rejected"].indexOf(d.dispute_status)===-1;}).reduce(function(s,d){return s+(Number(d.gap_aed)||0);},0);
+  var el=document.getElementById("recon-summary");if(!el)return;
+  el.innerHTML=   "<div class=\"recon-stat teal\"><div class=\"rs-label\">Total invoiced AED</div><div class=\"rs-value\">"+aed(totalInv)+"</div></div>"  +"<div class=\"recon-stat navy\"><div class=\"rs-label\">Invoices with PO</div><div class=\"rs-value\">"+withPO+"</div></div>"  +"<div class=\"recon-stat green\"><div class=\"rs-label\">Dispute credits recovered</div><div class=\"rs-value\">"+aed(creditRec)+"</div></div>"  +"<div class=\"recon-stat amber\"><div class=\"rs-label\">Outstanding disputes</div><div class=\"rs-value\">"+aed(outstanding)+"</div></div>";
+}
+function renderReconFilters(){
+  var el=document.getElementById("recon-inv-filters");if(!el)return;
+  var chips=[["all","All"],["paid","Paid"],["unpaid","Unpaid"],["haspo","Has PO"],["nopo","No PO"]];
+  el.innerHTML=chips.map(function(c){return "<button class=\"recon-chip"+(RECON.invFilter===c[0]?" active":"")+"\" onclick=\"setReconFilter('"+c[0]+"')\">"+c[1]+"</button>";}).join("");
+}
+window.setReconFilter=function(f){RECON.invFilter=f;renderReconFilters();renderReconInvoices();};
+function filteredInvoices(){
+  return RECON.inv.filter(function(r){
+    var hasPO=r.po_number!=null&&r.po_number!=="";
+    var paid=r.payment_status==="paid";
+    switch(RECON.invFilter){case "paid":return paid;case "unpaid":return !paid;case "haspo":return hasPO;case "nopo":return !hasPO;default:return true;}
+  });
+}
+function renderReconInvoices(){
+  var host=document.getElementById("recon-inv-table");if(!host)return;
+  var rows=filteredInvoices();
+  if(!rows.length){host.innerHTML="<div class=\"recon-empty\">No invoices match this filter.</div>";return;}
+  var h="<table class=\"recon-tbl\"><thead><tr><th>Invoice #</th><th>Date</th><th>Amount AED</th><th>PO Number</th><th>Payment Ref</th><th>Status</th><th>Age</th></tr></thead><tbody>";
+  rows.forEach(function(r){
+    var paid=r.payment_status==="paid";
+    var hasPO=r.po_number!=null&&r.po_number!=="";
+    var age="";var ageCls="recon-age";
+    if(!paid){var d=daysSince(r.invoice_date);if(d!=null){age=d+"d";if(d>60)ageCls+=" overdue";}}
+    var poCell=hasPO?("<span>"+escapeHtmlR(r.po_number)+"</span>"):("<span class=\"recon-po-add\">+ Add PO</span>");
+    var payCell=(r.payment_number!=null&&r.payment_number!=="")?escapeHtmlR(r.payment_number):"<span class=\"recon-muted\">Awaiting payment</span>";
+    h+="<tr data-inv=\""+escapeHtmlR(r.invoice_number)+"\">"
+      +"<td class=\"recon-inv-num\">"+escapeHtmlR(r.invoice_number)+"</td>"
+      +"<td>"+(r.invoice_date||"")+"</td>"
+      +"<td>"+aed(r.amount_aed)+"</td>"
+      +"<td class=\"recon-po-cell\" data-col=\"po_number\" data-id=\""+escapeHtmlR(r.invoice_number)+"\">"+poCell+"</td>"
+      +"<td>"+payCell+"</td>"
+      +"<td><span class=\"recon-pill "+(paid?"paid":"unpaid")+"\">"+(paid?"Paid":"Unpaid")+"</span></td>"
+      +"<td class=\""+ageCls+"\">"+age+"</td></tr>";
+  });
+  h+="</tbody></table>";host.innerHTML=h;
+  wireReconPOEdit(host);
+}
+function wireReconPOEdit(host){
+  host.querySelectorAll(".recon-po-cell").forEach(function(cell){
+    cell.style.cursor="pointer";
+    cell.addEventListener("click",function(){
+      var id=cell.getAttribute("data-id");
+      if(typeof window.makeEditable==="function"){window.makeEditable(cell,"invoices","invoice_number",id,"po_number","text",null);}
+      else{simplePOEdit(cell,id);}
+    });
+  });
+}
+function simplePOEdit(cell,id){
+  if(cell.querySelector("input"))return;
+  var cur=(cell.textContent||"").replace("+ Add PO","").trim();
+  cell.innerHTML="<input type=\"text\" value=\""+escapeHtmlR(cur)+"\" style=\"color:#1a1a1a;width:120px;\"> <button>Save</button>";
+  var inp=cell.querySelector("input"),btn=cell.querySelector("button");inp.focus();
+  btn.onclick=async function(){var v=inp.value.trim();try{await sb.from("invoices").update({po_number:v||null}).eq("invoice_number",id);}catch(e){console.error(e);}var rec=RECON.inv.find(function(x){return x.invoice_number===id;});if(rec)rec.po_number=v||null;renderReconInvoices();renderReconSummary();};
+}
+function escapeHtmlR(s){if(s==null)return "";return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
+function renderReconPayments(){
+  var host=document.getElementById("recon-pay-list");if(!host)return;
+  if(!RECON.rem.length){host.innerHTML="<div class=\"recon-empty\">No remittances found.</div>";return;}
+  var h="";
+  RECON.rem.forEach(function(p){
+    var ref=p.remittance_ref;
+    var linkedInv=RECON.inv.filter(function(i){return i.payment_number===ref;});
+    var linkedCred=RECON.disp.filter(function(d){return d.payment_number===ref;});
+    var sumInv=linkedInv.reduce(function(s,i){return s+(Number(i.amount_aed)||0);},0);
+    var sumCred=linkedCred.reduce(function(s,d){return s+(Number(d.credit_amount_aed)||0);},0);
+    var gross=Number(p.gross_amount_aed)||0;var net=sumInv+sumCred;
+    var lineCount=linkedInv.length+linkedCred.length;
+    var status,scls;
+    if(lineCount===0){status="Unreconciled";scls="unreconciled";}
+    else if(Math.abs(net-gross)<=5){status="Reconciled";scls="reconciled";}
+    else{status="Partial";scls="partial";}
+    h+="<div class=\"recon-pay-card\"><div class=\"recon-pay-top\">"
+      +"<div><span class=\"recon-pay-ref\">"+escapeHtmlR(ref)+"</span> <span class=\"recon-pay-meta\">"+(p.payment_date||"")+"</span></div>"
+      +"<div><span class=\"recon-pay-gross\">AED "+aed(gross)+"</span> <span class=\"recon-status "+scls+"\">"+status+"</span></div></div>";
+    if(linkedInv.length){h+="<div class=\"recon-sub\">Linked invoices</div><ul class=\"recon-linked\">"+linkedInv.map(function(i){return "<li><span class=\"ll-label\">"+escapeHtmlR(i.invoice_number)+"</span><span>AED "+aed(i.amount_aed)+"</span></li>";}).join("")+"</ul>";}
+    if(linkedCred.length){h+="<div class=\"recon-sub\">Dispute credits</div><ul class=\"recon-linked\">"+linkedCred.map(function(d){return "<li><span class=\"ll-label\">"+escapeHtmlR(d.dispute_number)+"</span><span>AED "+aed(d.credit_amount_aed)+"</span></li>";}).join("")+"</ul>";}
+    h+="<div class=\"recon-net\"><span class=\"ll-label\">Linked total vs gross</span><span>AED "+aed(net)+" / AED "+aed(gross)+"</span></div></div>";
+  });
+  host.innerHTML=h;
+}
+window.exportReconciliationPDF=function(){
+  var root=document.getElementById("recon-print-root");
+  if(!root){root=document.createElement("div");root.id="recon-print-root";document.body.appendChild(root);}
+  var now=new Date();var dstr=now.toISOString().slice(0,10);
+  var invPO=RECON.inv.filter(function(i){return i.po_number!=null&&i.po_number!=="";});
+  var html="<div class=\"rp-header\">Techniline Electronics LLC</div><div class=\"rp-sub\">Reconciliation report &middot; Generated "+dstr+"</div>";
+  html+="<div class=\"rp-h\">Invoice summary (with PO)</div><table class=\"rp-tbl\"><thead><tr><th>Invoice #</th><th>PO</th><th>Amount AED</th><th>Payment status</th></tr></thead><tbody>";
+  invPO.forEach(function(i){html+="<tr><td>"+escapeHtmlR(i.invoice_number)+"</td><td>"+escapeHtmlR(i.po_number)+"</td><td>"+aed(i.amount_aed)+"</td><td>"+escapeHtmlR(i.payment_status||"unpaid")+"</td></tr>";});
+  html+="</tbody></table>";
+  html+="<div class=\"rp-h\">Payment summary</div><table class=\"rp-tbl\"><thead><tr><th>Remittance</th><th>Date</th><th>Gross AED</th><th>Linked invoices</th></tr></thead><tbody>";
+  RECON.rem.forEach(function(p){var li=RECON.inv.filter(function(i){return i.payment_number===p.remittance_ref;}).map(function(i){return i.invoice_number;}).join(", ");html+="<tr><td>"+escapeHtmlR(p.remittance_ref)+"</td><td>"+(p.payment_date||"")+"</td><td>"+aed(p.gross_amount_aed)+"</td><td>"+escapeHtmlR(li)+"</td></tr>";});
+  html+="</tbody></table>";
+  var outs=RECON.disp.filter(function(d){return ["resolved","amazon_rejected"].indexOf(d.dispute_status)===-1;});
+  if(outs.length){html+="<div class=\"rp-h\">Outstanding disputes</div><table class=\"rp-tbl\"><thead><tr><th>Dispute #</th><th>Invoice</th><th>Gap AED</th><th>Status</th></tr></thead><tbody>";
+  outs.forEach(function(d){html+="<tr class=\"rp-amber\"><td>"+escapeHtmlR(d.dispute_number)+"</td><td>"+escapeHtmlR(d.tle_invoice_number||"")+"</td><td>"+aed(d.gap_aed)+"</td><td>"+escapeHtmlR(d.dispute_status||"")+"</td></tr>";});html+="</tbody></table>";}
+  root.innerHTML=html;window.print();
+};
+if(typeof window.switchTab==="function"&&!window.__reconSwitchHooked){
+  window.__reconSwitchHooked=true;var _orig=window.switchTab;
+  window.switchTab=function(tab,el){var r=_orig.apply(this,arguments);if(tab==="reconciliation"){loadReconciliation();}return r;};
+}
+})();
+</script>
+
 
 <style id="add-return-modal-css">
 .returns-completion-card { background:#fff; border:1px solid #E2E8F0; border-left:4px solid #F59E0B; border-radius:10px; padding:14px 16px; margin:10px 0; }
@@ -5060,6 +5190,9 @@ input[type='text'], input[type='search'], input[type='number'], input[type='date
 .inline-edit-input { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:110px; max-width:180px; color:#1a1a1a; }
 .inline-edit-select { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:120px; color:#1a1a1a; }
 .inline-edit-save { margin-left:6px; padding:4px 10px; background:#009198; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; }
+
+/* ===== Reconciliation tab (additive) ===== */
+.recon-wrap{padding:18px 22px;max-width:1500px;margin:0 auto;}.recon-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;}.recon-title{font-size:20px;font-weight:700;color:#0b1f3a;margin:0;}.recon-print-btn{display:inline-flex;align-items:center;gap:8px;background:#009198;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;}.recon-print-btn:hover{background:#007a80;}.recon-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}@media(max-width:900px){.recon-summary{grid-template-columns:repeat(2,1fr);}}.recon-stat{border-radius:12px;padding:16px 18px;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);}.recon-stat .rs-label{font-size:12px;opacity:.9;font-weight:500;margin-bottom:6px;letter-spacing:.02em;}.recon-stat .rs-value{font-size:24px;font-weight:700;line-height:1.1;}.recon-stat.teal{background:linear-gradient(135deg,#009198,#00b3bb);}.recon-stat.navy{background:linear-gradient(135deg,#0b1f3a,#1c3a63);}.recon-stat.green{background:linear-gradient(135deg,#1f9d55,#28b463);}.recon-stat.amber{background:linear-gradient(135deg,#d68910,#e8a13a);}.recon-section{margin-bottom:28px;}.recon-h3{font-size:15px;font-weight:700;color:#0b1f3a;margin:0 0 12px;}.recon-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}.recon-chip{border:1.5px solid #CCF0F1;background:#f8f7fc;color:#0b1f3a;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;}.recon-chip:hover{border-color:#009198;}.recon-chip.active{background:#009198;border-color:#009198;color:#fff;}.recon-table-host{overflow-x:auto;border:1px solid #e6e8ee;border-radius:10px;}.recon-tbl{width:100%;border-collapse:collapse;font-size:13px;}.recon-tbl th{position:sticky;top:0;background:#f4f6f9;color:#475569;text-align:left;font-weight:600;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid #e6e8ee;z-index:1;}.recon-tbl td{padding:10px 12px;border-bottom:1px solid #f0f1f5;color:#1a1a1a;vertical-align:middle;}.recon-tbl tr:hover td{background:#fafbfc;}.recon-inv-num{font-family:ui-monospace,Menlo,Consolas,monospace;color:#009198;font-weight:600;}.recon-pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}.recon-pill.paid{background:#e6f6ec;color:#1f9d55;}.recon-pill.unpaid{background:#fdf2e2;color:#b9770a;}.recon-po-add{color:#d68910;font-weight:600;cursor:pointer;}.recon-po-add:hover{text-decoration:underline;}.recon-muted{color:#9aa3b2;font-style:italic;}.recon-age{font-weight:600;}.recon-age.overdue{color:#dc2626;}.recon-pay-card{border:1px solid #e6e8ee;border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fff;}.recon-pay-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;}.recon-pay-ref{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:#0b1f3a;font-size:14px;}.recon-pay-meta{font-size:12px;color:#64748b;}.recon-pay-gross{font-size:15px;font-weight:700;color:#0b1f3a;}.recon-linked{font-size:12px;color:#334155;margin:4px 0 0 0;padding-left:0;list-style:none;}.recon-linked li{padding:3px 0;border-bottom:1px dashed #eef0f4;display:flex;justify-content:space-between;gap:12px;}.recon-linked .ll-label{color:#64748b;}.recon-sub{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#94a3b8;margin:10px 0 2px;}.recon-net{margin-top:10px;padding-top:8px;border-top:1px solid #e6e8ee;display:flex;justify-content:space-between;align-items:center;font-size:13px;}.recon-status{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}.recon-status.reconciled{background:#e6f6ec;color:#1f9d55;}.recon-status.partial{background:#fdf2e2;color:#b9770a;}.recon-status.unreconciled{background:#fdeaea;color:#dc2626;}.recon-empty{padding:18px;text-align:center;color:#9aa3b2;font-size:13px;}#recon-print-root{display:none;}@media print{body *{visibility:hidden;}#recon-print-root,#recon-print-root *{visibility:visible;}#recon-print-root{display:block!important;position:absolute;left:0;top:0;width:100%;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#000;}.rp-header{font-size:20px;font-weight:700;border-bottom:2px solid #009198;padding-bottom:8px;margin-bottom:4px;}.rp-sub{font-size:12px;color:#444;margin-bottom:18px;}.rp-h{font-size:14px;font-weight:700;margin:18px 0 6px;}.rp-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;}.rp-tbl th,.rp-tbl td{border:1px solid #bbb;padding:4px 6px;text-align:left;}.rp-tbl th{background:#eef2f6;}.rp-amber{background:#fff4e0;}}
 </style>
 <div id="escalate-modal-host"></div>
 </body>
