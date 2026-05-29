@@ -1207,7 +1207,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
         <svg class="global-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="global-search" class="global-search-input" placeholder="Search disputes, returns, POs, invoices…" autocomplete="off" oninput="onGlobalSearchInput(event)" onkeydown="onGlobalSearchKey(event)" onfocus="if(this.value)showGlobalSearchResults()" />
         <span class="global-search-kbd">Ctrl K</span>
-        <div class="global-search-panel" id="global-search-panel" style="display:none"></div>
+        <div class="global-search-panel" id="global-search-panel" style="display:none"><button type="button" class="tl-x-close" onclick="closeGlobalSearch()" aria-label="Close" style="position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;border:1px solid #CCF0F1;background:white;color:#009198;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:all 0.15s;z-index:5;" onmouseover="this.style.background='#E6F8F8'" onmouseout="this.style.background='white'">×</button></div>
       </div>
       <div class="topbar-date" id="topbar-date"></div>
       <div class="topbar-user">
@@ -1399,7 +1399,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
       
     <!-- Pre-dispute checklist overlay -->
     <div class="predispute-overlay" id="predispute-overlay">
-      <div class="predispute-box">
+      <div class="predispute-box" style="position:relative;"><button type="button" class="tl-x-close" onclick="closePreDispute()" aria-label="Close" style="position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;border:1px solid #CCF0F1;background:white;color:#009198;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:all 0.15s;z-index:5;" onmouseover="this.style.background='#E6F8F8'" onmouseout="this.style.background='white'">×</button>
         <div class="predispute-title">Before raising a dispute — confirm all of the following</div>
         <div class="predispute-subtitle">Disputing without evidence reduces recovery credibility</div>
         <div class="predispute-check" id="pdc-1" onclick="togglePreDisputeCheck(1)"><div class="predispute-check-box">✓</div><div class="predispute-check-label">POD was signed and confirmed by carrier</div></div>
@@ -4911,6 +4911,62 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
     window[name] = wrapped;
   }
   function install(){ ['renderReturnsTable','renderReturns','renderDisputes'].forEach(wrap); window.enhanceEditableTables(); }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') install();
+  else window.addEventListener('DOMContentLoaded', install);
+})();
+</script>
+
+<script>
+/* === Modal UX: click-outside-to-close + Escape-to-close (additive) === */
+(function(){
+  if (window.__modalCloseUXInstalled) return;
+  window.__modalCloseUXInstalled = true;
+
+  function closeAllOpenModals(){
+    // Standard modal-overlay modals (open via 'open' class)
+    document.querySelectorAll('.modal-overlay.open, .modal-overlay.active').forEach(function(m){
+      if (typeof closeModal === 'function' && m.id) { try { closeModal(m.id); return; } catch(e){} }
+      m.classList.remove('open','active');
+    });
+    // Pre-dispute overlay
+    var pd = document.getElementById('predispute-overlay');
+    if (pd && pd.classList.contains('open')) {
+      if (typeof closePreDispute === 'function') { try { closePreDispute(); } catch(e){ pd.classList.remove('open','active'); } }
+      else pd.classList.remove('open','active');
+    }
+    // Escalate modal (dynamic host)
+    var eh = document.getElementById('escalate-modal-host');
+    if (eh && eh.children.length) {
+      if (typeof closeEscalateModal === 'function') { try { closeEscalateModal(); } catch(e){ eh.innerHTML=''; } }
+      else eh.innerHTML = '';
+    }
+    // Global search panel
+    var sp = document.getElementById('global-search-panel');
+    if (sp && sp.style.display !== 'none') {
+      if (typeof closeGlobalSearch === 'function') { try { closeGlobalSearch(); } catch(e){ sp.style.display='none'; } }
+      else sp.style.display = 'none';
+    }
+  }
+  window.__closeAllOpenModals = closeAllOpenModals;
+
+  // Click on dark overlay backdrop closes that modal
+  function wireOverlay(el, closer){
+    if (!el || el.__overlayClickWired) return;
+    el.__overlayClickWired = true;
+    el.addEventListener('click', function(e){ if (e.target === el) { closer(el); } });
+  }
+  function installOverlayClicks(){
+    document.querySelectorAll('.modal-overlay').forEach(function(m){
+      wireOverlay(m, function(el){ if (typeof closeModal === 'function' && el.id){ try{ closeModal(el.id); return; }catch(e){} } el.classList.remove('open','active'); });
+    });
+    var pd = document.getElementById('predispute-overlay');
+    wireOverlay(pd, function(el){ if (typeof closePreDispute === 'function'){ try{ closePreDispute(); return; }catch(e){} } el.classList.remove('open','active'); });
+  }
+
+  // Escape key closes any open modal
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAllOpenModals(); });
+
+  function install(){ installOverlayClicks(); }
   if (document.readyState === 'complete' || document.readyState === 'interactive') install();
   else window.addEventListener('DOMContentLoaded', install);
 })();
