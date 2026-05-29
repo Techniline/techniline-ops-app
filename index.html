@@ -4724,6 +4724,198 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
 })();
 </script>
 
+<script>
+/* === Universal inline cell editing (additive; visual + Supabase update only) === */
+(function(){
+  if (window.__inlineEditInstalled) return;
+  window.__inlineEditInstalled = true;
+
+  const STAGE_OPTS = [
+    {value:'SRT Required',label:'SRT Required'},
+    {value:'SRT Raised',label:'SRT Raised'},
+    {value:'PRT Pending',label:'PRT Pending'},
+    {value:'PRT Received',label:'PRT Received'},
+    {value:'Dispute Raised',label:'Dispute Raised'},
+    {value:'Resolved',label:'Resolved'}
+  ];
+  const RET_STATUS_OPTS = [
+    {value:'open',label:'open'},
+    {value:'pending_dispute',label:'pending_dispute'},
+    {value:'closed',label:'closed'}
+  ];
+
+  // Returns column-index -> db column config
+  const RETURNS_COLS = {
+    0:{col:'date_received',type:'date'},
+    1:{col:'return_id',type:'text'},
+    2:{col:'vret_number',type:'text'},
+    3:{col:'model_sku',type:'text'},
+    4:{col:'po_number',type:'text'},
+    5:{col:'tle_invoice_number',type:'text'},
+    6:{col:'invoice_date',type:'date'},
+    7:{col:'qty',type:'number'},
+    8:{col:'total_cost_aed',type:'number'},
+    9:{col:'recovery_amt_aed',type:'number'},
+    10:{col:'stage',type:'select',options:STAGE_OPTS},
+    11:{col:'srt_number',type:'text'},
+    12:{col:'prt_number',type:'text'},
+    13:{col:'dispute_id_ref',type:'text'},
+    14:{col:'status',type:'select',options:RET_STATUS_OPTS}
+  };
+  // Disputes column-index -> db column config
+  const DISPUTES_COLS = {
+    1:{col:'return_ids',type:'text'},
+    3:{col:'tle_invoice_number',type:'text'},
+    4:{col:'po_number',type:'text'},
+    5:{col:'payment_number',type:'text'},
+    6:{col:'invoice_amount_aed',type:'number'},
+    9:{col:'created_at',type:'date'},
+    10:{col:'srt_number',type:'text'},
+    11:{col:'prt_number',type:'text'}
+  };
+
+  function cellText(td){ return (td.textContent||'').trim(); }
+  function isEmptyVal(v){ return v===''||v==='—'||v==='-'||v==null; }
+
+  function tagCell(cell, table, idField, idValue, cfg){
+    if (!cell || cell.__editWired) return;
+    // skip cells containing controls/buttons/links already (action cells)
+    if (cell.querySelector('button, a, select, input')) return;
+    cell.__editWired = true;
+    cell.classList.add('editable-cell');
+    const txt = cellText(cell);
+    cell.dataset.value = isEmptyVal(txt) ? '' : txt;
+    if (isEmptyVal(txt)) { cell.classList.add('empty'); cell.dataset.placeholder = cell.innerHTML.trim()||'—'; if(!cell.textContent.trim()){ cell.textContent='Add'; } }
+    cell.onclick = function(e){
+      if (cell.querySelector('input,select')) return;
+      makeEditable(cell, table, idField, idValue, cfg.col, cfg.type||'text', cfg.options||null);
+      e.stopPropagation();
+    };
+  }
+
+  window.makeEditable = function(cell, table, idField, idValue, dbColumn, inputType, options){
+    inputType = inputType || 'text';
+    const currentVal = cell.dataset.value || '';
+    const restore = function(val){
+      cell.dataset.value = val;
+      if (isEmptyVal(val)) { cell.classList.add('empty'); cell.textContent='Add'; }
+      else { cell.classList.remove('empty'); cell.textContent = val; }
+      cell.classList.add('cell-saved');
+      setTimeout(function(){ cell.classList.remove('cell-saved'); }, 850);
+      cell.onclick = function(e){ if(cell.querySelector('input,select')) return; makeEditable(cell, table, idField, idValue, dbColumn, inputType, options); e.stopPropagation(); };
+    };
+    const btn = document.createElement('button');
+    btn.textContent = 'Save'; btn.className='inline-edit-save';
+    if (inputType==='select' && options){
+      const sel = document.createElement('select'); sel.className='inline-edit-select';
+      options.forEach(function(opt){ const o=document.createElement('option'); o.value=opt.value; o.textContent=opt.label; if(opt.value===currentVal) o.selected=true; sel.appendChild(o); });
+      cell.classList.remove('empty'); cell.innerHTML=''; cell.appendChild(sel); cell.appendChild(btn);
+      btn.onclick = async function(){
+        const val = sel.value;
+        try { await sb.from(table).update({[dbColumn]: val}).eq(idField, idValue); } catch(err){ console.error('inline save', err); }
+        restore(val);
+        afterSave(table, idValue, dbColumn, val);
+      };
+    } else {
+      const inp = document.createElement('input'); inp.type=inputType; inp.value=currentVal; inp.className='inline-edit-input';
+      cell.classList.remove('empty'); cell.innerHTML=''; cell.appendChild(inp); cell.appendChild(btn); inp.focus();
+      const save = async function(){
+        let val = inp.value; if (typeof val==='string') val=val.trim();
+        if (val==='' && inputType!=='date') { restore(currentVal); return; }
+        let payload = val;
+        if (inputType==='number') payload = (val===''?null:Number(val));
+        try { await sb.from(table).update({[dbColumn]: payload}).eq(idField, idValue); } catch(err){ console.error('inline save', err); }
+        restore(val);
+        afterSave(table, idValue, dbColumn, val);
+      };
+      btn.onclick = save;
+      inp.onkeydown = function(e){ if(e.key==='Enter') save(); if(e.key==='Escape') restore(currentVal); };
+    }
+  };
+
+  window.afterSave = async function(table, recordId, column, value){
+    try {
+      if (table === 'returns') {
+        const { data: ret } = await sb.from('returns').select('*').eq('id', recordId).single();
+        if (!ret) return;
+        if (ret.dispute_id_ref) {
+          const updates = {};
+          if (column === 'srt_number') updates.srt_number = value;
+          if (column === 'prt_number') updates.prt_number = value;
+          if (column === 'po_number') updates.po_number = value;
+          if (column === 'tle_invoice_number') updates.tle_invoice_number = value;
+          if (Object.keys(updates).length > 0) {
+            const { data: disp } = await sb.from('disputes').select('srt_number,prt_number,po_number,tle_invoice_number').eq('dispute_number', ret.dispute_id_ref).single();
+            if (disp) {
+              const safeUpdates = {};
+              Object.keys(updates).forEach(function(k){ if(!disp[k]) safeUpdates[k]=updates[k]; });
+              if (Object.keys(safeUpdates).length > 0) await sb.from('disputes').update(safeUpdates).eq('dispute_number', ret.dispute_id_ref);
+            }
+          }
+        }
+        if (column === 'dispute_id_ref') {
+          const { data: disp } = await sb.from('disputes').select('po_number,tle_invoice_number,invoice_amount_aed').eq('dispute_number', value).single();
+          if (disp) {
+            const pullUpdates = {};
+            if (!ret.po_number && disp.po_number) pullUpdates.po_number = disp.po_number;
+            if (!ret.tle_invoice_number && disp.tle_invoice_number) pullUpdates.tle_invoice_number = disp.tle_invoice_number;
+            if (Object.keys(pullUpdates).length > 0) await sb.from('returns').update(pullUpdates).eq('id', recordId);
+          }
+        }
+      }
+    } catch(err){ console.error('afterSave', err); }
+  };
+
+  window.enhanceEditableTables = function(){
+    try {
+      // RETURNS
+      const rHost = document.getElementById('returns-table-host');
+      if (rHost) {
+        rHost.querySelectorAll('tr.ret-row').forEach(function(tr){
+          const rid = tr.getAttribute('data-rid');
+          if (!rid) return;
+          const tds = tr.children;
+          Object.keys(RETURNS_COLS).forEach(function(idx){
+            const td = tds[+idx];
+            if (td) tagCell(td, 'returns', 'id', rid, RETURNS_COLS[idx]);
+          });
+        });
+      }
+      // DISPUTES
+      const dHost = document.getElementById('disp-list');
+      if (dHost) {
+        dHost.querySelectorAll('tr[data-id]').forEach(function(tr){
+          if (tr.classList.contains('expand-row')) return;
+          const did = tr.getAttribute('data-id');
+          if (!did) return;
+          const tds = tr.children;
+          Object.keys(DISPUTES_COLS).forEach(function(idx){
+            const td = tds[+idx];
+            if (td) tagCell(td, 'disputes', 'id', did, DISPUTES_COLS[idx]);
+          });
+        });
+      }
+    } catch(err){ console.error('enhanceEditableTables', err); }
+  };
+
+  // Non-destructive wrappers: run enhancer after the real render functions complete.
+  function wrap(name){
+    const fn = window[name];
+    if (typeof fn !== 'function' || fn.__wrappedEdit) return;
+    const wrapped = function(){
+      const out = fn.apply(this, arguments);
+      setTimeout(window.enhanceEditableTables, 0);
+      return out;
+    };
+    wrapped.__wrappedEdit = true;
+    window[name] = wrapped;
+  }
+  function install(){ ['renderReturnsTable','renderReturns','renderDisputes'].forEach(wrap); window.enhanceEditableTables(); }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') install();
+  else window.addEventListener('DOMContentLoaded', install);
+})();
+</script>
+
 <style id="add-return-modal-css">
 .returns-completion-card { background:#fff; border:1px solid #E2E8F0; border-left:4px solid #F59E0B; border-radius:10px; padding:14px 16px; margin:10px 0; }
 .returns-completion-card .rc-top { margin-bottom:10px; }
@@ -4795,6 +4987,23 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
 .ret-copy-btn:hover { background:#009198; color:#fff; border-color:#009198; }
 .ret-copy-btn.copied { background:#10B981; color:#fff; border-color:#10B981; }
 .vc-lookup { display:inline-block; font-size:11px; font-weight:500; color:#009198; background:#EEF2F6; padding:2px 8px; border-radius:999px; margin-left:8px; }
+
+/* === FIX1: visible input text === */
+.global-search-input { color:#1a1a1a !important; }
+.global-search-input::placeholder { color:#a0aec0; }
+input[type='text'], input[type='search'], input[type='number'], input[type='date'], select, textarea { color:#1a1a1a; }
+.field-input, .modal-input, .date-input-sm { color:#1a1a1a !important; }
+
+/* === FIX2: universal inline cell editing === */
+.editable-cell { cursor:pointer; position:relative; }
+.editable-cell:hover::after { content:'\270E'; font-size:10px; color:#009198; margin-left:4px; opacity:0.7; }
+.editable-cell.empty { color:#009198; opacity:0.7; font-style:italic; }
+.editable-cell.empty::before { content:'+ '; }
+.cell-saved { animation: cellFlash 0.8s ease; }
+@keyframes cellFlash { 0%,100%{background:transparent} 30%{background:#E6F8F8} }
+.inline-edit-input { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:110px; max-width:180px; color:#1a1a1a; }
+.inline-edit-select { font-size:12px; padding:4px 8px; border:1.5px solid #009198; border-radius:6px; outline:none; min-width:120px; color:#1a1a1a; }
+.inline-edit-save { margin-left:6px; padding:4px 10px; background:#009198; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; }
 </style>
 <div id="escalate-modal-host"></div>
 </body>
