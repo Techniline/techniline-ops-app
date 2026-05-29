@@ -1859,7 +1859,9 @@ function setNotifWindow(win) {
     ...open.filter(n=>n.type==='remittance'||n.type==='return_processed'),
     ...done];
   if (sorted.length === 0) { document.getElementById('notif-list').innerHTML = '<div class="empty-state"><div class="empty-title">All clear</div><div class="empty-sub">No notifications at the moment</div></div>'; return; }
-  document.getElementById('notif-list').innerHTML = sorted.map(n => buildNotifCard(n)).join('');
+  const missingInv = sorted.filter(n => n.type === 'vendor_po' && n.needs_invoice === true).length;
+  const invBanner = missingInv > 0 ? '<div class="inv-missing-banner" onclick="document.getElementById(\'notif-list\').scrollIntoView()">' + missingInv + ' PO' + (missingInv === 1 ? '' : 's') + ' confirmed but missing invoice number — tap to complete</div>' : '';
+  document.getElementById('notif-list').innerHTML = invBanner + sorted.map(n => buildNotifCard(n)).join('');
 }
 
 function buildNotifCard(n) {
@@ -1910,7 +1912,7 @@ function buildNotifCard(n) {
     actions = `<div class="done-row" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Cancelled by Amazon — no action needed</div>`;
     setTimeout(() => autoActionCancelled(n.id), 1000);
   } else if (n.type === 'vendor_po') {
-    actions = `<button class="btn-navy" onclick="openPOModal('${n.id}','${n.ref_number}')">Action PO ${n.ref_number}</button><span class="sla-pill warning">2 days to confirm</span>`;
+    actions = `<button class="btn-navy" onclick="openPOConfirmForm('${n.id}','${n.ref_number}','${n.po_number||''}')">Confirm PO ${n.ref_number}</button><button class="btn-light" onclick="openPOModal('${n.id}','${n.ref_number}')">More actions</button><span class="sla-pill warning">2 days to confirm</span><div id="po-confirm-form-${n.id}" class="accept-form-host"></div>`;
   } else if (n.type === 'shortage_claim') {
     actions = `<button class="btn-navy" onclick="raiseDisputeFromClaim('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="openAcceptForm('${n.id}', ${parseFloat(n.aed_amount)||0})">Accept</button><button class="btn-outline" style="border-color:var(--amber);color:var(--amber)" onclick="openEscalateModal('${n.id}', '${n.ref_number||''}', ${parseFloat(n.aed_amount)||0})">Escalate</button><span class="sla-pill urgent">Act within 2 days</span><div id="accept-form-${n.id}" class="accept-form-host"></div>`;
   } else if (n.type === 'po_cancellation') {
@@ -2131,6 +2133,81 @@ async function submitPOAction() {
   await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentPOActionId);
   closeModal('po-modal');
   showToast('PO actioned successfully');
+  await loadNotifications();
+}
+
+function openPOConfirmForm(actionId, refNumber, poNumber) {
+  const host = document.getElementById('po-confirm-form-' + actionId);
+  if (!host) return;
+  if (host.innerHTML.trim() !== '') { host.innerHTML = ''; return; }
+  const today = new Date().toISOString().slice(0,10);
+  host.innerHTML = `
+    <div class="accept-form">
+      <div class="accept-form-title">Confirm PO ${refNumber}</div>
+      <div class="accept-form-row"><label>WS Invoice Number</label><input type="text" id="poci-num-${actionId}" placeholder="WS/2600xxx" oninput="validatePOConfirm('${actionId}')"></div>
+      <div class="accept-form-row"><label>Invoice Date</label><input type="date" id="poci-date-${actionId}" value="${today}" oninput="validatePOConfirm('${actionId}')"></div>
+      <div class="accept-form-row"><label>Invoice Amount AED</label><input type="number" id="poci-amt-${actionId}" min="0.01" step="0.01" placeholder="0.00" oninput="validatePOConfirm('${actionId}')"></div>
+      <div class="accept-form-note">This invoice number links your shipment to the Amazon payment for reconciliation — required before confirming.</div>
+      <button class="btn-navy" id="poci-submit-${actionId}" disabled onclick="submitPOConfirm('${actionId}','${poNumber}')">Confirm PO and log invoice</button>
+      <div class="accept-form-later"><a href="#" onclick="markPONeedsInvoice('${actionId}','${poNumber}');return false;">I will enter invoice number later</a></div>
+    </div>`;
+  validatePOConfirm(actionId);
+}
+
+function closePOConfirmForm(actionId) {
+  const host = document.getElementById('po-confirm-form-' + actionId);
+  if (host) host.innerHTML = '';
+}
+
+function validatePOConfirm(actionId) {
+  const numEl = document.getElementById('poci-num-' + actionId);
+  const dateEl = document.getElementById('poci-date-' + actionId);
+  const amtEl = document.getElementById('poci-amt-' + actionId);
+  const btn = document.getElementById('poci-submit-' + actionId);
+  if (!numEl || !dateEl || !amtEl || !btn) return;
+  const num = numEl.value.trim();
+  const dateOk = !!dateEl.value;
+  const amtOk = parseFloat(amtEl.value) >= 0.01;
+  const numOk = num.startsWith('WS/') && num.length > 3;
+  btn.disabled = !(numOk && dateOk && amtOk);
+}
+
+async function submitPOConfirm(actionId, poNumber) {
+  const num = document.getElementById('poci-num-' + actionId).value.trim();
+  const date = document.getElementById('poci-date-' + actionId).value;
+  const amt = parseFloat(document.getElementById('poci-amt-' + actionId).value);
+  if (!num.startsWith('WS/')) { alert('Invoice number must start with WS/'); return; }
+  if (!date) { alert('Invoice date is required.'); return; }
+  if (!(amt >= 0.01)) { alert('Invoice amount must be at least 0.01 AED.'); return; }
+  const { error: invErr } = await sb.from('invoices').upsert({
+    invoice_number: num,
+    invoice_date: date,
+    amount_aed: amt,
+    po_number: poNumber || null,
+    payment_status: 'awaiting_remittance',
+    source: 'po_confirmation'
+  }, { onConflict: 'invoice_number' });
+  if (invErr) { alert('Error logging invoice: ' + invErr.message); return; }
+  const { error: aErr } = await sb.from('expected_actions').update({
+    status: 'actioned',
+    actioned_at: new Date().toISOString(),
+    actioned_by: currentUser.id,
+    needs_invoice: false
+  }).eq('id', actionId);
+  if (aErr) { alert('Error updating action: ' + aErr.message); return; }
+  showToast('PO confirmed — invoice ' + num + ' logged for reconciliation');
+  await loadNotifications();
+}
+
+async function markPONeedsInvoice(actionId, poNumber) {
+  const { error } = await sb.from('expected_actions').update({
+    status: 'actioned',
+    actioned_at: new Date().toISOString(),
+    actioned_by: currentUser.id,
+    needs_invoice: true
+  }).eq('id', actionId);
+  if (error) { alert('Error: ' + error.message); return; }
+  showToast('PO marked as actioned — invoice number still required');
   await loadNotifications();
 }
 
