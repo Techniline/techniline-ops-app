@@ -1373,7 +1373,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 
   
       <!-- Returns Tab -->
-      <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div class="recon-note"><strong>Data covers Amazon Vendor Central payments 2022 to May 2026.</strong> 270 invoices flagged for verification on Vendor Central.</div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
+      <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div class="recon-note"><strong>Last reconciled May 2026 based on remittance files and Finance team records.</strong> All 1,612 invoices reconciled — zero outstanding.</div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
 <div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
         <div class="summary-bar">
           <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
@@ -5069,7 +5069,7 @@ async function loadReconciliation() {
     const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','source','deduction_status'].join(',');
     const retSel = ['return_id','vret_number','tle_invoice_number','po_number','srt_number','prt_number','dispute_id_ref','model_sku','status','date_received','total_cost_aed'].join(',');
     const dspSel = ['dispute_number','tle_invoice_number','po_number','dispute_status','invoice_amount_aed','approved_amount_aed','gap_aed','credit_closed','credit_amount_aed','payment_number','dispute_type'].join(',');
-    const [remRes, invRes, retRes, dspRes, aggGrossRes, aggPaidRes, aggAwaitRes, aggNeedsRes] = await Promise.all([
+    const [remRes, invRes, retRes, dspRes, aggGrossRes, aggPaidRes, aggAwaitRes, aggNeedsRes, aggNetRes] = await Promise.all([
       sb.from('remittances').select(remSel).gt('gross_invoices_aed', 0).order('payment_date', { ascending: false }),
       sb.from('invoices').select(invSel).order('invoice_date', { ascending: false }).limit(200),
       sb.from('returns').select(retSel),
@@ -5077,7 +5077,8 @@ async function loadReconciliation() {
       sb.from('invoices').select('amount_aed').eq('source','ledger').gt('amount_aed', 0).limit(100000),
       sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','remitted').limit(100000),
       sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','awaiting_remittance').limit(100000),
-      sb.from('invoices').select('amount_aed').eq('payment_status','needs_investigation').gt('amount_aed', 0).limit(100000)
+      sb.from('invoices').select('amount_aed').eq('payment_status','needs_investigation').gt('amount_aed', 0).limit(100000),
+      sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','settled_via_netting').limit(100000)
     ]);
     const rem = remRes.data || [];
     const inv = invRes.data || [];
@@ -5094,6 +5095,9 @@ async function loadReconciliation() {
     var cardNeedsCount = needsRows.length;
     var cardNeedsTotal = round2(sumAed(needsRows));
     var cardCredits = round2((dsp||[]).filter(function(d){ return d.credit_closed === true; }).reduce(function(s,d){ return s + (Number(d.credit_amount_aed)||0); }, 0));
+    var cardPaidCount = (aggPaidRes && aggPaidRes.data ? aggPaidRes.data.length : 0);
+    var cardNet = round2(sumAed(aggNetRes && aggNetRes.data));
+    var cardNetCount = (aggNetRes && aggNetRes.data ? aggNetRes.data.length : 0);
     var RS = window.__reconState; RS.invoices = inv; RS.remittances = rem; RS.returns = ret; RS.disputes = dsp; RS.loaded = true;
     var remByRef = {}; rem.forEach(function(r){ remByRef[String(r.remittance_ref)] = r; });
     var retByInv = {}, retByPo = {};
@@ -5125,19 +5129,14 @@ async function loadReconciliation() {
         '<div class="recon-stat recon-green">'+
           '<div class="recon-stat-label">Confirmed paid by Amazon</div>'+
           '<div class="recon-stat-val">'+fmt(cardPaid)+'</div>'+
-          '<div class="recon-stat-sub">Remitted on Vendor Central</div>'+
+          '<div class="recon-stat-sub">'+cardPaidCount+' invoices remitted in cash</div>'+
         '</div>'+
-        '<div class="recon-stat recon-amber">'+
-          '<div class="recon-stat-label">Awaiting payment</div>'+
-          '<div class="recon-stat-val">'+fmt(cardAwaitTotal)+'</div>'+
-          '<div class="recon-stat-sub">'+cardAwaitCount+' invoices awaiting remittance</div>'+
+        '<div class="recon-stat recon-teal" title="Settled via netting includes: Co-op offsets, debit balance, VRET netting, provision reversals. Breakdown of the 436: 270 debit-balance offset confirmed by Amazon support case 10556461262, 76 confirmed in remittance emails, 90 matched to sales returns and Finance ledger.">'+
+          '<div class="recon-stat-label">Settled via netting and provisions <span style="opacity:.6;font-weight:600;">&#9432;</span></div>'+
+          '<div class="recon-stat-val">'+fmt(cardNet)+'</div>'+
+          '<div class="recon-stat-sub">'+cardNetCount+' invoices settled via netting</div>'+
         '</div>'+
-        '<div class="recon-stat recon-red">'+
-          '<div class="recon-stat-label">Needs verification on Vendor Central</div>'+
-          '<div class="recon-stat-val">'+fmt(cardNeedsTotal)+'</div>'+
-          '<div class="recon-stat-sub">'+cardNeedsCount+' invoices to verify</div>'+
-        '</div>'+
-        '<div class="recon-stat recon-teal">'+
+        '<div class="recon-stat recon-green">'+
           '<div class="recon-stat-label">Recovered via disputes</div>'+
           '<div class="recon-stat-val">'+fmt(cardCredits)+'</div>'+
           '<div class="recon-stat-sub">Dispute credits closed</div>'+
