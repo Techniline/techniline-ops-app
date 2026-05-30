@@ -1373,7 +1373,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 
   
       <!-- Returns Tab -->
-      <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
+      <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div class="recon-note"><strong>Data covers Amazon Vendor Central payments 2022 to May 2026.</strong> 270 invoices flagged for verification on Vendor Central.</div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
 <div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
         <div class="summary-bar">
           <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
@@ -5066,19 +5066,34 @@ async function loadReconciliation() {
   if (!sb) return;
   try {
     const remSel = ['remittance_ref','payment_date','gross_invoices_aed','coop_deductions_aed','vret_deductions_aed','shortage_deductions_aed','damage_deductions_aed','dispute_credits_aed','net_paid_aed','gross_amount_aed','invoice_count'].join(',');
-    const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','deduction_status'].join(',');
+    const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','source','deduction_status'].join(',');
     const retSel = ['return_id','vret_number','tle_invoice_number','po_number','srt_number','prt_number','dispute_id_ref','model_sku','status','date_received','total_cost_aed'].join(',');
-    const dspSel = ['dispute_number','tle_invoice_number','po_number','dispute_status','invoice_amount_aed','approved_amount_aed','gap_aed','credit_closed','payment_number','dispute_type'].join(',');
-    const [remRes, invRes, retRes, dspRes] = await Promise.all([
+    const dspSel = ['dispute_number','tle_invoice_number','po_number','dispute_status','invoice_amount_aed','approved_amount_aed','gap_aed','credit_closed','credit_amount_aed','payment_number','dispute_type'].join(',');
+    const [remRes, invRes, retRes, dspRes, aggGrossRes, aggPaidRes, aggAwaitRes, aggNeedsRes] = await Promise.all([
       sb.from('remittances').select(remSel).gt('gross_invoices_aed', 0).order('payment_date', { ascending: false }),
-      sb.from('invoices').select(invSel),
+      sb.from('invoices').select(invSel).order('invoice_date', { ascending: false }).limit(200),
       sb.from('returns').select(retSel),
-      sb.from('disputes').select(dspSel)
+      sb.from('disputes').select(dspSel),
+      sb.from('invoices').select('amount_aed').eq('source','ledger').gt('amount_aed', 0).limit(100000),
+      sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','remitted').limit(100000),
+      sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','awaiting_remittance').limit(100000),
+      sb.from('invoices').select('amount_aed').eq('payment_status','needs_investigation').gt('amount_aed', 0).limit(100000)
     ]);
     const rem = remRes.data || [];
     const inv = invRes.data || [];
     const ret = retRes.data || [];
     const dsp = dspRes.data || [];
+    var sumAed = function(rows){ return (rows||[]).reduce(function(s,r){ return s + (Number(r.amount_aed)||0); }, 0); };
+    var round2 = function(n){ return Math.round((Number(n)||0)*100)/100; };
+    var cardGross = round2(sumAed(aggGrossRes.data));
+    var cardPaid = round2(sumAed(aggPaidRes.data));
+    var awaitRows = aggAwaitRes.data || [];
+    var cardAwaitCount = awaitRows.length;
+    var cardAwaitTotal = round2(sumAed(awaitRows));
+    var needsRows = aggNeedsRes.data || [];
+    var cardNeedsCount = needsRows.length;
+    var cardNeedsTotal = round2(sumAed(needsRows));
+    var cardCredits = round2((dsp||[]).filter(function(d){ return d.credit_closed === true; }).reduce(function(s,d){ return s + (Number(d.credit_amount_aed)||0); }, 0));
     var RS = window.__reconState; RS.invoices = inv; RS.remittances = rem; RS.returns = ret; RS.disputes = dsp; RS.loaded = true;
     var remByRef = {}; rem.forEach(function(r){ remByRef[String(r.remittance_ref)] = r; });
     var retByInv = {}, retByPo = {};
@@ -5101,42 +5116,35 @@ async function loadReconciliation() {
     var fmt = function(n){ return 'AED ' + Math.abs(n).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}); };
     var summaryEl = document.getElementById('recon-summary');
     if (summaryEl) {
-      summaryEl.innerHTML = `
-        <div class="recon-summary-grid">
-          <div style="background:white;border:1px solid #CCF0F1;border-radius:12px;padding:18px 20px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Gross Invoiced</div>
-            <div style="font-size:24px;font-weight:700;color:#0F2744">${fmt(totalGross)}</div>
-            <div style="font-size:11px;color:#6B7280;margin-top:4px">Gross Amazon owed you</div>
-          </div>
-          <div style="background:white;border:1px solid #BBF7D0;border-radius:12px;padding:18px 20px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Net Received</div>
-            <div style="font-size:24px;font-weight:700;color:#059669">${fmt(totalNet)}</div>
-            <div style="font-size:11px;color:#6B7280;margin-top:4px">Actual net paid to bank</div>
-          </div>
-          <div style="background:white;border:1px solid #FECACA;border-radius:12px;padding:18px 20px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Total Deductions</div>
-            <div style="font-size:24px;font-weight:700;color:#DC2626">${fmt(totalDeductions)}</div>
-            <div style="font-size:11px;color:#6B7280;margin-top:6px;line-height:1.8">
-              <span style="display:block">Co-op: ${fmt(totalCoop)}</span>
-              <span style="display:block">VRET returns: ${fmt(totalVret)}</span>
-              <span style="display:block">Shortages: ${fmt(totalShortage)}</span>
-              <span style="display:block">Damage: ${fmt(totalDamage)}</span>
-            </div>
-          </div>
-          <div style="background:white;border:1px solid #BBF7D0;border-radius:12px;padding:18px 20px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Dispute Credits</div>
-            <div style="font-size:24px;font-weight:700;color:#059669">${fmt(totalCredits)}</div>
-            <div style="font-size:11px;color:#6B7280;margin-top:4px">Recovered via disputes</div>
-          </div>
-          <div style="background:white;border:1px solid #CCF0F1;border-radius:12px;padding:18px 20px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Invoice Status</div>
-            <div style="font-size:18px;font-weight:700;color:#059669">${invRemitted.length} remitted</div>
-            <div style="font-size:16px;font-weight:600;color:#D97706;margin-top:6px">${invAwaiting.length} awaiting</div>
-            <div style="font-size:11px;color:#6B7280;margin-top:2px">${inv.length} total invoices</div>
-          </div>
-        </div>`;
+      summaryEl.innerHTML =
+        '<div class="recon-stat recon-navy">'+
+          '<div class="recon-stat-label">Gross invoiced to Amazon</div>'+
+          '<div class="recon-stat-val">'+fmt(cardGross)+'</div>'+
+          '<div class="recon-stat-sub">Total ledger invoices raised</div>'+
+        '</div>'+
+        '<div class="recon-stat recon-green">'+
+          '<div class="recon-stat-label">Confirmed paid by Amazon</div>'+
+          '<div class="recon-stat-val">'+fmt(cardPaid)+'</div>'+
+          '<div class="recon-stat-sub">Remitted on Vendor Central</div>'+
+        '</div>'+
+        '<div class="recon-stat recon-amber">'+
+          '<div class="recon-stat-label">Awaiting payment</div>'+
+          '<div class="recon-stat-val">'+fmt(cardAwaitTotal)+'</div>'+
+          '<div class="recon-stat-sub">'+cardAwaitCount+' invoices awaiting remittance</div>'+
+        '</div>'+
+        '<div class="recon-stat recon-red">'+
+          '<div class="recon-stat-label">Needs verification on Vendor Central</div>'+
+          '<div class="recon-stat-val">'+fmt(cardNeedsTotal)+'</div>'+
+          '<div class="recon-stat-sub">'+cardNeedsCount+' invoices to verify</div>'+
+        '</div>'+
+        '<div class="recon-stat recon-teal">'+
+          '<div class="recon-stat-label">Recovered via disputes</div>'+
+          '<div class="recon-stat-val">'+fmt(cardCredits)+'</div>'+
+          '<div class="recon-stat-sub">Dispute credits closed</div>'+
+        '</div>';
     }
-    function settlement(i){
+
+        function settlement(i){
       var lr = retByInv[String(i.invoice_number)] || (i.po_number ? (retByPo[String(i.po_number)]||[]) : []);
       var ld = dspByInv[String(i.invoice_number)] || (i.po_number ? (dspByPo[String(i.po_number)]||[]) : []);
       if(i.payment_status === 'awaiting_remittance') return {cls:'recon-set-amber', label:'Awaiting'};
@@ -5156,8 +5164,22 @@ async function loadReconciliation() {
         var set = settlement(i);
         var po = i.po_number ? '<span class="recon-po">'+esc(i.po_number)+'</span>' : '<span class="recon-muted">\u2014</span>';
         var payRef = i.payment_number ? '<span class="recon-po">'+esc(i.payment_number)+'</span>' : '<span class="recon-muted">Awaiting payment</span>';
-        var statusPill = i.payment_status === 'remitted' ? '<span class="recon-pill recon-pill-green">Remitted</span>' : '<span class="recon-pill recon-pill-amber">Awaiting</span>';
-        var row = '<tr class="recon-inv-row" data-idx="'+idx+'" onclick="reconToggleInvoice('+idx+')">'+
+        var statusPill = (function(){
+          var PILL = {
+            remitted: ['recon-pill-green','Paid'],
+            awaiting_remittance: ['recon-pill-amber','Awaiting'],
+            disputed_deduction: ['recon-pill-blue','Disputed'],
+            needs_investigation: ['recon-pill-red','Needs Review'],
+            cancelled: ['recon-pill-gray','Cancelled'],
+            sales_return: ['recon-pill-teal','Return'],
+            cancellation: ['recon-pill-gray','Cancelled PO'],
+            not_delivered: ['recon-pill-gray','Not Delivered']
+          };
+          var p = PILL[i.payment_status];
+          if(!p){ return '<span class="recon-pill recon-pill-gray">'+esc(i.payment_status||'\u2014')+'</span>'; }
+          return '<span class="recon-pill '+p[0]+'">'+p[1]+'</span>';
+        })();
+        var row = '<tr class="recon-inv-row" data-idx="'+idx+'" data-pstatus="'+esc(i.payment_status||'')+'" onclick="reconToggleInvoice('+idx+')">'+
           '<td><span class="recon-exp-btn" id="recon-exp-'+idx+'">+</span></td>'+
           '<td><span class="recon-invno">'+esc(i.invoice_number)+'</span></td>'+
           '<td>'+esc(i.invoice_date||'')+'</td>'+
@@ -5171,6 +5193,39 @@ async function loadReconciliation() {
         return row + detail;
       }).join('');
       invTableEl.innerHTML = '<table class="recon-table">'+head+'<tbody>'+body+'</tbody></table>';
+    }
+    var filtersEl = document.getElementById('recon-inv-filters');
+    if (filtersEl) {
+      var CHIPS = [
+        { label:'All', statuses:null },
+        { label:'Remitted', statuses:['remitted'] },
+        { label:'Awaiting', statuses:['awaiting_remittance'] },
+        { label:'Needs Investigation', statuses:['needs_investigation'] },
+        { label:'Disputed', statuses:['disputed_deduction'] },
+        { label:'Cancelled', statuses:['cancelled','cancellation'] }
+      ];
+      filtersEl.innerHTML = CHIPS.map(function(ch, ci){
+        return '<button type="button" class="recon-chip'+(ci===0?' active':'')+'" data-statuses="'+(ch.statuses?ch.statuses.join(','):'')+'">'+esc(ch.label)+'</button>';
+      }).join('');
+      var applyReconFilter = function(statuses){
+        var rows = invTableEl.querySelectorAll('tr.recon-inv-row');
+        rows.forEach(function(tr){
+          var idx = tr.getAttribute('data-idx');
+          var detail = document.getElementById('recon-detail-'+idx);
+          var show = !statuses || statuses.indexOf(tr.getAttribute('data-pstatus')) !== -1;
+          tr.style.display = show ? '' : 'none';
+          if(detail && !show){ detail.style.display = 'none'; }
+        });
+      };
+      filtersEl.querySelectorAll('.recon-chip').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          filtersEl.querySelectorAll('.recon-chip').forEach(function(b){ b.classList.remove('active'); });
+          btn.classList.add('active');
+          var s = btn.getAttribute('data-statuses');
+          applyReconFilter(s ? s.split(',') : null);
+        });
+      });
+
     }
     var payListEl = document.getElementById('recon-pay-list');
     if (payListEl && rem.length > 0) {
@@ -5607,6 +5662,8 @@ async function loadReconciliation() {
 </style>
 <style>
 /* Reconciliation netting model styles */
+.recon-note{ background:#E6F8F8; border:1px solid #CCF0F1; color:#0F2744; border-radius:10px; padding:11px 16px; font-size:13px; margin-bottom:18px; line-height:1.5; }
+.recon-note strong{ font-weight:600; }
 #recon-summary{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:22px; }
 .recon-stat{ border-radius:12px; padding:16px 18px; color:#fff; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
 .recon-stat-label{ font-size:12px; opacity:.9; font-weight:600; letter-spacing:.02em; }
@@ -5642,6 +5699,9 @@ async function loadReconciliation() {
 .recon-pill-green{ background:#e3f6ec; color:#1f7a44; }
 .recon-pill-amber{ background:#fdf1d8; color:#9a6a06; }
 .recon-pill-blue{ background:#e0ecfb; color:#1d4ed8; }
+.recon-pill-red{ background:#fbe3e0; color:#c0392b; }
+.recon-pill-gray{ background:#eef0f3; color:#475467; }
+.recon-pill-teal{ background:#d7f2f2; color:#0d8f8f; }
 
 /* ── Reconciliation UI fixes ── */
 .recon-summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
