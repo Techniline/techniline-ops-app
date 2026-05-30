@@ -5066,7 +5066,7 @@ async function loadReconciliation() {
   if (!sb) return;
   try {
     const remSel = ['remittance_ref','payment_date','gross_invoices_aed','coop_deductions_aed','vret_deductions_aed','shortage_deductions_aed','damage_deductions_aed','dispute_credits_aed','net_paid_aed','gross_amount_aed','invoice_count'].join(',');
-    const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','source','deduction_status'].join(',');
+    const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','source','deduction_status','resolution_note'].join(',');
     const retSel = ['return_id','vret_number','tle_invoice_number','po_number','srt_number','prt_number','dispute_id_ref','model_sku','status','date_received','total_cost_aed'].join(',');
     const dspSel = ['dispute_number','tle_invoice_number','po_number','dispute_status','invoice_amount_aed','approved_amount_aed','gap_aed','credit_closed','credit_amount_aed','payment_number','dispute_type'].join(',');
     const [remRes, invRes, retRes, dspRes, aggGrossRes, aggPaidRes, aggAwaitRes, aggNeedsRes, aggNetRes] = await Promise.all([
@@ -5120,27 +5120,35 @@ async function loadReconciliation() {
     var fmt = function(n){ return 'AED ' + Math.abs(n).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}); };
     var summaryEl = document.getElementById('recon-summary');
     if (summaryEl) {
+      var cardDispute = round2((dsp||[]).reduce(function(s,d){ return s + (d.credit_closed===true ? (Number(d.credit_amount_aed)||0) : 0); }, 0));
       summaryEl.innerHTML =
         '<div class="recon-stat recon-navy">'+
           '<div class="recon-stat-label">Gross invoiced to Amazon</div>'+
           '<div class="recon-stat-val">'+fmt(cardGross)+'</div>'+
-          '<div class="recon-stat-sub">Total ledger invoices raised</div>'+
         '</div>'+
         '<div class="recon-stat recon-green">'+
           '<div class="recon-stat-label">Confirmed paid by Amazon</div>'+
           '<div class="recon-stat-val">'+fmt(cardPaid)+'</div>'+
-          '<div class="recon-stat-sub">'+cardPaidCount+' invoices remitted in cash</div>'+
+          '<div class="recon-stat-sub">'+cardPaidCount+' invoices</div>'+
         '</div>'+
-        '<div class="recon-stat recon-teal" title="Settled via netting includes: Co-op offsets, debit balance, VRET netting, provision reversals. Breakdown of the 436: 270 debit-balance offset confirmed by Amazon support case 10556461262, 76 confirmed in remittance emails, 90 matched to sales returns and Finance ledger.">'+
-          '<div class="recon-stat-label">Settled via netting and provisions <span style="opacity:.6;font-weight:600;">&#9432;</span></div>'+
+        '<div class="recon-stat recon-teal">'+
+          '<div class="recon-stat-label">Settled via netting and provisions</div>'+
           '<div class="recon-stat-val">'+fmt(cardNet)+'</div>'+
-          '<div class="recon-stat-sub">'+cardNetCount+' invoices settled via netting</div>'+
+          '<div class="recon-stat-sub">'+cardNetCount+' invoices</div>'+
+          '<div class="recon-stat-sub" style="opacity:.75">Co-op offsets &middot; debit balance &middot; provision reversals</div>'+
+        '</div>'+
+        '<div class="recon-stat recon-amber">'+
+          '<div class="recon-stat-label">Awaiting payment</div>'+
+          '<div class="recon-stat-val">'+fmt(cardAwaitTotal)+'</div>'+
+          '<div class="recon-stat-sub">'+cardAwaitCount+' invoices</div>'+
+          '<div class="recon-stat-sub" style="opacity:.75">Within 90-day payment cycle</div>'+
         '</div>'+
         '<div class="recon-stat recon-green">'+
           '<div class="recon-stat-label">Recovered via disputes</div>'+
-          '<div class="recon-stat-val">'+fmt(cardCredits)+'</div>'+
-          '<div class="recon-stat-sub">Dispute credits closed</div>'+
+          '<div class="recon-stat-val">'+fmt(cardDispute)+'</div>'+
         '</div>';
+      var existingBanner = document.getElementById('recon-info-banner'); if(existingBanner){ existingBanner.parentNode.removeChild(existingBanner); }
+      summaryEl.insertAdjacentHTML('afterend', '<div id="recon-info-banner" style="display:flex;align-items:center;gap:8px;background:#eef4fb;border:1px solid #cfe0f3;color:#34506e;border-radius:8px;padding:10px 14px;font-size:12.5px;margin:-10px 0 22px;"><span style="font-weight:700;">&#9432;</span><span>Reconciliation aligned with Finance SOA dated 22 May 2026. Data verified against Amazon remittance files 2022&ndash;2026 and Finance team records.</span></div>');
     }
 
         function settlement(i){
@@ -5167,7 +5175,8 @@ async function loadReconciliation() {
           var PILL = {
             remitted: ['recon-pill-green','Paid'],
             awaiting_remittance: ['recon-pill-amber','Awaiting'],
-            disputed_deduction: ['recon-pill-blue','Disputed'],
+            disputed_deduction: ['recon-pill-red','Disputed'],
+            settled_via_netting: ['recon-pill-teal','Settled'],
             needs_investigation: ['recon-pill-red','Needs Review'],
             cancelled: ['recon-pill-gray','Cancelled'],
             sales_return: ['recon-pill-teal','Return'],
@@ -5178,6 +5187,9 @@ async function loadReconciliation() {
           if(!p){ return '<span class="recon-pill recon-pill-gray">'+esc(i.payment_status||'\u2014')+'</span>'; }
           return '<span class="recon-pill '+p[0]+'">'+p[1]+'</span>';
         })();
+        var __ageDays = (function(){ var d=i.invoice_date; if(!d) return null; var dt=new Date(d); if(isNaN(dt.getTime())) return null; return Math.floor((Date.now()-dt.getTime())/86400000); })();
+        var __ageBadge = (i.payment_status==='awaiting_remittance' && __ageDays!==null && __ageDays>60) ? ' <span class="recon-overdue">'+__ageDays+'d</span>' : '';
+        var __dispTip = (i.payment_status==='disputed_deduction' && i.resolution_note) ? ' title="'+esc(i.resolution_note)+'"' : '';
         var row = '<tr class="recon-inv-row" data-idx="'+idx+'" data-pstatus="'+esc(i.payment_status||'')+'" onclick="reconToggleInvoice('+idx+')">'+
           '<td><span class="recon-exp-btn" id="recon-exp-'+idx+'">+</span></td>'+
           '<td><span class="recon-invno">'+esc(i.invoice_number)+'</span></td>'+
@@ -5185,7 +5197,7 @@ async function loadReconciliation() {
           '<td class="recon-amt">'+esc((Number(i.amount_aed)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</td>'+
           '<td>'+po+'</td>'+
           '<td>'+payRef+'</td>'+
-          '<td>'+statusPill+'</td>'+
+          '<td'+__dispTip+'>'+statusPill+__ageBadge+'</td>'+
           '<td><span class="recon-set '+set.cls+'">'+set.label+'</span></td>'+
         '</tr>';
         var detail = '<tr class="recon-detail-row" id="recon-detail-'+idx+'" style="display:none"><td colspan="8" class="recon-detail-cell"><div class="recon-detail-box" id="recon-detail-box-'+idx+'"></div></td></tr>';
@@ -5198,11 +5210,10 @@ async function loadReconciliation() {
       var CHIPS = [
         { label:'All', statuses:null },
         { label:'Remitted', statuses:['remitted'] },
+        { label:'Settled via netting', statuses:['settled_via_netting'] },
         { label:'Awaiting', statuses:['awaiting_remittance'] },
-        { label:'Needs Investigation', statuses:['needs_investigation'] },
-        { label:'Disputed', statuses:['disputed_deduction'] },
-        { label:'Cancelled', statuses:['cancelled','cancellation'] }
-      ];
+        { label:'Disputed', statuses:['disputed_deduction'] }
+      ]
       filtersEl.innerHTML = CHIPS.map(function(ch, ci){
         return '<button type="button" class="recon-chip'+(ci===0?' active':'')+'" data-statuses="'+(ch.statuses?ch.statuses.join(','):'')+'">'+esc(ch.label)+'</button>';
       }).join('');
