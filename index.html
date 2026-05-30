@@ -5166,76 +5166,126 @@ async function loadReconciliation() {
     }
     var invTableEl = document.getElementById('recon-inv-table');
     if (invTableEl) {
+      var CREDIT_SOURCES = ['sales_return','cancellation','not_delivered','dspt_linked','rejected_delivery'];
+      var isCredit = function(i){ return CREDIT_SOURCES.indexOf(i.source) !== -1; };
+      var isNeedsInv = function(i){ return i.payment_status === 'needs_investigation'; };
+      var activeInv = inv.filter(function(i){ return !isNeedsInv(i) && i.source === 'ledger' && (Number(i.amount_aed)||0) > 0; });
+      var creditInv = inv.filter(function(i){ return !isNeedsInv(i) && isCredit(i); });
+      var needsInv = inv.filter(function(i){ return isNeedsInv(i); });
       var head = '<thead><tr><th style="width:34px"></th><th>Invoice #</th><th>Date</th><th>Amount AED</th><th>PO Number</th><th>Payment Ref</th><th>Status</th><th>Settlement</th></tr></thead>';
-      var body = inv.map(function(i, idx){
+      var statusPillFor = function(i){
+        var PILL = {
+          remitted: ['recon-pill-green','Remitted'],
+          awaiting_remittance: ['recon-pill-amber','Awaiting'],
+          disputed_deduction: ['recon-pill-red','Disputed'],
+          settled_via_netting: ['recon-pill-teal','Settled'],
+          needs_investigation: ['recon-pill-red','Needs Review'],
+          cancelled: ['recon-pill-gray','Cancelled'],
+          sales_return: ['recon-pill-teal','Return'],
+          cancellation: ['recon-pill-gray','Cancelled PO'],
+          not_delivered: ['recon-pill-gray','Not Delivered']
+        };
+        var p = PILL[i.payment_status];
+        if(!p){ return '<span class="recon-pill recon-pill-gray">'+esc(i.payment_status||'\u2014')+'</span>'; }
+        return '<span class="recon-pill '+p[0]+'">'+p[1]+'</span>';
+      };
+      var sectionHeader = function(cls, label, count, sumAed){
+        var sumTxt = (Number(sumAed)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+        return '<tr class="recon-section-head '+cls+'"><td colspan="8"><span class="recon-section-title">'+esc(label)+'</span><span class="recon-section-meta">'+count+' total \u2014 AED '+sumTxt+'</span></td></tr>';
+      };
+      var renderRow = function(i, idx, opts){
+        opts = opts || {};
         var set = settlement(i);
         var po = i.po_number ? '<span class="recon-po">'+esc(i.po_number)+'</span>' : '<span class="recon-muted">\u2014</span>';
-        var payRef = i.payment_number ? '<span class="recon-po">'+esc(i.payment_number)+'</span>' : '<span class="recon-muted">Awaiting payment</span>';
-        var statusPill = (function(){
-          var PILL = {
-            remitted: ['recon-pill-green','Paid'],
-            awaiting_remittance: ['recon-pill-amber','Awaiting'],
-            disputed_deduction: ['recon-pill-red','Disputed'],
-            settled_via_netting: ['recon-pill-teal','Settled'],
-            needs_investigation: ['recon-pill-red','Needs Review'],
-            cancelled: ['recon-pill-gray','Cancelled'],
-            sales_return: ['recon-pill-teal','Return'],
-            cancellation: ['recon-pill-gray','Cancelled PO'],
-            not_delivered: ['recon-pill-gray','Not Delivered']
-          };
-          var p = PILL[i.payment_status];
-          if(!p){ return '<span class="recon-pill recon-pill-gray">'+esc(i.payment_status||'\u2014')+'</span>'; }
-          return '<span class="recon-pill '+p[0]+'">'+p[1]+'</span>';
-        })();
-        var __ageDays = (function(){ var d=i.invoice_date; if(!d) return null; var dt=new Date(d); if(isNaN(dt.getTime())) return null; return Math.floor((Date.now()-dt.getTime())/86400000); })();
-        var __ageBadge = (i.payment_status==='awaiting_remittance' && __ageDays!==null && __ageDays>60) ? ' <span class="recon-overdue">'+__ageDays+'d</span>' : '';
+        var payRef = i.payment_number ? '<span class="recon-po">'+esc(i.payment_number)+'</span>' : (opts.credit ? '<span class="recon-muted">\u2014</span>' : '<span class="recon-muted">Awaiting payment</span>');
+        var amtNum = Number(i.amount_aed)||0;
+        var amtTxt = amtNum.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+        var amtCls = 'recon-amt' + (amtNum < 0 ? ' recon-amt-credit' : '');
+        var __ageDays = (function(){ var d=i.invoice_date?Math.floor((Date.now()-new Date(i.invoice_date).getTime())/86400000):null; return d; })();
+        var __ageBadge = (!opts.credit && i.payment_status==='awaiting_remittance' && __ageDays!=null && __ageDays>60) ? ' <span class="recon-overdue">'+__ageDays+'d</span>' : '';
         var __dispTip = (i.payment_status==='disputed_deduction' && i.resolution_note) ? ' title="'+esc(i.resolution_note)+'"' : '';
-        var row = '<tr class="recon-inv-row" data-idx="'+idx+'" data-pstatus="'+esc(i.payment_status||'')+'" onclick="reconToggleInvoice('+idx+')">'+
+        var flag = opts.needsInv ? '<span class="recon-flag" title="Needs verification">\u26A1</span> ' : '';
+        var statusCell = opts.credit ? '<span class="recon-pill recon-pill-gray">Credit note</span>' : (flag + statusPillFor(i));
+        var row = '<tr class="recon-inv-row" data-idx="'+idx+'" data-pstatus="'+esc(i.payment_status||'')+'" data-source="'+esc(i.source||'')+'" data-kind="'+(opts.credit?'credit':(opts.needsInv?'needs':'active'))+'" onclick="reconToggleInvoice('+idx+')">'+
           '<td><span class="recon-exp-btn" id="recon-exp-'+idx+'">+</span></td>'+
           '<td><span class="recon-invno">'+esc(i.invoice_number)+'</span></td>'+
           '<td>'+esc(i.invoice_date||'')+'</td>'+
-          '<td class="recon-amt">'+esc((Number(i.amount_aed)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</td>'+
+          '<td class="'+amtCls+'">'+amtTxt+'</td>'+
           '<td>'+po+'</td>'+
           '<td>'+payRef+'</td>'+
-          '<td'+__dispTip+'>'+statusPill+__ageBadge+'</td>'+
+          '<td'+__dispTip+'>'+statusCell+__ageBadge+'</td>'+
           '<td><span class="recon-set '+set.cls+'">'+set.label+'</span></td>'+
         '</tr>';
         var detail = '<tr class="recon-detail-row" id="recon-detail-'+idx+'" style="display:none"><td colspan="8" class="recon-detail-cell"><div class="recon-detail-box" id="recon-detail-box-'+idx+'"></div></td></tr>';
         return row + detail;
-      }).join('');
-      invTableEl.innerHTML = '<table class="recon-table">'+head+'<tbody>'+body+'</tbody></table>';
+      };
+      var sumOf = function(arr){ return arr.reduce(function(s,i){ return s + (Number(i.amount_aed)||0); }, 0); };
+      var activeSum = sumOf(activeInv), creditSum = sumOf(creditInv), netPos = activeSum + creditSum;
+      var idxOf = function(i){ return inv.indexOf(i); };
+      var body = '';
+      if(activeInv.length){
+        body += sectionHeader('recon-sec-active','WS Invoices \u2014 Amazon Vendor', activeInv.length, activeSum);
+        body += activeInv.map(function(i){ return renderRow(i, idxOf(i), {}); }).join('');
+      }
+      if(creditInv.length){
+        body += sectionHeader('recon-sec-credit','Credit Notes \u2014 Sales Returns', creditInv.length, creditSum);
+        body += creditInv.map(function(i){ return renderRow(i, idxOf(i), {credit:true}); }).join('');
+      }
+      if(needsInv.length){
+        body += sectionHeader('recon-sec-needs','Needs Verification', needsInv.length, sumOf(needsInv));
+        body += needsInv.map(function(i){ return renderRow(i, idxOf(i), {needsInv:true}); }).join('');
+      }
+      var fmtAed = function(n){ return (Number(n)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+      var summaryLine = '<div class="recon-inv-summary">'+
+        '<span class="recon-sum-item"><span class="recon-sum-label">Active invoices:</span> '+activeInv.length+' total \u2014 <strong>AED '+fmtAed(activeSum)+'</strong></span>'+
+        '<span class="recon-sum-item"><span class="recon-sum-label">Credit notes:</span> '+creditInv.length+' total \u2014 <strong class="recon-amt-credit">AED '+fmtAed(creditSum)+'</strong> (negative)</span>'+
+        '<span class="recon-sum-item recon-sum-net"><span class="recon-sum-label">Net position:</span> <strong>AED '+fmtAed(netPos)+'</strong></span>'+
+      '</div>';
+      invTableEl.innerHTML = summaryLine + '<div class="recon-table-scroll"><table class="recon-table recon-invoice-table">'+head+'<tbody>'+body+'</tbody></table></div>';
     }
     var filtersEl = document.getElementById('recon-inv-filters');
     if (filtersEl) {
       var CHIPS = [
-        { label:'All', statuses:null },
-        { label:'Remitted', statuses:['remitted'] },
-        { label:'Settled via netting', statuses:['settled_via_netting'] },
-        { label:'Awaiting', statuses:['awaiting_remittance'] },
-        { label:'Disputed', statuses:['disputed_deduction'] }
-      ]
+        { label:'All', kind:null, statuses:null },
+        { label:'WS Invoices', kind:'active', statuses:null },
+        { label:'Credit Notes', kind:'credit', statuses:null },
+        { label:'Remitted', kind:null, statuses:['remitted'] },
+        { label:'Awaiting', kind:null, statuses:['awaiting_remittance'] },
+        { label:'Settled', kind:null, statuses:['settled_via_netting'] }
+      ];
       filtersEl.innerHTML = CHIPS.map(function(ch, ci){
-        return '<button type="button" class="recon-chip'+(ci===0?' active':'')+'" data-statuses="'+(ch.statuses?ch.statuses.join(','):'')+'">'+esc(ch.label)+'</button>';
+        return '<button type="button" class="recon-chip'+(ci===0?' active':'')+'" data-kind="'+(ch.kind||'')+'" data-statuses="'+(ch.statuses?ch.statuses.join(','):'')+'">'+esc(ch.label)+'</button>';
       }).join('');
-      var applyReconFilter = function(statuses){
+      var applyReconFilter = function(kind, statuses){
+        var headRows = invTableEl.querySelectorAll('tr.recon-section-head');
         var rows = invTableEl.querySelectorAll('tr.recon-inv-row');
+        var shownByKind = {};
         rows.forEach(function(tr){
+          var rk = tr.getAttribute('data-kind');
+          var ps = tr.getAttribute('data-pstatus');
           var idx = tr.getAttribute('data-idx');
           var detail = document.getElementById('recon-detail-'+idx);
-          var show = !statuses || statuses.indexOf(tr.getAttribute('data-pstatus')) !== -1;
+          var show = true;
+          if(kind && rk !== kind) show = false;
+          if(show && statuses && statuses.indexOf(ps) === -1) show = false;
           tr.style.display = show ? '' : 'none';
           if(detail && !show){ detail.style.display = 'none'; }
+          if(show){ shownByKind[rk] = true; }
+        });
+        headRows.forEach(function(hr){
+          var hk = hr.classList.contains('recon-sec-active') ? 'active' : (hr.classList.contains('recon-sec-credit') ? 'credit' : 'needs');
+          hr.style.display = shownByKind[hk] ? '' : 'none';
         });
       };
       filtersEl.querySelectorAll('.recon-chip').forEach(function(btn){
         btn.addEventListener('click', function(){
           filtersEl.querySelectorAll('.recon-chip').forEach(function(b){ b.classList.remove('active'); });
           btn.classList.add('active');
+          var k = btn.getAttribute('data-kind') || null;
           var s = btn.getAttribute('data-statuses');
-          applyReconFilter(s ? s.split(',') : null);
+          applyReconFilter(k, s ? s.split(',') : null);
         });
       });
-
     }
     var payListEl = document.getElementById('recon-pay-list');
     if (payListEl && rem.length > 0) {
@@ -5797,6 +5847,25 @@ async function loadReconciliation() {
   body.recon-printing > *{ display:none !important; }
   body.recon-printing #recon-print-root{ display:block !important; }
 }
+/* --- Reconciliation: sticky headers + separated invoice sections --- */
+.recon-table-scroll{ max-height:62vh; overflow-y:auto; overflow-x:auto; border:1px solid #E3EAEA; border-radius:10px; position:relative; }
+.recon-invoice-table thead th,
+.recon-table thead th{ position:sticky; top:0; z-index:10; background:#009198; color:white; }
+.recon-section-head td{ font-weight:700; font-size:12px; letter-spacing:.02em; padding:9px 12px; position:sticky; top:34px; z-index:5; }
+.recon-section-head .recon-section-title{ text-transform:uppercase; }
+.recon-section-head .recon-section-meta{ float:right; font-weight:600; opacity:.85; }
+.recon-sec-active td{ background:#E6F4F4; color:#0F2744; border-top:2px solid #009198; }
+.recon-sec-credit td{ background:#EEF1F3; color:#44515C; border-top:2px solid #9AA7B0; }
+.recon-sec-needs td{ background:#FDF1D8; color:#7A5B05; border-top:2px solid #E0A800; }
+.recon-amt-credit{ color:#C0392B; font-weight:700; }
+.recon-pill-red{ background:#FCE8E6; color:#C0392B; }
+.recon-pill-teal{ background:#E2F1F1; color:#066E73; }
+.recon-pill-gray{ background:#EDEFF1; color:#55606A; }
+.recon-flag{ color:#C0392B; font-weight:700; margin-right:2px; }
+.recon-inv-summary{ display:flex; flex-wrap:wrap; gap:18px; align-items:center; background:#F4F8F8; border:1px solid #DCE7E7; border-radius:10px; padding:10px 16px; margin-bottom:12px; font-size:13px; }
+.recon-inv-summary .recon-sum-label{ color:#5A6B72; font-weight:600; }
+.recon-inv-summary .recon-sum-net{ margin-left:auto; }
+.recon-inv-summary .recon-sum-net strong{ color:#0F2744; }
 </style>
 <div id="escalate-modal-host"></div>
 </body>
