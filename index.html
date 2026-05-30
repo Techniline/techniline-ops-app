@@ -1157,6 +1157,44 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
   .disp-detail-item.disp-detail-wide { grid-column: span 1; }
   .lr-grid { grid-template-columns: 1fr 1fr; }
 }
+
+    /* ── Manager Dashboard ── */
+    .mgr-wrap { display:flex; flex-direction:column; gap:24px; }
+    .mgr-section-title { font-size:15px; font-weight:600; color:var(--navy); letter-spacing:-0.2px; margin-bottom:12px; }
+    .mgr-stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+    .mgr-stat-card { background:var(--white); border:1px solid var(--border); border-left-width:4px; border-radius:var(--radius-md); padding:16px 18px; box-shadow:var(--shadow-sm); }
+    .mgr-stat-card.amber { border-left-color:var(--amber); }
+    .mgr-stat-card.red { border-left-color:var(--red); }
+    .mgr-stat-card.teal { border-left-color:var(--teal); }
+    .mgr-stat-card.navy { border-left-color:var(--navy); }
+    .mgr-stat-card.green { border-left-color:var(--green); }
+    .mgr-stat-label { font-size:12px; color:var(--text-secondary); font-weight:500; margin-bottom:8px; }
+    .mgr-stat-value { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text-primary); font-family:'DM Sans',sans-serif; }
+    .mgr-stat-card.amber .mgr-stat-value { color:var(--amber); }
+    .mgr-stat-card.red .mgr-stat-value { color:var(--red); }
+    .mgr-stat-card.teal .mgr-stat-value { color:var(--teal); }
+    .mgr-stat-card.navy .mgr-stat-value { color:var(--navy); }
+    .mgr-stat-card.green .mgr-stat-value { color:var(--green); }
+    .mgr-overdue-card { background:var(--red-light); border:1px solid #FECACA; border-left:4px solid var(--red); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:10px; }
+    .mgr-overdue-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+    .mgr-overdue-title { font-size:14px; font-weight:600; color:var(--text-primary); }
+    .mgr-overdue-days { font-size:12px; font-weight:600; color:var(--red); white-space:nowrap; }
+    .mgr-overdue-desc { font-size:13px; color:var(--text-secondary); line-height:1.5; }
+    .mgr-empty { display:flex; flex-direction:column; align-items:center; gap:10px; padding:32px 16px; text-align:center; border:1px dashed var(--border); border-radius:var(--radius-md); }
+    .mgr-empty.ok { color:var(--green); }
+    .mgr-empty.warn { color:var(--amber); }
+    .mgr-empty-text { font-size:13px; font-weight:500; }
+    .mgr-activity-big { font-size:40px; font-weight:700; color:var(--navy); letter-spacing:-1px; line-height:1; }
+    .mgr-activity-caption { font-size:12px; color:var(--text-muted); margin-top:4px; margin-bottom:16px; }
+    .mgr-activity-table { width:100%; border-collapse:collapse; }
+    .mgr-activity-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.4px; color:var(--text-muted); padding:8px 10px; border-bottom:1px solid var(--border); }
+    .mgr-activity-table td { font-size:13px; color:var(--text-secondary); padding:9px 10px; border-bottom:1px solid var(--border); }
+    .mgr-activity-table td.count { font-weight:600; color:var(--navy); text-align:right; }
+    .mgr-activity-last { font-size:12px; color:var(--text-muted); margin-top:12px; font-family:'DM Mono',monospace; }
+    .mgr-fin-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .mgr-card-host { background:var(--white); border:1px solid var(--border); border-radius:var(--radius-md); padding:18px; box-shadow:var(--shadow-sm); }
+    .mgr-access-denied { display:flex; align-items:center; justify-content:center; padding:60px 20px; font-size:14px; font-weight:500; color:var(--text-muted); }
+
 </style>
 </head>
 <body>
@@ -1190,7 +1228,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 
 <!-- App -->
 <div id="app-screen" class="app-grid" style="display:none; flex-direction:column; height:100vh;">
-<nav class="sidebar" id="app-sidebar"><div class="sb-top"><div class="sb-logo">T</div><div class="sb-brand">Techniline</div></div><button class="sb-toggle" id="sb-toggle-btn" onclick="window.__tlToggleSidebar&&window.__tlToggleSidebar()" title="Collapse"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><div class="sb-nav"><button class="sb-item" data-tab="notifications" onclick="switchTab('notifications', this)" title="Notifications"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="sb-label">Notifications</span><span class="sb-badge" id="sb-notif-badge"></span></button><button class="sb-item" data-tab="checklist" onclick="switchTab('checklist', this)" title="Checklist"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="sb-label">Checklist</span></button><button class="sb-item" data-tab="kpi" onclick="switchTab('kpi', this)" title="KPIs"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="sb-label">KPIs</span></button><button class="sb-item" data-tab="priorities" onclick="switchTab('priorities', this)" title="Priorities"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg><span class="sb-label">Priorities</span></button><button class="sb-item" data-tab="disputes" onclick="switchTab('disputes', this)" title="Disputes"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l3 6h-6z"/><path d="M7 21h10"/></svg><span class="sb-label">Disputes</span></button><button class="sb-item" data-tab="reconciliation" onclick="switchTab('reconciliation', this)" title="Reconciliation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg><span class="sb-label">Reconciliation</span></button>
+<nav class="sidebar" id="app-sidebar"><div class="sb-top"><div class="sb-logo">T</div><div class="sb-brand">Techniline</div></div><button class="sb-toggle" id="sb-toggle-btn" onclick="window.__tlToggleSidebar&&window.__tlToggleSidebar()" title="Collapse"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><div class="sb-nav"><button class="sb-item" data-tab="notifications" onclick="switchTab('notifications', this)" title="Notifications"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="sb-label">Notifications</span><span class="sb-badge" id="sb-notif-badge"></span></button><button class="sb-item" data-tab="checklist" onclick="switchTab('checklist', this)" title="Checklist"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="sb-label">Checklist</span></button><button class="sb-item" data-tab="kpi" onclick="switchTab('kpi', this)" title="KPIs"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="sb-label">KPIs</span></button><button class="sb-item" data-tab="priorities" onclick="switchTab('priorities', this)" title="Priorities"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg><span class="sb-label">Priorities</span></button><button class="sb-item" id="mgr-nav-item" data-tab="manager" onclick="switchTab('manager', this)" title="Manager" style="display:none"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="sb-label">Manager</span></button><button class="sb-item" data-tab="disputes" onclick="switchTab('disputes', this)" title="Disputes"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l3 6h-6z"/><path d="M7 21h10"/></svg><span class="sb-label">Disputes</span></button><button class="sb-item" data-tab="reconciliation" onclick="switchTab('reconciliation', this)" title="Reconciliation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg><span class="sb-label">Reconciliation</span></button>
 <button class="sb-item" data-tab="returns" onclick="switchTab('returns', this)" title="Returns"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg><span class="sb-label">Returns</span></button></div><div class="sb-user"><div class="sb-user-avatar" id="sb-user-avatar">U</div><div class="sb-user-info"><div class="sb-user-name" id="sb-user-name">User</div><div class="sb-user-role">Operations</div></div></div></nav>
 
   <div class="topbar">
@@ -1316,6 +1354,14 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
           Download PDF
         </button>
       </div>
+    </div>
+
+    <!-- Manager Tab -->
+    <div class="tab-pane" id="pane-manager">
+      <div id="mgr-content" class="mgr-wrap">
+        <div class="loading-state">Loading manager dashboard…</div>
+      </div>
+      <div id="mgr-denied" class="mgr-access-denied" style="display:none">Access restricted — manager view only.</div>
     </div>
 
     <!-- Disputes Tab -->
@@ -1719,7 +1765,7 @@ async function checkSupabaseConnection() {
       hideGlobalBanner();
       await checkSupabaseConnection();
       if (typeof initApp === 'function' && currentUser) {
-        await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes()]);
+        await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes(), loadManager()]);
       }
     });
     return false;
@@ -1751,6 +1797,7 @@ async function initApp(user) {
     document.getElementById('user-role').textContent = profile.role === 'manager' ? 'Manager' : 'Staff';
     document.getElementById('user-avatar').textContent = (profile.avatar_initials || profile.full_name?.slice(0,2) || 'U').toUpperCase();
     if (profile.role === 'manager') document.getElementById('pri-assign-field').style.display = 'block';
+    if (profile.role === 'manager') { const mn = document.getElementById('mgr-nav-item'); if (mn) mn.style.display = ''; }
   }
   const now = new Date();
   document.getElementById('topbar-date').textContent = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -1761,7 +1808,7 @@ async function initApp(user) {
   const dispFrom = document.getElementById('disp-export-from');
   if (dispTo) dispTo.value = new Date().toISOString().split('T')[0];
   if (dispFrom) dispFrom.value = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
-  await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes()]);
+  await Promise.all([loadNotifications(), loadChecklist(), loadKPIs(), loadPriorities(), loadDisputes(), loadManager()]);
   // Verify Supabase connection — show banner if anything is unreachable
   checkSupabaseConnection();
 }
@@ -2590,6 +2637,113 @@ async function loadDisputeRecoveryKPI() {
 }
 
 // ── Priorities ─────────────────────────────────────────
+
+// ── Manager Dashboard ──────────────────────────────────────
+function mgrFmtMoney(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function mgrEscape(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+async function loadManager() {
+  if (!currentUserProfile || currentUserProfile.role !== 'manager') {
+    const c = document.getElementById('mgr-content');
+    const d = document.getElementById('mgr-denied');
+    if (c) c.style.display = 'none';
+    if (d) d.style.display = 'flex';
+    return;
+  }
+  const host = document.getElementById('mgr-content');
+  if (!host) return;
+
+  const isoDaysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString();
+
+  const notifRes = await sbQuery(sb.from('expected_actions').select('id', { count: 'exact' }).eq('status', 'open'));
+  const priRes = await sbQuery(sb.from('priorities').select('*'));
+  const dispRes = await sbQuery(sb.from('disputes').select('*'));
+  const userRes = await sbQuery(sb.from('users').select('id').eq('email', 'purchasing@techniline.org').single(), { data: null });
+  const maricelId = userRes.data ? userRes.data.id : null;
+  let actRes = { data: [] };
+  if (maricelId) {
+    actRes = await sbQuery(sb.from('daily_tasks')
+      .select('completed_at, evidence, task_definitions(title)')
+      .eq('status', 'complete')
+      .gt('completed_at', isoDaysAgo(7))
+      .eq('assigned_to', maricelId)
+      .order('completed_at', { ascending: false }));
+  }
+
+  const priorities = priRes.data || [];
+  const disputes = dispRes.data || [];
+  const activity = actRes.data || [];
+
+  const openNotif = (typeof notifRes.count === 'number') ? notifRes.count : ((notifRes.data || []).length);
+  const overduePri = priorities.filter(p => p.status === 'overdue');
+  const now = Date.now();
+  const dispNeedAction = disputes.filter(d =>
+    ['open','raised','awaiting_amazon'].includes(d.dispute_status) &&
+    d.created_at && (new Date(d.created_at).getTime() < now - 30 * 86400000)
+  ).length;
+  const recDisputes = disputes.filter(d => !['open','raised'].includes(d.dispute_status));
+  const recApproved = recDisputes.reduce((s,d) => s + (Number(d.approved_amount_aed) || 0), 0);
+  const recInvoice = recDisputes.reduce((s,d) => s + (Number(d.invoice_amount_aed) || 0), 0);
+  const recoveryRate = recInvoice ? (Math.round((recApproved / recInvoice) * 1000) / 10) : null;
+
+  const statHtml = '<div class="mgr-stat-grid">' +
+    '<div class="mgr-stat-card amber"><div class="mgr-stat-label">Open notifications</div><div class="mgr-stat-value">' + openNotif + '</div></div>' +
+    '<div class="mgr-stat-card red"><div class="mgr-stat-label">Overdue priorities</div><div class="mgr-stat-value">' + overduePri.length + '</div></div>' +
+    '<div class="mgr-stat-card amber"><div class="mgr-stat-label">Disputes needing action</div><div class="mgr-stat-value">' + dispNeedAction + '</div></div>' +
+    '<div class="mgr-stat-card teal"><div class="mgr-stat-label">Recovery rate</div><div class="mgr-stat-value">' + (recoveryRate == null ? '—' : recoveryRate + '%') + '</div></div>' +
+    '</div>';
+
+  const overdueSorted = overduePri.slice().sort((a,b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)).slice(0, 20);
+  let overdueBody;
+  if (overdueSorted.length === 0) {
+    overdueBody = '<div class="mgr-empty ok"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><div class="mgr-empty-text">All clear — no overdue items</div></div>';
+  } else {
+    overdueBody = overdueSorted.map(p => {
+      const days = p.created_at ? Math.floor((now - new Date(p.created_at).getTime()) / 86400000) : 0;
+      const desc = (p.description || '').length > 100 ? (p.description || '').slice(0, 100) + '…' : (p.description || '');
+      return '<div class="mgr-overdue-card"><div class="mgr-overdue-top"><span class="mgr-overdue-title">' + mgrEscape(p.title) + '</span><span class="mgr-overdue-days">' + days + ' day' + (days === 1 ? '' : 's') + ' ago</span></div>' + (desc ? '<div class="mgr-overdue-desc">' + mgrEscape(desc) + '</div>' : '') + '</div>';
+    }).join('');
+  }
+  const section2 = '<div><div class="mgr-section-title">Needs your attention</div>' + overdueBody + '</div>';
+
+  let section3Body;
+  if (activity.length === 0) {
+    section3Body = '<div class="mgr-empty warn"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><div class="mgr-empty-text">No checklist activity recorded this week</div></div>';
+  } else {
+    const counts = {};
+    activity.forEach(a => { const t = (a.task_definitions && a.task_definitions.title) || 'Untitled task'; counts[t] = (counts[t] || 0) + 1; });
+    const rows = Object.keys(counts).sort((a,b) => counts[b] - counts[a]).map(t => '<tr><td>' + mgrEscape(t) + '</td><td class="count">' + counts[t] + '</td></tr>').join('');
+    const last = activity[0].completed_at ? new Date(activity[0].completed_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+    section3Body = '<div class="mgr-activity-big">' + activity.length + '</div><div class="mgr-activity-caption">tasks completed this week</div>' +
+      '<table class="mgr-activity-table"><thead><tr><th>Task</th><th style="text-align:right">Count</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="mgr-activity-last">Last activity: ' + last + '</div>';
+  }
+  const section3 = '<div class="mgr-card-host"><div class="mgr-section-title">Team activity — last 7 days</div>' + section3Body + '</div>';
+
+  const totalDisputed = disputes.reduce((s,d) => s + (Number(d.invoice_amount_aed) || 0), 0);
+  const approvedByAmazon = disputes.filter(d => (Number(d.approved_amount_aed) || 0) > 0).reduce((s,d) => s + (Number(d.approved_amount_aed) || 0), 0);
+  const outstandingGap = disputes.filter(d => !['resolved','amazon_rejected'].includes(d.dispute_status)).reduce((s,d) => s + (Number(d.gap_aed) || 0), 0);
+  const creditsReceived = disputes.filter(d => d.credit_closed === true).reduce((s,d) => s + (Number(d.credit_amount_aed) || 0), 0);
+  const section4 = '<div><div class="mgr-section-title">Amazon Vendor — financial overview</div><div class="mgr-fin-grid">' +
+    '<div class="mgr-stat-card navy"><div class="mgr-stat-label">Total disputed</div><div class="mgr-stat-value">' + mgrFmtMoney(totalDisputed) + '</div></div>' +
+    '<div class="mgr-stat-card green"><div class="mgr-stat-label">Approved by Amazon</div><div class="mgr-stat-value">' + mgrFmtMoney(approvedByAmazon) + '</div></div>' +
+    '<div class="mgr-stat-card red"><div class="mgr-stat-label">Outstanding gap</div><div class="mgr-stat-value">' + mgrFmtMoney(outstandingGap) + '</div></div>' +
+    '<div class="mgr-stat-card teal"><div class="mgr-stat-label">Credits received</div><div class="mgr-stat-value">' + mgrFmtMoney(creditsReceived) + '</div></div>' +
+    '</div></div>';
+
+  host.style.display = 'flex';
+  const denied = document.getElementById('mgr-denied');
+  if (denied) denied.style.display = 'none';
+  host.innerHTML = statHtml + section2 + section3 + section4;
+
+  window.__mgrStats = { openNotif: openNotif, overduePri: overduePri.length, dispNeedAction: dispNeedAction, recoveryRate: recoveryRate };
+}
+
+
 async function loadPriorities() {
   const { data, error } = await sbQuery(
     sb.from('priorities')
