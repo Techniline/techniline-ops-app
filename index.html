@@ -2393,7 +2393,7 @@ function buildTaskCard(t) {
         <div class="task-card-body">
           <div class="task-row">
             <div><div class="task-name">${name}</div><div class="task-hint">${hint}</div></div>
-            <button class="confirm-btn" onclick="submitOneTap('${t.id}','${hint.replace(/'/g,"\\'")}')">Confirm</button>
+            <button class="btn-outline" onclick="submitOneTap('${t.id}','${hint.replace(/'/g,"\\'")}')">Confirm</button>
           </div>
         </div>
       </div>
@@ -2407,7 +2407,7 @@ function buildTaskCard(t) {
       <div class="task-card-body">
         <div class="task-row" onclick="toggleTaskExpand('${t.id}')" style="cursor:pointer">
           <span class="task-name">${name}</span>
-          <span class="task-status-badge open">Tap to add</span>
+          <button class="btn-outline" onclick="toggleTaskExpand('${t.id}')">Add evidence</button>
         </div>
       </div>
     </div>
