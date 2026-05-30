@@ -1651,6 +1651,7 @@ const SUPABASE_URL = 'https://xtvjzpmmuryaoluhynvl.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0dmp6cG1tdXJ5YW9sdWh5bnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjUzNTIsImV4cCI6MjA5NTM0MTM1Mn0.2tXY9dSYG7w_wcv6fs0XRvWMvbtcNzMHVw_kVAEVxt8';
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { lock: (name, acquireTimeout, fn) => fn() } });
+window.sb = sb;
 
 // ── Team user IDs ─────────────────────────────────────────────────────────
 const VIHAN_ID    = 'c4abda49-13e9-41fd-acae-88acd4aa7fcb'; // manager
@@ -5061,26 +5062,92 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
   window.escapeHtmlR = escapeHtmlR;
   function daysSince(d){ if(!d) return null; var t=new Date(d).getTime(); if(isNaN(t)) return null; return Math.floor((Date.now()-t)/86400000); }
 
-  async function loadReconciliation(){
-    if (!window.sb){ return; }
-    try {
-      var inv = await sb.from('invoices').select('invoice_number,po_number,invoice_date,amount_aed,payment_number,payment_date,payment_status,deduction_status').order('invoice_date',{ascending:false});
-      RS.invoices = (inv && inv.data) ? inv.data : [];
-      var rem = await sb.from('remittances').select('remittance_ref,payment_date,gross_amount_aed,deductions_aed,net_paid_aed,invoice_refs,match_status,gap_aed').order('payment_date',{ascending:false});
-      RS.remittances = (rem && rem.data) ? rem.data : [];
-      var dsp = await sb.from('disputes').select('dispute_number,tle_invoice_number,invoice_amount_aed,dispute_status,gap_aed,payment_number,credit_amount_aed,credit_closed,po_number,srt_number,return_ids');
-      RS.disputes = (dsp && dsp.data) ? dsp.data : [];
-      var ret = await sb.from('returns').select('return_type,return_id,srt_number,prt_number,vret_number,tle_invoice_number,po_number,refund_aed,total_cost_aed,recovery_amt_aed,status,payment_number');
-      RS.returns = (ret && ret.data) ? ret.data : [];
-      var rl = await sb.from('remittance_lines').select('remittance_ref,invoice_number,invoice_date,description,transaction_type,invoice_amount_aed,amount_paid_aed,amount_remaining_aed,dspt_number,is_credit,matched_dispute,matched_return_id,matched_invoice');
-      RS.remLines = (rl && rl.data) ? rl.data : [];
-    } catch(e){ /* tolerate */ }
-    RS.loaded = true;
-    renderReconSummary();
-    renderReconFilters();
-    renderReconInvoices();
-    renderReconPayments();
-  }
+async function loadReconciliation() {
+  if (!sb) return;
+  try {
+    const { data: remData } = await sb.from('remittances').select('gross_invoices_aed,coop_deductions_aed,vret_deductions_aed,shortage_deductions_aed,damage_deductions_aed,dispute_credits_aed,net_paid_aed,remittance_ref,payment_date,gross_amount_aed,invoice_count').gt('gross_invoices_aed', 0).order('payment_date', { ascending: false });
+    const rem = remData || [];
+    const totalGross = rem.reduce((s,r) => s+(r.gross_invoices_aed||0), 0);
+    const totalCoop = rem.reduce((s,r) => s+(r.coop_deductions_aed||0), 0);
+    const totalVret = rem.reduce((s,r) => s+(r.vret_deductions_aed||0), 0);
+    const totalShortage = rem.reduce((s,r) => s+(r.shortage_deductions_aed||0), 0);
+    const totalDamage = rem.reduce((s,r) => s+(r.damage_deductions_aed||0), 0);
+    const totalCredits = rem.reduce((s,r) => s+(r.dispute_credits_aed||0), 0);
+    const totalNet = rem.reduce((s,r) => s+(r.net_paid_aed||0), 0);
+    const totalDeductions = totalCoop + totalVret + totalShortage + totalDamage;
+    const { data: invStats } = await sb.from('invoices').select('payment_status,amount_aed');
+    const invAll = invStats || [];
+    const invRemitted = invAll.filter(i => i.payment_status === 'remitted');
+    const invAwaiting = invAll.filter(i => i.payment_status === 'awaiting_remittance');
+    const invRemittedAed = invRemitted.reduce((s,i) => s+(i.amount_aed||0), 0);
+    const invAwaitingAed = invAwaiting.reduce((s,i) => s+(i.amount_aed||0), 0);
+    const fmt = n => 'AED ' + Math.abs(n).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const summaryEl = document.getElementById('recon-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px">
+          <div style="background:white;border:1px solid #CCF0F1;border-radius:12px;padding:18px 20px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Gross Invoiced</div>
+            <div style="font-size:24px;font-weight:700;color:#0F2744">${fmt(totalGross)}</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:4px">Gross Amazon owed you</div>
+          </div>
+          <div style="background:white;border:1px solid #BBF7D0;border-radius:12px;padding:18px 20px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Net Received</div>
+            <div style="font-size:24px;font-weight:700;color:#059669">${fmt(totalNet)}</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:4px">Actual net paid to bank</div>
+          </div>
+          <div style="background:white;border:1px solid #FECACA;border-radius:12px;padding:18px 20px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Total Deductions</div>
+            <div style="font-size:24px;font-weight:700;color:#DC2626">${fmt(totalDeductions)}</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:6px;line-height:1.8">
+              <span style="display:block">Co-op: ${fmt(totalCoop)}</span>
+              <span style="display:block">VRET returns: ${fmt(totalVret)}</span>
+              <span style="display:block">Shortages: ${fmt(totalShortage)}</span>
+              <span style="display:block">Damage: ${fmt(totalDamage)}</span>
+            </div>
+          </div>
+          <div style="background:white;border:1px solid #BBF7D0;border-radius:12px;padding:18px 20px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Dispute Credits</div>
+            <div style="font-size:24px;font-weight:700;color:#059669">${fmt(totalCredits)}</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:4px">Recovered via disputes</div>
+          </div>
+          <div style="background:white;border:1px solid #CCF0F1;border-radius:12px;padding:18px 20px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6B7280;margin-bottom:8px">Invoice Status</div>
+            <div style="font-size:18px;font-weight:700;color:#059669">${invRemitted.length} remitted</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:2px">${fmt(invRemittedAed)}</div>
+            <div style="font-size:16px;font-weight:600;color:#D97706;margin-top:6px">${invAwaiting.length} awaiting</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:2px">${fmt(invAwaitingAed)}</div>
+          </div>
+        </div>`;
+    }
+    const payListEl = document.getElementById('recon-pay-list');
+    if (payListEl && rem.length > 0) {
+      payListEl.innerHTML = rem.slice(0,50).map(r => {
+        const gross=r.gross_invoices_aed||0, coop=r.coop_deductions_aed||0, vret=r.vret_deductions_aed||0, shortage=r.shortage_deductions_aed||0, damage=r.damage_deductions_aed||0, credits=r.dispute_credits_aed||0, net=r.net_paid_aed||0, grossAmt=r.gross_amount_aed||0;
+        const diff=Math.abs(net-grossAmt), balanced=diff<5;
+        const pdate=r.payment_date?new Date(r.payment_date).toLocaleDateString('en-AE',{day:'2-digit',month:'short',year:'numeric'}):'\u2014';
+        const f=n=>'AED '+Math.abs(n).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+        return `
+        <div style="background:white;border:1px solid #E5E7EB;border-radius:12px;padding:18px 20px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div><div style="font-family:monospace;font-size:14px;font-weight:600;color:#009198">${r.remittance_ref}</div>
+            <div style="font-size:12px;color:#6B7280;margin-top:2px">${pdate} \u00b7 ${r.invoice_count||0} invoices</div></div>
+            <div style="text-align:right"><div style="font-size:18px;font-weight:700;color:#059669">${f(net)}</div>
+            <div style="font-size:11px;margin-top:3px">${balanced?'<span style=\"color:#059669\">\u2713 Balanced</span>':'<span style=\"color:#DC2626\">\u26a0 Gap '+f(diff)+'</span>'}</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;background:#F9FAFB;border-radius:8px;padding:12px">
+            <div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">Gross invoices</div><div style="font-size:13px;font-weight:600;color:#059669;margin-top:2px">+${f(gross)}</div></div>
+            ${coop<0?`<div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">Co-op</div><div style="font-size:13px;font-weight:600;color:#6B7280;margin-top:2px">-${f(coop)}</div></div>`:''}
+            ${vret<0?`<div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">VRET returns</div><div style="font-size:13px;font-weight:600;color:#D97706;margin-top:2px">-${f(vret)}</div></div>`:''}
+            ${shortage<0?`<div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">Shortages</div><div style="font-size:13px;font-weight:600;color:#DC2626;margin-top:2px">-${f(shortage)}</div></div>`:''}
+            ${damage<0?`<div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">Damage</div><div style="font-size:13px;font-weight:600;color:#D97706;margin-top:2px">-${f(damage)}</div></div>`:''}
+            ${credits>0?`<div><div style="font-size:10px;color:#6B7280;font-weight:500;text-transform:uppercase">Dispute credits</div><div style="font-size:13px;font-weight:600;color:#059669;margin-top:2px">+${f(credits)}</div></div>`:''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch(err) { console.error('Reconciliation error:', err); }
+}
   window.loadReconciliation = loadReconciliation;
 
   function renderReconSummary(){
@@ -5199,8 +5266,8 @@ setTimeout(() => { loadDispItemReturnIds(); }, 800);
     cell.innerHTML=''; cell.appendChild(input); input.focus();
     function commit(){
       var v = input.value.trim();
-      if(v && window.sb){
-        window.sb.from('invoices').update({ po_number: v }).eq('invoice_number', invNo).then(function(){
+      if(v && sb){
+        sb.from('invoices').update({ po_number: v }).eq('invoice_number', invNo).then(function(){
           var rec = RS.invoices.find(function(x){ return x.invoice_number===invNo; });
           if(rec) rec.po_number = v;
           renderReconInvoices();
