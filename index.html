@@ -1863,7 +1863,7 @@ async function loadNotifications() {
   const { data, error } = await sbQuery(
     sb.from('expected_actions')
       .select('*').eq('assigned_to', currentUser.id)
-      .order('email_received_at', { ascending: false }).limit(50)
+      .order('email_received_at', { ascending: false }).limit(500)
   );
   if (error || !data) {
     showRetryBanner('notif-list', () => loadNotifications(), 'Could not load notifications — tap to retry');
@@ -1889,7 +1889,7 @@ function setNotifWindow(win) {
         cutoff.setDate(cutoff.getDate() - 30);
         data = (data || []).filter(n => {
           const ts = n.email_received_at ? new Date(n.email_received_at) : null;
-          return ts && ts >= cutoff;
+          if (n.type === 'po_cancellation') return true; return ts && ts >= cutoff;
         });
       }
   const open = data.filter(n => n.status === 'open');
@@ -1900,7 +1900,7 @@ function setNotifWindow(win) {
   document.getElementById('sum-pos').textContent = open.filter(n => n.type === 'vendor_po').length;
   const claimAed = open.filter(n => n.type === 'shortage_claim').reduce((s, n) => s + (parseFloat(n.aed_amount) || 0), 0);
   document.getElementById('sum-claims').textContent = claimAed > 0 ? claimAed.toLocaleString('en-AE', {minimumFractionDigits:2, maximumFractionDigits:2}) : open.filter(n=>n.type==='shortage_claim').length;
-  document.getElementById('sum-cancels').textContent = open.filter(n => n.type === 'po_cancellation').length;
+  document.getElementById('sum-cancels').textContent = data.filter(n => n.type === 'po_cancellation').length;
   document.getElementById('sum-done').textContent = done.length;
   const sorted = [...open.filter(n=>n.type==='shortage_claim'||n.type==='dispute_update'),
     ...open.filter(n=>n.type==='po_cancellation'||n.type==='vendor_po'),
@@ -1973,7 +1973,7 @@ function buildNotifCard(n) {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Status updated')">Update status</button>`;
   }
   const truncSubject = detailBox.length > 100 ? detailBox.slice(0, 100) + '…' : detailBox;
-  return `<div class="notif-card${isDone?' done':''}" data-email-received-at="${n.email_received_at||''}" data-notif-type="${n.type||''}">
+  return `<div class="notif-card${isDone?' done':''}" data-email-received-at="${n.email_received_at||''}" data-notif-type="${n.type||''}" data-action-id="${n.id||''}">
     <div class="notif-inner">
       <div class="notif-accent-bar ${color}"></div>
       <div class="notif-body">
@@ -4884,8 +4884,8 @@ function goToSearchResult(kind, refOrId, returnIdRef) {
   closeGlobalSearchPanel();
   const sel = (txt) => Array.from(document.querySelectorAll('.tab-btn')).find(b => new RegExp(txt, 'i').test(b.textContent));
   if (kind === 'dispute') {
-    const b = sel('disputes'); if (b) b.click();
-    setTimeout(() => {
+po_cancellation') return true
+  setTimeout(() => {
       const rows = document.querySelectorAll('#disp-list tr[data-id], #disp-list tr');
       let target = null;
       rows.forEach(r => { if ((r.textContent||'').indexOf(refOrId) >= 0 && !target) target = r; });
@@ -4899,7 +4899,7 @@ function goToSearchResult(kind, refOrId, returnIdRef) {
       else if (returnIdRef) jumpToReturn(returnIdRef);
     }, 350);
   } else if (kind === 'notif') {
-    const b = sel('notifications'); if (b) b.click();
+    const b = sel('notifications'); if (b) b.click(); setTimeout(() => { const card = document.querySelector('.notif-card[data-action-id="' + refOrId + '"]'); if (card) flashHighlight(card); }, 350);
   }
 }
 
