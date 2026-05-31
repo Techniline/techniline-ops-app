@@ -4707,7 +4707,7 @@ async function saveNotBookedReturn(){
   var record = {
     return_id: po + '-NB-' + Date.now(),
     po_number: po,
-    return_type: null,
+    return_type: 'type_a',
     stage: 'Closed \u2014 not booked',
     comments: (cEl && cEl.value.trim()) || ('PO ' + po + ' cancelled \u2014 order never booked, no documents required'),
     date_received: new Date().toISOString().slice(0,10),
