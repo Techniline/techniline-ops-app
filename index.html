@@ -1889,7 +1889,7 @@ function setNotifWindow(win) {
         cutoff.setDate(cutoff.getDate() - 30);
         data = (data || []).filter(n => {
           const ts = n.email_received_at ? new Date(n.email_received_at) : null;
-          if (n.type === 'po_cancellation') return true; return ts && ts >= cutoff;
+          if (n.type === 'po_cancellation' && n.status !== 'actioned') return true; return ts && ts >= cutoff;
         });
       }
   const open = data.filter(n => n.status === 'open');
@@ -1907,8 +1907,8 @@ function setNotifWindow(win) {
     ...open.filter(n=>n.type==='remittance'||n.type==='return_processed'),
     ...done];
   sorted.sort(function(a, b) {
-    if (a.type === 'po_cancellation' && b.type !== 'po_cancellation') return -1;
-    if (b.type === 'po_cancellation' && a.type !== 'po_cancellation') return 1;
+    if (a.type === 'po_cancellation' && a.status !== 'actioned' && !(b.type === 'po_cancellation' && b.status !== 'actioned')) return -1;
+    if (b.type === 'po_cancellation' && b.status !== 'actioned' && !(a.type === 'po_cancellation' && a.status !== 'actioned')) return 1;
     return 0;
   });
   if (sorted.length === 0) { document.getElementById('notif-list').innerHTML = '<div class="empty-state"><div class="empty-title">All clear</div><div class="empty-sub">No notifications at the moment</div></div>'; return; }
