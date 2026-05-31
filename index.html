@@ -4884,8 +4884,8 @@ function goToSearchResult(kind, refOrId, returnIdRef) {
   closeGlobalSearchPanel();
   const sel = (txt) => Array.from(document.querySelectorAll('.tab-btn')).find(b => new RegExp(txt, 'i').test(b.textContent));
   if (kind === 'dispute') {
-po_cancellation') return true
-  setTimeout(() => {
+    const b = sel('disputes'); if (b) b.click();
+    setTimeout(() => {
       const rows = document.querySelectorAll('#disp-list tr[data-id], #disp-list tr');
       let target = null;
       rows.forEach(r => { if ((r.textContent||'').indexOf(refOrId) >= 0 && !target) target = r; });
