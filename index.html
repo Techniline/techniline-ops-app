@@ -1918,7 +1918,7 @@ function setNotifWindow(win) {
 }
 
 function buildNotifCard(n) {
-  if (n.type === 'po_cancellation') {
+  if (n.type === 'po_cancellation' && n.status !== 'actioned') {
     var cancelTime = n.email_received_at ? new Date(n.email_received_at).toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
     return '<div class="notif-card cancellation-card" data-notif-type="po_cancellation" data-action-id="' + (n.id||'') + '" style="border-left: 4px solid #DC2626;">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
@@ -1927,6 +1927,10 @@ function buildNotifCard(n) {
       + '</div>'
       + '<div class="notif-title" style="color:#DC2626;font-weight:600;">PO ' + (n.po_number || n.ref_number || '') + ' has been cancelled</div>'
       + '<div class="notif-desc" style="color:#DC2626;margin-top:4px;">Do not prepare or dispatch any stock for this order.</div>'
+      + '<div class="notif-actions" style="margin-top:12px;">'
+      + '<button class="btn-navy" onclick="actionNotif(\'' + (n.id||'') + '\',\'Confirmed \u2014 will not ship\')">Confirmed \u2014 will not ship</button>'
+      + '<button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif(\'' + (n.id||'') + '\',\'Already shipped \u2014 escalating\')">Already shipped \u2014 escalate</button>'
+      + '</div>'
       + '</div>';
   }
   const isDone = n.status === 'actioned';
