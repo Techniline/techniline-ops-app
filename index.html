@@ -1929,7 +1929,7 @@ function buildNotifCard(n) {
       + '<div class="notif-desc" style="color:#DC2626;margin-top:4px;">Do not prepare or dispatch any stock for this order.</div>'
       + '<div class="notif-actions" style="margin-top:12px;">'
       + '<button class="btn-navy" onclick="actionNotif(\'' + (n.id||'') + '\',\'Confirmed \u2014 will not ship\')">Confirmed \u2014 will not ship</button>'
-      + '<button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif(\'' + (n.id||'') + '\',\'Already shipped \u2014 escalating\')">Already shipped \u2014 escalate</button>'
+      + '<button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="escalateCancellationToReturn(\'' + (n.id||'') + '\',\'' + (n.po_number || n.ref_number || '') + '\')">Already shipped \u2014 escalate</button>'
       + '</div>'
       + '</div>';
   }
@@ -4656,6 +4656,7 @@ async function saveNewReturn(){
     dispute_id_ref: dispId || null,
     is_complete: !!srt,
     status: 'open',
+    comments: v('nr-comments') || null,
     source: 'new'
   };
   try {
@@ -4677,6 +4678,80 @@ async function saveNewReturn(){
     if (typeof loadReturns === 'function') loadReturns();
   } catch(e) { alert('Save error: ' + e.message); }
 }
+
+// === Cancellation -> Return escalation flow ===
+window._cancellationNotifId = window._cancellationNotifId || null;
+function escalateCancellationToReturn(notifId, poNumber){
+  window._cancellationNotifId = notifId;
+  openAddReturnModal({ po_number: poNumber });
+  setTimeout(function(){
+    var c = document.getElementById('nr-comments');
+    if (c && !c.value) c.value = 'PO ' + poNumber + ' CANCELLED \u2014 escalated: already shipped. Capture SRT/PRT, or close as not booked.';
+    var modal = document.getElementById('add-return-modal');
+    var footer = modal ? modal.querySelector('.modal-footer') : null;
+    if (footer && !document.getElementById('nr-not-booked-btn')) {
+      var b = document.createElement('button');
+      b.id = 'nr-not-booked-btn'; b.type = 'button';
+      b.textContent = 'No docs needed \u2014 order not booked';
+      b.style.cssText = 'padding:10px 18px;background:#fff;border:1px solid #DC2626;color:#DC2626;border-radius:8px;font-weight:600;cursor:pointer;margin-right:auto;';
+      b.onclick = saveNotBookedReturn;
+      footer.insertBefore(b, footer.firstChild);
+    }
+  }, 90);
+}
+async function saveNotBookedReturn(){
+  var poEl = document.getElementById('nr-po');
+  var po = poEl ? (poEl.value||'').trim() : '';
+  if (!po) { alert('PO number is required to close this out.'); return; }
+  var cEl = document.getElementById('nr-comments');
+  var record = {
+    return_id: po + '-NB-' + Date.now(),
+    po_number: po,
+    return_type: null,
+    stage: 'Closed \u2014 not booked',
+    comments: (cEl && cEl.value.trim()) || ('PO ' + po + ' cancelled \u2014 order never booked, no documents required'),
+    date_received: new Date().toISOString().slice(0,10),
+    total_cost_aed: 0,
+    is_complete: true,
+    status: 'closed',
+    source: 'cancellation'
+  };
+  try {
+    const { error } = await sb.from('returns').insert(record);
+    if (error) { alert('Save failed: ' + error.message); return; }
+    if (window._cancellationNotifId && typeof actionNotif === 'function') {
+      try { await actionNotif(window._cancellationNotifId, 'Cancelled \u2014 order not booked, no docs'); } catch(e){}
+      window._cancellationNotifId = null;
+    }
+    closeAddReturnModal();
+    if (typeof showToast === 'function') showToast('Return closed \u2014 order not booked'); else alert('Return closed');
+    if (typeof loadReturns === 'function') loadReturns();
+  } catch(e){ alert('Save error: ' + e.message); }
+}
+(function(){
+  if (typeof saveNewReturn !== 'function') return;
+  var _origSave = saveNewReturn;
+  saveNewReturn = async function(){
+    var notifId = window._cancellationNotifId;
+    await _origSave.apply(this, arguments);
+    var modal = document.getElementById('add-return-modal');
+    var closed = !modal || modal.style.display === 'none' || !modal.classList.contains('active');
+    if (notifId && closed && typeof actionNotif === 'function') {
+      try { await actionNotif(notifId, 'Cancelled \u2014 return documented (SRT/PRT)'); } catch(e){}
+      window._cancellationNotifId = null;
+    }
+  };
+})();
+(function(){
+  if (typeof closeAddReturnModal !== 'function') return;
+  var _origClose = closeAddReturnModal;
+  closeAddReturnModal = function(){
+    _origClose.apply(this, arguments);
+    var nb = document.getElementById('nr-not-booked-btn'); if (nb) nb.remove();
+    window._cancellationNotifId = null;
+  };
+})();
+// === end cancellation flow ===
 function showToast(msg){
   let t = document.getElementById('app-toast');
   if (!t) {
