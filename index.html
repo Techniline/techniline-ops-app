@@ -4657,6 +4657,7 @@ async function saveNewReturn(){
     is_complete: !!srt,
     status: 'open',
     comments: v('nr-comments') || null,
+    logged_by: currentUser.id,
     source: 'new'
   };
   try {
@@ -4714,6 +4715,7 @@ async function saveNotBookedReturn(){
     total_cost_aed: 0,
     is_complete: true,
     status: 'closed',
+    logged_by: currentUser.id,
     source: 'cancellation'
   };
   try {
