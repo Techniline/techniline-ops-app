@@ -669,7 +669,7 @@ html, body { background: var(--bg) !important; font-family: 'DM Sans', system-ui
 }
 
 /* ===== SEARCH BAR ===== */
-.gs-input, .search-input, input[placeholder*="Search"] {
+.gs-input, .search-input, input[placeholder*="Search"] { color: var(--text-primary) !important;
   border-radius: 999px !important;
   background: var(--gray-light) !important;
   border: 1px solid transparent !important;
@@ -5231,7 +5231,7 @@ async function loadReconciliation() {
       sb.from('invoices').select('amount_aed').eq('source','ledger').gt('amount_aed', 0).limit(100000),
       sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','remitted').limit(100000),
       sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','awaiting_remittance').limit(100000),
-      sb.from('invoices').select('amount_aed').eq('payment_status','needs_investigation').gt('amount_aed', 0).limit(100000),
+      sb.from('invoices').select('amount_aed').eq('payment_status','needs_investigation').eq('source','ledger').gt('amount_aed', 0).limit(100000),
       sb.from('invoices').select('amount_aed').eq('source','ledger').eq('payment_status','settled_via_netting').limit(100000)
     ]);
     const rem = remRes.data || [];
