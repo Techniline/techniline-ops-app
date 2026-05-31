@@ -1974,8 +1974,7 @@ function buildNotifCard(n) {
     actions = `<div class="done-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Actioned${actTime ? ' at '+actTime : ''}</div>`;
   } else if (isCancelled) {
     actions = `<div class="done-row" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Cancelled by Amazon — no action needed</div>`;
-    setTimeout(() => autoActionCancelled(n.id), 1000);
-  } else if (n.type === 'vendor_po') {
+    } else if (n.type === 'vendor_po') {
     actions = `<button class="btn-navy" onclick="openPOConfirmForm('${n.id}','${n.ref_number}','${n.po_number||''}')">Confirm PO ${n.ref_number}</button><button class="btn-light" onclick="openPOModal('${n.id}','${n.ref_number}')">More actions</button><span class="sla-pill warning">2 days to confirm</span><div id="po-confirm-form-${n.id}" class="accept-form-host"></div>`;
   } else if (n.type === 'shortage_claim') {
     actions = `<button class="btn-navy" onclick="raiseDisputeFromClaim('${n.id}')">Raise dispute</button><button class="btn-outline" onclick="openAcceptForm('${n.id}', ${parseFloat(n.aed_amount)||0})">Accept</button><button class="btn-outline" style="border-color:var(--amber);color:var(--amber)" onclick="openEscalateModal('${n.id}', '${n.ref_number||''}', ${parseFloat(n.aed_amount)||0})">Escalate</button><span class="sla-pill urgent">Act within 2 days</span><div id="accept-form-${n.id}" class="accept-form-host"></div>`;
@@ -2006,9 +2005,6 @@ function buildNotifCard(n) {
   </div>`;
 }
 
-async function autoActionCancelled(id) {
-  await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
-}
 
 async function actionNotif(id, note) {
   await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', id);
