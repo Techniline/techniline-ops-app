@@ -6507,3 +6507,74 @@ async function loadReconciliation() {
 <div id="escalate-modal-host"></div>
 </body>
 </html>
+<script>
+/* TL Remittances upgrade - interlinked WS invoices */
+(function(){
+  if(!document.getElementById('tl-jump-style')){
+    var st=document.createElement('style'); st.id='tl-jump-style';
+    st.textContent='@keyframes tlFlash{0%{background:#FFF3BF}60%{background:#FFF3BF}100%{background:transparent}} .tl-flash{animation:tlFlash 2.2s ease-out}';
+    document.head.appendChild(st);
+  }
+  var TEAL='#009198';
+  var norm=function(s){ if(!s) return s; s=String(s).trim(); if(/^WS\d/.test(s)) return 'WS/'+s.slice(2); if(/^SRT\d/.test(s)) return 'SRT/'+s.slice(3); return s; };
+  var esc=function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+  var fmtDate=function(d){ if(!d) return '-'; var x=new Date(d); if(isNaN(x)) return esc(d); return x.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); };
+  var amt=function(n){ if(n==null) return ''; var v=Number(n); return (v<0?'-':'+')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var plain=function(n){ return (n==null?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); };
+  var poFrom=function(desc,type){ if(type!=='invoice_payable') return null; var t=String(desc||'').split('/')[0].trim(); return t||null; };
+  var BADGE={ invoice_payable:['Invoice paid','#E1F5EE','#0F6E56'], coop_contra:['Co-op fee','#F1EFE8','#5F5E5A'], vret_return:['VRET return','#FCEBEB','#A32D2D'], shortage_claim:['Shortage','#FCEBEB','#A32D2D'], damage_allowance:['Damage','#FCEBEB','#A32D2D'], damage_charge:['Damage','#FCEBEB','#A32D2D'], dispute_credit:['Dispute credit','#E6F1FB','#185FA5'], other:['Other','#F1EFE8','#5F5E5A'] };
+  var ORDER={ invoice_payable:0, dispute_credit:1, vret_return:2, shortage_claim:2, coop_contra:3, damage_allowance:3, damage_charge:3, other:4 };
+  function jumpToTab(id){ var b=[].slice.call(document.querySelectorAll('[onclick]')).find(function(el){return new RegExp("switchTab\\('"+id+"'").test(el.getAttribute('onclick')||'');}); if(b){ try{window.switchTab(id,b);}catch(e){} } }
+  function flashFind(paneId,text){ var pane=document.getElementById(paneId); if(!pane) return; var n=0; var tick=function(){ n++; var el=[].slice.call(pane.querySelectorAll('td,div,span,a')).find(function(x){return x.children.length===0 && (x.textContent||'').trim()===text;}); if(el){ var row=el.closest('tr')||el; row.scrollIntoView({behavior:'smooth',block:'center'}); row.classList.add('tl-flash'); setTimeout(function(){row.classList.remove('tl-flash');},2300);} else if(n<10) setTimeout(tick,250); }; setTimeout(tick,350); }
+  window._tlJump=function(type,val){ if(type==='invoice'){jumpToTab('reconciliation');flashFind('pane-reconciliation',val);} else if(type==='po'){jumpToTab('notifications');flashFind('pane-notifications',val);} else if(type==='dispute'){jumpToTab('disputes');flashFind('pane-disputes',val);} else if(type==='return'){jumpToTab('returns');flashFind('pane-returns',val);} };
+  window.renderRemittancesUpgraded=function(){ return (async function(){
+    var list=document.getElementById('remit-tab-list'); if(!list) return 'no list';
+    if(window._tlRemitBusy) return 'busy'; window._tlRemitBusy=true;
+    try{
+      list.innerHTML='<div class="remit-empty">Loading payments...</div>';
+      var ledger=new Set(); var f=0; while(true){ var resp=await window.sb.from('invoices').select('invoice_number').range(f,f+999); var data=resp.data; if(!data) break; data.forEach(function(r){ledger.add(r.invoice_number);}); if(data.length<1000) break; f+=1000; }
+      var remResp=await window.sb.from('remittances').select('*').order('payment_date',{ascending:false}); var rems=remResp.data;
+      var lines=[]; f=0; while(true){ var lr=await window.sb.from('remittance_lines').select('*').range(f,f+999); if(!lr.data) break; lines=lines.concat(lr.data); if(lr.data.length<1000) break; f+=1000; }
+      var byRef={}; lines.forEach(function(l){ (byRef[l.remittance_ref]=byRef[l.remittance_ref]||[]).push(l); });
+      var lnk=function(t,ty,v){ return '<span class="tl-link" data-jt="'+esc(ty)+'" data-jv="'+esc(v)+'" style="color:'+TEAL+';text-decoration:underline;cursor:pointer">'+esc(t)+'</span>'; };
+      var sum=function(arr){ return arr.reduce(function(s,l){return s+(Number(l.amount_paid_aed)||0);},0); };
+      var html='';
+      (rems||[]).forEach(function(r){
+        var ls=(byRef[r.remittance_ref]||[]).slice().sort(function(a,b){ return (ORDER[a.transaction_type]==null?5:ORDER[a.transaction_type])-(ORDER[b.transaction_type]==null?5:ORDER[b.transaction_type]) || String(a.invoice_number).localeCompare(String(b.invoice_number)); });
+        var wsCount=ls.filter(function(l){return l.transaction_type==='invoice_payable';}).length;
+        var otherCount=ls.length-wsCount;
+        var dedStored=(r.coop_deductions_aed||0)+(r.vret_deductions_aed||0)+(r.shortage_deductions_aed||0)+(r.damage_deductions_aed||0);
+        var gross=(r.gross_invoices_aed!=null&&r.gross_invoices_aed!==0)?r.gross_invoices_aed:sum(ls.filter(function(l){return l.transaction_type==='invoice_payable';}));
+        var ded=(dedStored!==0)?dedStored:sum(ls.filter(function(l){return Number(l.amount_paid_aed)<0;}));
+        var credits=(r.dispute_credits_aed!=null&&r.dispute_credits_aed!==0)?r.dispute_credits_aed:sum(ls.filter(function(l){return l.transaction_type==='dispute_credit';}));
+        var net=(r.net_paid_aed!=null&&r.net_paid_aed!==0)?r.net_paid_aed:sum(ls);
+        var rows=ls.map(function(l){
+          var led=norm(l.invoice_number); var isWS=/^WS\//.test(led); var invCell;
+          if(l.transaction_type==='invoice_payable' && ledger.has(led)) invCell=lnk(led,'invoice',led);
+          else if(isWS) invCell='<span style="color:#333">'+esc(led)+'</span><span style="font-size:10px;color:#A36A00;background:#FAEEDA;padding:2px 6px;border-radius:6px;margin-left:6px">unmatched</span>';
+          else if(l.invoice_number) invCell='<span style="color:#999">'+esc(l.invoice_number)+'</span>';
+          else invCell='<span style="color:#bbb">-</span>';
+          var po=poFrom(l.description,l.transaction_type); var refCell='<span style="color:#bbb">-</span>';
+          if(po) refCell=lnk(po,'po',po);
+          else if(l.dspt_number) refCell=lnk('DSPT '+l.dspt_number,'dispute',String(l.dspt_number));
+          else if(l.description) refCell='<span style="color:#888">'+esc(String(l.description).slice(0,24))+'</span>';
+          var b=BADGE[l.transaction_type]||BADGE.other; var col=Number(l.amount_paid_aed)<0?'#A32D2D':'#3B6D11';
+          return '<tr style="border-top:0.5px solid #eee"><td style="padding:7px 6px">'+invCell+'</td><td style="padding:7px 6px;color:#666;white-space:nowrap">'+fmtDate(l.invoice_date)+'</td><td style="padding:7px 6px">'+refCell+'</td><td style="padding:7px 6px"><span style="background:'+b[1]+';color:'+b[2]+';font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap">'+b[0]+'</span></td><td style="padding:7px 6px;text-align:right;color:'+col+';white-space:nowrap">'+amt(l.amount_paid_aed)+'</td></tr>';
+        }).join('');
+        var badge=r.reconciled?'<span style="background:#E1F5EE;color:#0F6E56;font-size:11px;padding:3px 10px;border-radius:6px">Reconciled</span>':'<span style="background:#FAEEDA;color:#A36A00;font-size:11px;padding:3px 10px;border-radius:6px">'+esc(r.match_status||'unmatched')+'</span>';
+        var sub=fmtDate(r.payment_date)+' - '+wsCount+' WS invoice'+(wsCount===1?'':'s')+(otherCount?(' - '+otherCount+' adjustment'+(otherCount===1?'':'s')):'');
+        html+='<div class="tl-remit-card" style="background:#fff;border:0.5px solid #e6e6e6;border-radius:12px;padding:14px 16px;margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div style="font-size:15px;font-weight:500">Payment '+esc(r.remittance_ref)+'</div><div style="font-size:13px;color:#666">'+sub+'</div></div><div style="text-align:right"><div style="font-size:12px;color:#666">Net paid</div><div style="font-size:17px;font-weight:500">AED '+plain(net)+'</div></div>'+badge+'</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px"><thead><tr style="color:#888;text-align:left"><th style="font-weight:500;padding:4px 6px">Invoice</th><th style="font-weight:500;padding:4px 6px">Inv date</th><th style="font-weight:500;padding:4px 6px">PO / ref</th><th style="font-weight:500;padding:4px 6px">Type</th><th style="font-weight:500;padding:4px 6px;text-align:right">Amount</th></tr></thead><tbody>'+(rows||'<tr><td colspan=5 style="padding:8px 6px;color:#999">No line detail captured</td></tr>')+'</tbody></table></div><div style="border-top:0.5px solid #eee;margin-top:8px;padding-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#666"><span>Gross invoices <b style="color:#222;font-weight:500">'+plain(gross)+'</b></span><span>Deductions <b style="color:#222;font-weight:500">'+plain(ded)+'</b></span><span>Dispute credits <b style="color:#222;font-weight:500">'+plain(credits)+'</b></span><span>Net paid <b style="color:#222;font-weight:500">'+plain(net)+'</b></span></div></div>';
+      });
+      list.innerHTML=html||'<div class="remit-empty">No remittances found</div>';
+      list.onclick=function(e){ var t=e.target.closest('.tl-link'); if(t) window._tlJump(t.dataset.jt,t.dataset.jv); };
+      return 'rendered '+(rems?rems.length:0)+' payments, '+lines.length+' lines';
+    } finally { window._tlRemitBusy=false; }
+  })(); };
+  if(!window._tlSwitchWrapped && typeof window.switchTab==='function'){
+    var _orig=window.switchTab;
+    window.switchTab=function(id,btn){ var rv=_orig.apply(this,arguments); if(id==='remittances') setTimeout(function(){ if(window.renderRemittancesUpgraded) window.renderRemittancesUpgraded(); },60); return rv; };
+    window._tlSwitchWrapped=true;
+  }
+  setTimeout(function(){ var p=document.getElementById('pane-remittances'); if(p && getComputedStyle(p).display!=='none' && window.renderRemittancesUpgraded) window.renderRemittancesUpgraded(); }, 900);
+})();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     </script>
