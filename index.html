@@ -4188,7 +4188,9 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
       } else {
         s2 += '<div class="linked-returns-list">';
         retIds.forEach(function(rid){
-          const r = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => String(x.return_id) === String(rid));
+          const _normRid = function(v){ return String(v == null ? '' : v).trim().replace(/\.0+$/, ''); };
+          const _ridKey = _normRid(rid);
+          const r = (typeof _allReturns !== 'undefined' ? _allReturns : []).find(x => _normRid(x.return_id) === _ridKey);
           if (r) {
             const stageS = String(r.stage||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
             const rsKey = (r.status || 'open').toLowerCase();
