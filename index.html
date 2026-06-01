@@ -1229,7 +1229,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
 <!-- App -->
 <div id="app-screen" class="app-grid" style="display:none; flex-direction:column; height:100vh;">
 <nav class="sidebar" id="app-sidebar"><div class="sb-top"><div class="sb-logo">T</div><div class="sb-brand">Techniline</div></div><button class="sb-toggle" id="sb-toggle-btn" onclick="window.__tlToggleSidebar&&window.__tlToggleSidebar()" title="Collapse"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><div class="sb-nav"><button class="sb-item" data-tab="notifications" onclick="switchTab('notifications', this)" title="Notifications"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="sb-label">Notifications</span><span class="sb-badge" id="sb-notif-badge"></span></button><button class="sb-item" data-tab="checklist" onclick="switchTab('checklist', this)" title="Checklist"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="sb-label">Checklist</span></button><button class="sb-item" data-tab="kpi" onclick="switchTab('kpi', this)" title="KPIs"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="sb-label">KPIs</span></button><button class="sb-item" data-tab="priorities" onclick="switchTab('priorities', this)" title="Priorities"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg><span class="sb-label">Priorities</span></button><button class="sb-item" id="mgr-nav-item" data-tab="manager" onclick="switchTab('manager', this)" title="Manager" style="display:none"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="sb-label">Manager</span></button><button class="sb-item" data-tab="disputes" onclick="switchTab('disputes', this)" title="Disputes"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l3 6h-6z"/><path d="M7 21h10"/></svg><span class="sb-label">Disputes</span></button><button class="sb-item" data-tab="reconciliation" onclick="switchTab('reconciliation', this)" title="Reconciliation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg><span class="sb-label">Reconciliation</span></button>
-<button class="sb-item" data-tab="returns" onclick="switchTab('returns', this)" title="Returns"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg><span class="sb-label">Returns</span></button></div><div class="sb-user"><div class="sb-user-avatar" id="sb-user-avatar">U</div><div class="sb-user-info"><div class="sb-user-name" id="sb-user-name">User</div><div class="sb-user-role">Operations</div></div></div></nav>
+<button class="sb-item" data-tab="remittances" onclick="switchTab('remittances', this)" title="Remittances"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg><span class="sb-label">Remittances</span></button><button class="sb-item" data-tab="returns" onclick="switchTab('returns', this)" title="Returns"><svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg><span class="sb-label">Returns</span></button></div><div class="sb-user"><div class="sb-user-avatar" id="sb-user-avatar">U</div><div class="sb-user-info"><div class="sb-user-name" id="sb-user-name">User</div><div class="sb-user-role">Operations</div></div></div></nav>
 
   <div class="topbar">
     <div class="topbar-left">
@@ -1420,7 +1420,7 @@ h1, h2, h3, h4 { letter-spacing: -0.3px; color: var(--navy); }
   
       <!-- Returns Tab -->
       <div class="tab-pane" id="pane-reconciliation"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Reconciliation</h2><button class="recon-print-btn" onclick="exportReconciliationPDF()" title="Export reconciliation report"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span>Export reconciliation report</span></button></div><div class="recon-note"><strong>Last reconciled May 2026 based on remittance files and Finance team records.</strong> All 1,612 invoices reconciled — zero outstanding.</div><div id="recon-summary" class="recon-summary"></div><div class="recon-section"><h3 class="recon-h3">Invoice reconciliation</h3><div id="recon-inv-filters" class="recon-filters"></div><div id="recon-inv-table" class="recon-table-host"></div></div><div class="recon-section"><h3 class="recon-h3">Payment reconciliation</h3><div id="recon-pay-list" class="recon-pay-list"></div></div></div></div>
-<div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
+<div class="tab-pane" id="pane-remittances"><div class="recon-wrap"><div class="recon-head"><h2 class="recon-title">Remittances</h2></div><div class="remit-tab-wrap"><div id="remit-tab-list" class="remit-tab-list"><div class="remit-empty">Loading payments…</div></div></div></div></div><div class="tab-pane" id="pane-returns"><div class="priorities-header returns-top-header"><div class="returns-header-title">Returns</div><button class="btn-navy add-return-btn" onclick="openAddReturnModal()">+ Add return</button></div>
         <div class="summary-bar">
           <div class="sum-card"><div class="sum-card-val" id="ret-total">—</div><div class="sum-card-label">Total returns</div></div>
           <div class="sum-card"><div class="sum-card-val danger" id="ret-needs">—</div><div class="sum-card-label">Needs action</div></div>
@@ -1985,7 +1985,7 @@ function buildNotifCard(n) {
   } else if (n.type === 'po_cancellation') {
     actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Confirmed — will not ship')">Confirmed — will not ship</button><button class="btn-outline" style="border-color:var(--red);color:var(--red)" onclick="actionNotif('${n.id}','Already shipped — escalating')">Already shipped — escalate</button>`;
   } else if (n.type === 'remittance') {
-    actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Reconciled')">Mark reconciled</button><span class="sla-pill ok">No urgent action</span>`;
+    actions = `<button class="btn-navy" onclick="actionNotif('${n.id}','Reconciled')">Mark reconciled</button><span class="sla-pill ok">No urgent action</span>` + '<button class="remit-expand-btn" onclick="toggleRemitNotif(this, \'' + (n.id||'') + '\', \'' + (n.ref_number||'') + '\')">Show breakdown</button>';
   } else if (n.type === 'return_processed') {
     actions = `<div class="vret-decision"><div class="vret-question">Was stock physically returned to your warehouse?</div><div class="vret-options"><button class="vret-opt green" onclick="chooseVretA('${n.id}')"><span class="vret-opt-title">Yes — sellable condition</span><span class="vret-opt-sub">Accept — rebook to inventory</span></button><button class="vret-opt amber" onclick="chooseVretB('${n.id}')"><span class="vret-opt-title">Yes — damaged or incomplete</span><span class="vret-opt-sub">Medium recovery probability</span></button><button class="vret-opt red" onclick="chooseVretC('${n.id}')"><span class="vret-opt-title">Not received — dispute</span><span class="vret-opt-sub">High recovery probability</span></button></div></div>`;
   } else if (n.type === 'dispute_update') {
@@ -2004,6 +2004,7 @@ function buildNotifCard(n) {
         <div class="notif-detail-line">${detailLine}</div>
         ${truncSubject && !isDone ? `<div class="notif-detail-box">${truncSubject}</div>` : ''}
         <div class="notif-actions">${actions}</div>
+        ${ n.type === 'remittance' && !isDone ? '<div class="remit-notif-host" id="remit-notif-' + (n.id||'') + '" data-open="0"></div>' : '' }
       </div>
     </div>
   </div>`;
@@ -5992,9 +5993,172 @@ async function loadReconciliation() {
     window.switchTab = function(tab, el){
       var r = __origSwitchTab.apply(this, arguments);
       if(tab === 'reconciliation'){ loadReconciliation(); }
+      if(tab === 'remittances'){ loadRemittancesTab(); }
       return r;
     };
   }
+
+
+  // ── Remittance line-item rendering (shared by Notifications expand + Remittances tab) ──
+  function remitVretBadge(line, returnsList){
+    var ret = (returnsList||[]).find(function(r){ return r.vret_number === line.invoice_number; });
+    if(!ret){ return '<span class="recon-badge recon-badge-red">● No return found</span>'; }
+    var st = (ret.status||'').toLowerCase();
+    if(st === 'closed'){ return '<span class="recon-badge recon-badge-green">● Return closed</span>'; }
+    if(ret.srt_number){ return '<span class="recon-badge recon-badge-blue">● ' + escapeHtmlR(ret.stage||'In progress') + '</span>'; }
+    return '<span class="recon-badge recon-badge-amber">● SRT pending</span>';
+  }
+
+  function renderRemitLineGroups(lines, returnsList){
+    lines = lines || [];
+    var paid = lines.filter(function(l){ return l.transaction_type === 'invoice_payable'; });
+    var vret = lines.filter(function(l){ return l.transaction_type === 'vret_return'; });
+    var other = lines.filter(function(l){ return l.transaction_type !== 'invoice_payable' && l.transaction_type !== 'vret_return'; });
+    var net = lines.reduce(function(s,l){ return s + (Number(l.amount_paid_aed)||0); }, 0);
+    var html = '<div class="remit-expand">';
+    // Invoices paid
+    html += '<div class="remit-grp"><div class="remit-grp-h">Invoices paid</div>';
+    if(paid.length){
+      html += paid.map(function(l){
+        return '<div class="remit-line">'
+          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'—') + '</span>'
+          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
+          + '<span class="remit-amt remit-pos">+' + aed(Math.abs(Number(l.amount_paid_aed)||Number(l.invoice_amount_aed)||0)) + '</span>'
+          + '</div>';
+      }).join('');
+    } else { html += '<div class="remit-empty">No invoice lines.</div>'; }
+    html += '</div>';
+    // Returns deducted
+    html += '<div class="remit-grp"><div class="remit-grp-h">Returns deducted</div>';
+    if(vret.length){
+      html += vret.map(function(l){
+        return '<div class="remit-line">'
+          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'—') + '</span>'
+          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
+          + remitVretBadge(l, returnsList)
+          + '<span class="remit-amt remit-neg">-' + aed(Math.abs(Number(l.amount_paid_aed)||0)) + '</span>'
+          + '</div>';
+      }).join('');
+    } else { html += '<div class="remit-empty">No return deductions.</div>'; }
+    html += '</div>';
+    // Credits and other
+    html += '<div class="remit-grp"><div class="remit-grp-h">Credits and other</div>';
+    if(other.length){
+      html += other.map(function(l){
+        var amt = Number(l.amount_paid_aed)||0;
+        var pos = amt >= 0 || l.is_credit;
+        var cls = pos ? 'remit-pos' : 'remit-neg';
+        var sign = pos ? '+' : '-';
+        return '<div class="remit-line">'
+          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'') + '</span>'
+          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
+          + '<span class="remit-amt ' + cls + '">' + sign + aed(Math.abs(amt)) + '</span>'
+          + '</div>';
+      }).join('');
+    } else { html += '<div class="remit-empty">No other lines.</div>'; }
+    html += '</div>';
+    // Net total
+    var netCls = net >= 0 ? 'remit-pos' : 'remit-neg';
+    html += '<div class="remit-net"><span>Net payment total</span><span class="remit-amt ' + netCls + '">' + aed(net) + '</span></div>';
+    html += '</div>';
+    return html;
+  }
+  window.renderRemitLineGroups = renderRemitLineGroups;
+
+  // Fetch lines + matching returns for a remittance ref, then render grouped view into a host element.
+  async function loadRemitDetail(hostId, ref){
+    var host = document.getElementById(hostId);
+    if(!host) return;
+    host.innerHTML = '<div class="remit-empty">Loading…</div>';
+    var lr = await sbQuery(sb.from('remittance_lines').select('*').eq('remittance_ref', ref));
+    var lines = (lr && lr.data) || [];
+    var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return l.invoice_number; });
+    var returnsList = [];
+    if(vretNums.length){
+      var rr = await sbQuery(sb.from('returns').select('return_id,vret_number,srt_number,status,stage').in('vret_number', vretNums));
+      returnsList = (rr && rr.data) || [];
+    }
+    host.innerHTML = renderRemitLineGroups(lines, returnsList);
+  }
+  window.loadRemitDetail = loadRemitDetail;
+
+  // Notifications: toggle inline remittance expansion
+  window.toggleRemitNotif = function(btn, id, ref){
+    var host = document.getElementById('remit-notif-' + id);
+    if(!host) return;
+    if(host.dataset.open === '1'){ host.innerHTML = ''; host.dataset.open = '0'; if(btn) btn.textContent = 'Show breakdown'; return; }
+    host.dataset.open = '1';
+    if(btn) btn.textContent = 'Hide breakdown';
+    loadRemitDetail('remit-notif-' + id, ref);
+  };
+
+  // ── Remittances tab ──
+  window.__remitTabState = { remittances: [], returns: [], linesByRef: {} };
+  async function loadRemittancesTab(){
+    if(!sb) return;
+    var listEl = document.getElementById('remit-tab-list');
+    if(!listEl) return;
+    listEl.innerHTML = '<div class="remit-empty">Loading payments…</div>';
+    var remSel = ['remittance_ref','payment_date','net_paid_aed','net_amount_aed','gross_amount_aed','invoice_count'].join(',');
+    var rmRes = await sbQuery(sb.from('remittances').select('*').order('payment_date', { ascending: false }).limit(500));
+    var rems = (rmRes && rmRes.data) || [];
+    var rtRes = await sbQuery(sb.from('returns').select('return_id,vret_number,srt_number,status,stage'));
+    var rets = (rtRes && rtRes.data) || [];
+    window.__remitTabState.remittances = rems;
+    window.__remitTabState.returns = rets;
+    if(!rems.length){ listEl.innerHTML = '<div class="remit-empty">No remittances found.</div>'; return; }
+    listEl.innerHTML = rems.map(function(rem){ return renderRemitTabCard(rem, rets); }).join('');
+  }
+  window.loadRemittancesTab = loadRemittancesTab;
+
+  function renderRemitTabCard(rem, rets){
+    var ref = rem.remittance_ref || '';
+    var date = rem.payment_date ? new Date(rem.payment_date).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—';
+    var net = Number(rem.net_paid_aed != null ? rem.net_paid_aed : (rem.net_amount_aed != null ? rem.net_amount_aed : rem.gross_amount_aed)) || 0;
+    var nItems = rem.invoice_count != null ? rem.invoice_count : '—';
+    var hostId = 'remit-tab-detail-' + ref.replace(/[^A-Za-z0-9_-]/g, '');
+    var html = '<div class="remit-tab-card" data-ref="' + escapeHtmlR(ref) + '">';
+    html += '<div class="remit-tab-head" onclick="window.toggleRemitTab(this, \'' + hostId + '\', \'' + escapeHtmlR(ref) + '\')">';
+    html += '<span class="remit-tab-ref">' + escapeHtmlR(ref) + '</span>';
+    html += '<span class="remit-tab-date">' + date + '</span>';
+    html += '<span class="remit-tab-count">' + nItems + ' line items</span>';
+    html += '<span class="remit-tab-pending" id="' + hostId + '-pending"></span>';
+    html += '<span class="remit-tab-net remit-amt remit-pos">' + aed(net) + '</span>';
+    html += '<span class="remit-tab-caret">▾</span>';
+    html += '</div>';
+    html += '<div class="remit-tab-detail" id="' + hostId + '" data-open="0"></div>';
+    html += '</div>';
+    return html;
+  }
+
+  // Pending-returns badge: count open returns linked to this remittance's vret lines.
+  function updateRemitPendingBadge(hostId, lines, rets){
+    var badgeEl = document.getElementById(hostId + '-pending');
+    if(!badgeEl) return;
+    var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return l.invoice_number; });
+    var openCount = 0;
+    vretNums.forEach(function(num){
+      var ret = (rets||[]).find(function(r){ return r.vret_number === num; });
+      if(!ret || (ret.status||'').toLowerCase() !== 'closed') openCount++;
+    });
+    if(openCount > 0){ badgeEl.innerHTML = '<span class="recon-badge recon-badge-amber">' + openCount + ' pending return' + (openCount>1?'s':'') + '</span>'; }
+    else { badgeEl.innerHTML = ''; }
+  }
+
+  window.toggleRemitTab = async function(headEl, hostId, ref){
+    var host = document.getElementById(hostId);
+    if(!host) return;
+    if(host.dataset.open === '1'){ host.innerHTML = ''; host.dataset.open = '0'; if(headEl) headEl.classList.remove('open'); return; }
+    host.dataset.open = '1';
+    if(headEl) headEl.classList.add('open');
+    host.innerHTML = '<div class="remit-empty">Loading…</div>';
+    var lr = await sbQuery(sb.from('remittance_lines').select('*').eq('remittance_ref', ref));
+    var lines = (lr && lr.data) || [];
+    var rets = (window.__remitTabState && window.__remitTabState.returns) || [];
+    host.innerHTML = renderRemitLineGroups(lines, rets);
+    updateRemitPendingBadge(hostId, lines, rets);
+  };
+
 
 })();
 </script>
@@ -6178,6 +6342,36 @@ async function loadReconciliation() {
 .recon-inv-summary .recon-sum-label{ color:#5A6B72; font-weight:600; }
 .recon-inv-summary .recon-sum-net{ margin-left:auto; }
 .recon-inv-summary .recon-sum-net strong{ color:#0F2744; }
+
+/* ── Remittance expansion + Remittances tab ── */
+.remit-expand{ margin-top:10px; border-top:1px solid #eef0f3; padding-top:10px; }
+.remit-grp{ margin-bottom:12px; }
+.remit-grp-h{ font-size:11px; font-weight:700; color:#475467; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+.remit-line{ display:flex; align-items:center; gap:12px; padding:6px 10px; border-radius:7px; font-size:13px; background:#fafbfc; margin-bottom:4px; }
+.remit-inv{ font-family:ui-monospace,monospace; color:#1e3a5f; font-size:12px; min-width:90px; }
+.remit-desc{ color:#475467; font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.remit-amt{ margin-left:auto; font-variant-numeric:tabular-nums; font-weight:700; }
+.remit-pos{ color:#1f7a44; }
+.remit-neg{ color:#c0392b; }
+.remit-empty{ padding:8px 10px; font-size:12px; color:#98a2b3; }
+.remit-net{ display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e4e7ec; margin-top:6px; padding-top:10px; font-weight:700; font-size:13px; }
+.remit-expand-btn{ font-size:12px; padding:5px 12px; border:1px solid #009198; background:#fff; color:#009198; border-radius:7px; cursor:pointer; font-weight:600; }
+.remit-expand-btn:hover{ background:#E6F8F8; }
+.remit-notif-host{ margin-top:8px; }
+.remit-tab-wrap{ padding:4px; }
+.remit-tab-head{ display:flex; align-items:center; gap:16px; padding:14px 18px; cursor:pointer; }
+.remit-tab-card{ border:1px solid #e4e7ec; border-radius:12px; margin-bottom:12px; background:#fff; box-shadow:0 1px 3px rgba(15,39,68,.06); }
+.remit-tab-card .remit-tab-head:hover{ background:#fafbfc; }
+.remit-tab-ref{ font-family:ui-monospace,monospace; font-weight:700; color:#1e3a5f; font-size:15px; }
+.remit-tab-date{ color:#667085; font-size:13px; }
+.remit-tab-count{ color:#667085; font-size:12px; }
+.remit-tab-pending{ }
+.remit-tab-net{ margin-left:auto; font-size:16px; }
+.remit-tab-caret{ color:#98a2b3; transition:transform .15s; }
+.remit-tab-head.open .remit-tab-caret{ transform:rotate(180deg); }
+.remit-tab-detail{ padding:0 18px 14px; }
+.remit-tab-detail:empty{ padding:0; }
+
 </style>
 <div id="escalate-modal-host"></div>
 </body>
