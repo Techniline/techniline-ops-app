@@ -6002,86 +6002,152 @@ async function loadReconciliation() {
 
 
   // ── Remittance line-item rendering (shared by Notifications expand + Remittances tab) ──
-  function remitVretBadge(line, returnsList){
-    var ret = (returnsList||[]).find(function(r){ return r.vret_number === line.invoice_number; });
-    if(!ret){ return '<span class="recon-badge recon-badge-red">● No return found</span>'; }
-    var st = (ret.status||'').toLowerCase();
-    if(st === 'closed'){ return '<span class="recon-badge recon-badge-green">● Return closed</span>'; }
-    if(ret.srt_number){ return '<span class="recon-badge recon-badge-blue">● ' + escapeHtmlR(ret.stage||'In progress') + '</span>'; }
-    return '<span class="recon-badge recon-badge-amber">● SRT pending</span>';
-  }
+    function remitVretBadge(line, returnsList){
+      var inv = String((line && line.invoice_number) || '');
+      var ret = null;
+      for (var i = 0; i < (returnsList || []).length; i++) {
+        if (String(returnsList[i].vret_number || '') === inv) { ret = returnsList[i]; break; }
+      }
+      if (!ret) {
+        return '<span class="recon-badge recon-badge-red">No return found</span>';
+      }
+      var status = String(ret.status || '').toLowerCase();
+      var srt = ret.srt_number;
+      var dref = ret.dispute_id_ref;
+      if (status === 'closed') {
+        return '<span class="recon-badge recon-badge-green">Settled</span>';
+      }
+      if (status === 'open' && !srt) {
+        return '<span class="recon-badge recon-badge-amber">SRT pending</span>';
+      }
+      if (status === 'open' && srt && dref) {
+        return '<span class="recon-badge recon-badge-blue">' + String(dref) + ' \u00b7 Dispute open</span>';
+      }
+      return '<span class="recon-badge recon-badge-gray">' + (ret.status || 'pending') + '</span>';
+    }
 
-  function renderRemitLineGroups(lines, returnsList){
-    lines = lines || [];
-    var paid = lines.filter(function(l){ return l.transaction_type === 'invoice_payable'; });
-    var vret = lines.filter(function(l){ return l.transaction_type === 'vret_return'; });
-    var other = lines.filter(function(l){ return l.transaction_type !== 'invoice_payable' && l.transaction_type !== 'vret_return'; });
-    var net = lines.reduce(function(s,l){ return s + (Number(l.amount_paid_aed)||0); }, 0);
-    var html = '<div class="remit-expand">';
-    // Invoices paid
-    html += '<div class="remit-grp"><div class="remit-grp-h">Invoices paid</div>';
-    if(paid.length){
-      html += paid.map(function(l){
-        return '<div class="remit-line">'
-          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'—') + '</span>'
-          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
-          + '<span class="remit-amt remit-pos">+' + aed(Math.abs(Number(l.amount_paid_aed)||Number(l.invoice_amount_aed)||0)) + '</span>'
-          + '</div>';
-      }).join('');
-    } else { html += '<div class="remit-empty">No invoice lines.</div>'; }
-    html += '</div>';
-    // Returns deducted
-    html += '<div class="remit-grp"><div class="remit-grp-h">Returns deducted</div>';
-    if(vret.length){
-      html += vret.map(function(l){
-        return '<div class="remit-line">'
-          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'—') + '</span>'
-          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
-          + remitVretBadge(l, returnsList)
-          + '<span class="remit-amt remit-neg">-' + aed(Math.abs(Number(l.amount_paid_aed)||0)) + '</span>'
-          + '</div>';
-      }).join('');
-    } else { html += '<div class="remit-empty">No return deductions.</div>'; }
-    html += '</div>';
-    // Credits and other
-    html += '<div class="remit-grp"><div class="remit-grp-h">Credits and other</div>';
-    if(other.length){
-      html += other.map(function(l){
-        var amt = Number(l.amount_paid_aed)||0;
-        var pos = amt >= 0 || l.is_credit;
-        var cls = pos ? 'remit-pos' : 'remit-neg';
-        var sign = pos ? '+' : '-';
-        return '<div class="remit-line">'
-          + '<span class="remit-inv">' + escapeHtmlR(l.invoice_number||'') + '</span>'
-          + '<span class="remit-desc">' + escapeHtmlR(l.description||'') + '</span>'
-          + '<span class="remit-amt ' + cls + '">' + sign + aed(Math.abs(amt)) + '</span>'
-          + '</div>';
-      }).join('');
-    } else { html += '<div class="remit-empty">No other lines.</div>'; }
-    html += '</div>';
-    // Net total
-    var netCls = net >= 0 ? 'remit-pos' : 'remit-neg';
-    html += '<div class="remit-net"><span>Net payment total</span><span class="remit-amt ' + netCls + '">' + aed(net) + '</span></div>';
-    html += '</div>';
-    return html;
-  }
+    function renderRemitLineGroups(invoices, lines, returnsList){
+      function rfmt(v){
+        var n = Number(v) || 0;
+        return 'AED ' + n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function esc(s){
+        return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+      invoices = invoices || [];
+      lines = lines || [];
+      returnsList = returnsList || [];
+
+      var vretLines = lines.filter(function(l){ return String(l.transaction_type || '') === 'vret_return'; });
+      var otherLines = lines.filter(function(l){
+        var t = String(l.transaction_type || '');
+        return t !== 'invoice_payable' && t !== 'vret_return';
+      });
+
+      var html = '';
+
+      // ── Section 1: Invoices paid ──
+      html += '<div class="remit-grp">';
+      html += '<div class="remit-grp-h">Invoices paid <span style="opacity:.7">(' + invoices.length + ')</span></div>';
+      var invTotal = 0;
+      if (!invoices.length) {
+        html += '<div class="remit-empty">No invoices found for this payment.</div>';
+      } else {
+        for (var i = 0; i < invoices.length; i++) {
+          var iv = invoices[i];
+          var amt = Number(iv.amount_aed) || 0;
+          invTotal += amt;
+          html += '<div class="remit-line">';
+          html += '<span class="remit-inv">' + esc(iv.invoice_number) + '</span>';
+          html += '<span class="remit-desc">PO ' + esc(iv.po_number || '\u2014') + ' \u00b7 ' + esc(iv.invoice_date || '\u2014') + '</span>';
+          html += '<span class="remit-amt remit-pos">' + rfmt(amt) + '</span>';
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+
+      // ── Section 2: Returns deducted ──
+      html += '<div class="remit-grp">';
+      html += '<div class="remit-grp-h">Returns deducted <span style="opacity:.7">(' + vretLines.length + ')</span></div>';
+      var retDeductTotal = 0;
+      if (!vretLines.length) {
+        html += '<div class="remit-empty">No returns deducted in this payment.</div>';
+      } else {
+        for (var j = 0; j < vretLines.length; j++) {
+          var ln = vretLines[j];
+          var invNo = String(ln.invoice_number || '');
+          var ret = null;
+          for (var k = 0; k < returnsList.length; k++) {
+            if (String(returnsList[k].vret_number || '') === invNo) { ret = returnsList[k]; break; }
+          }
+          var lineAmt = Number(ln.amount_paid_aed) || 0;
+          retDeductTotal += lineAmt;
+          var idLabel = ret ? (ret.return_id || invNo) : invNo;
+          var poLabel = ret ? (ret.po_number || '\u2014') : '\u2014';
+          var dateLabel = ret ? (ret.date_received || '\u2014') : '\u2014';
+          var srtLabel = ret && ret.srt_number ? (' \u00b7 SRT ' + esc(ret.srt_number)) : '';
+          var prtLabel = ret && ret.prt_number ? (' \u00b7 PRT ' + esc(ret.prt_number)) : '';
+          html += '<div class="remit-line">';
+          html += '<span class="remit-inv">' + esc(idLabel) + '</span>';
+          html += '<span class="remit-desc">PO ' + esc(poLabel) + ' \u00b7 ' + esc(dateLabel) + srtLabel + prtLabel + '</span>';
+          html += remitVretBadge(ln, returnsList);
+          html += '<span class="remit-amt remit-neg">' + rfmt(lineAmt) + '</span>';
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+
+      // ── Section 3: Other deductions and credits ──
+      html += '<div class="remit-grp">';
+      html += '<div class="remit-grp-h">Other deductions and credits <span style="opacity:.7">(' + otherLines.length + ')</span></div>';
+      var otherTotal = 0;
+      if (!otherLines.length) {
+        html += '<div class="remit-empty">None.</div>';
+      } else {
+        for (var m = 0; m < otherLines.length; m++) {
+          var ol = otherLines[m];
+          var oAmt = Number(ol.amount_paid_aed) || 0;
+          otherTotal += oAmt;
+          var tLabel = String(ol.transaction_type || 'other').replace(/_/g, ' ');
+          var posNeg = oAmt >= 0 ? 'remit-pos' : 'remit-neg';
+          html += '<div class="remit-line">';
+          html += '<span class="remit-inv">' + esc(tLabel) + '</span>';
+          html += '<span class="remit-desc">' + esc(ol.description || '\u2014') + '</span>';
+          html += '<span class="remit-amt ' + posNeg + '">' + rfmt(oAmt) + '</span>';
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+
+      // ── Net total ──
+      var net = invTotal + retDeductTotal + otherTotal;
+      html += '<div class="remit-net"><span>Net total</span><span class="' + (net >= 0 ? 'remit-pos' : 'remit-neg') + '">' + rfmt(net) + '</span></div>';
+
+      return html;
+    }
   window.renderRemitLineGroups = renderRemitLineGroups;
 
   // Fetch lines + matching returns for a remittance ref, then render grouped view into a host element.
-  async function loadRemitDetail(hostId, ref){
-    var host = document.getElementById(hostId);
-    if(!host) return;
-    host.innerHTML = '<div class="remit-empty">Loading…</div>';
-    var lr = await sbQuery(sb.from('remittance_lines').select('*').eq('remittance_ref', ref));
-    var lines = (lr && lr.data) || [];
-    var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return l.invoice_number; });
-    var returnsList = [];
-    if(vretNums.length){
-      var rr = await sbQuery(sb.from('returns').select('return_id,vret_number,srt_number,status,stage').in('vret_number', vretNums));
-      returnsList = (rr && rr.data) || [];
+    async function loadRemitDetail(hostId, ref){
+      var host = document.getElementById(hostId);
+      if (!host) return;
+      host.innerHTML = '<div class="remit-empty">Loading\u2026</div>';
+      try {
+        var invRes = await sbQuery(sb.from('invoices').select('invoice_number, po_number, invoice_date, amount_aed, payment_number').eq('payment_number', ref));
+        var invoices = (invRes && invRes.data) || [];
+        var lr = await sbQuery(sb.from('remittance_lines').select('*').eq('remittance_ref', ref));
+        var lines = (lr && lr.data) || [];
+        var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return String(l.invoice_number); });
+        var returnsList = [];
+        if (vretNums.length) {
+          var rr = await sbQuery(sb.from('returns').select('return_id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, status, date_received').in('vret_number', vretNums));
+          returnsList = (rr && rr.data) || [];
+        }
+        host.innerHTML = renderRemitLineGroups(invoices, lines, returnsList);
+      } catch (e) {
+        host.innerHTML = '<div class="remit-empty">Could not load payment detail: ' + (e && e.message ? e.message : e) + '</div>';
+      }
     }
-    host.innerHTML = renderRemitLineGroups(lines, returnsList);
-  }
   window.loadRemitDetail = loadRemitDetail;
 
   // Notifications: toggle inline remittance expansion
@@ -6153,11 +6219,21 @@ async function loadReconciliation() {
     if(host.dataset.open === '1'){ host.innerHTML = ''; host.dataset.open = '0'; if(headEl) headEl.classList.remove('open'); return; }
     host.dataset.open = '1';
     if(headEl) headEl.classList.add('open');
-    host.innerHTML = '<div class="remit-empty">Loading…</div>';
+    host.innerHTML = '<div class="remit-empty">Loading\u2026</div>';
+    var invRes = await sbQuery(sb.from('invoices').select('invoice_number, po_number, invoice_date, amount_aed, payment_number').eq('payment_number', ref));
+    var invoices = (invRes && invRes.data) || [];
     var lr = await sbQuery(sb.from('remittance_lines').select('*').eq('remittance_ref', ref));
     var lines = (lr && lr.data) || [];
     var rets = (window.__remitTabState && window.__remitTabState.returns) || [];
-    host.innerHTML = renderRemitLineGroups(lines, rets);
+    var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return String(l.invoice_number); });
+    if (vretNums.length) {
+      var missing = vretNums.filter(function(n){ return !rets.some(function(r){ return String(r.vret_number || '') === n; }); });
+      if (missing.length) {
+        var rr = await sbQuery(sb.from('returns').select('return_id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, status, date_received').in('vret_number', vretNums));
+        rets = (rr && rr.data) || rets;
+      }
+    }
+    host.innerHTML = renderRemitLineGroups(invoices, lines, rets);
     updateRemitPendingBadge(hostId, lines, rets);
   };
 
