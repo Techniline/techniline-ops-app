@@ -3746,19 +3746,20 @@ document.getElementById('login-password').addEventListener('keydown', e => { if 
           if (!hasPRT) missingFields.push('prt_number');
         }
       } else if (isOverstock || isSellable) {
-        if (hasSRT) {
+        if (hasSRT && hasPRT) {
           isComplete = true;
           closeStatus = 'closed';
         } else {
-          missingFields.push('srt_number');
+          if (!hasSRT) missingFields.push('srt_number');
+          if (!hasPRT) missingFields.push('prt_number');
         }
       } else {
-        if (hasSRT) {
+        if (hasSRT && hasPRT) {
           isComplete = true;
           closeStatus = hasDispute ? 'pending_dispute' : 'closed';
         } else {
-          missingFields.push('srt_number');
-          if (hasDispute) missingFields.push('prt_number');
+          if (!hasSRT) missingFields.push('srt_number');
+          if (!hasPRT) missingFields.push('prt_number');
         }
       }
       return { isComplete: isComplete, missingFields: missingFields, closeStatus: closeStatus };
