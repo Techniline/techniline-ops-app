@@ -6057,9 +6057,17 @@ async function loadReconciliation() {
           var iv = invoices[i];
           var amt = Number(iv.amount_aed) || 0;
           invTotal += amt;
+          var wsNo = String(iv.invoice_number || '');
+          var poNo = String(iv.po_number || '');
+          var wsCell = wsNo
+            ? '<span class="remit-link" onclick="goToRemitTarget(\'reconciliation\',\'' + esc(wsNo) + '\')" style="cursor:pointer;color:#009198;">' + esc(wsNo) + '</span>'
+            : '\u2014';
+          var poCell = poNo
+            ? '<span class="remit-link" onclick="goToRemitTarget(\'notifications\',\'' + esc(poNo) + '\')" style="cursor:pointer;color:#009198;">PO ' + esc(poNo) + '</span>'
+            : 'PO \u2014';
           html += '<div class="remit-line">';
-          html += '<span class="remit-inv">' + esc(iv.invoice_number) + '</span>';
-          html += '<span class="remit-desc">PO ' + esc(iv.po_number || '\u2014') + ' \u00b7 ' + esc(iv.invoice_date || '\u2014') + '</span>';
+          html += '<span class="remit-inv">' + wsCell + '</span>';
+          html += '<span class="remit-desc">' + poCell + ' \u00b7 ' + esc(iv.invoice_date || '\u2014') + '</span>';
           html += '<span class="remit-amt remit-pos">' + rfmt(amt) + '</span>';
           html += '</div>';
         }
@@ -6075,21 +6083,37 @@ async function loadReconciliation() {
       } else {
         for (var j = 0; j < vretLines.length; j++) {
           var ln = vretLines[j];
-          var invNo = String(ln.invoice_number || '');
+          var taxCreditNote = String(ln.invoice_number || '');
           var ret = null;
           for (var k = 0; k < returnsList.length; k++) {
-            if (String(returnsList[k].vret_number || '') === invNo) { ret = returnsList[k]; break; }
+            if (String(returnsList[k].vret_number || '') === taxCreditNote) { ret = returnsList[k]; break; }
           }
           var lineAmt = Number(ln.amount_paid_aed) || 0;
           retDeductTotal += lineAmt;
-          var idLabel = ret ? (ret.return_id || invNo) : invNo;
-          var poLabel = ret ? (ret.po_number || '\u2014') : '\u2014';
-          var dateLabel = ret ? (ret.date_received || '\u2014') : '\u2014';
-          var srtLabel = ret && ret.srt_number ? (' \u00b7 SRT ' + esc(ret.srt_number)) : '';
-          var prtLabel = ret && ret.prt_number ? (' \u00b7 PRT ' + esc(ret.prt_number)) : '';
+          var retIdHuman = ret ? (ret.return_id || '') : '';
+          var retIdInternal = ret ? (ret.id || '') : '';
+          var modelSku = ret ? (ret.model_sku || '') : '';
+          var srtNo = ret ? (ret.srt_number || '') : '';
+          var prtNo = ret ? (ret.prt_number || '') : '';
+          var dispId = ret ? (ret.dispute_id_ref || '') : '';
+          var parts = [];
+          if (retIdHuman) {
+            parts.push(retIdInternal
+              ? '<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(retIdInternal) + '\')" style="cursor:pointer;color:#009198;">Return ' + esc(retIdHuman) + '</span>'
+              : 'Return ' + esc(retIdHuman));
+          }
+          if (modelSku) { parts.push('SKU ' + esc(modelSku)); }
+          if (srtNo) {
+            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(srtNo) + '\')" style="cursor:pointer;color:#009198;">SRT ' + esc(srtNo) + '</span>');
+          }
+          if (prtNo) { parts.push('PRT ' + esc(prtNo)); }
+          if (dispId) {
+            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'disputes\',\'' + esc(dispId) + '\')" style="cursor:pointer;color:#009198;">Dispute ' + esc(dispId) + '</span>');
+          }
+          var descInner = parts.length ? parts.join(' \u00b7 ') : '\u2014';
           html += '<div class="remit-line">';
-          html += '<span class="remit-inv">' + esc(idLabel) + '</span>';
-          html += '<span class="remit-desc">PO ' + esc(poLabel) + ' \u00b7 ' + esc(dateLabel) + srtLabel + prtLabel + '</span>';
+          html += '<span class="remit-inv">' + esc(taxCreditNote) + '</span>';
+          html += '<span class="remit-desc">' + descInner + '</span>';
           html += remitVretBadge(ln, returnsList);
           html += '<span class="remit-amt remit-neg">' + rfmt(lineAmt) + '</span>';
           html += '</div>';
@@ -6125,6 +6149,24 @@ async function loadReconciliation() {
 
       return html;
     }
+
+  function goToRemitTarget(tab, id) {
+    var btn = document.querySelector('.sb-item[data-tab="' + tab + '"]') || document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+    if (typeof switchTab === 'function') { switchTab(tab, btn || {classList:{add:function(){}}}); }
+    setTimeout(function() {
+      var sel = '[data-dispute-number="' + id + '"], [data-id="' + id + '"], [data-return-id="' + id + '"], [data-rid="' + id + '"], [data-srt="' + id + '"], [data-invoice="' + id + '"], [data-inv="' + id + '"]';
+      var el = document.querySelector(sel);
+      if (!el) {
+        var rows = document.querySelectorAll('#pane-' + tab + ' tr, #pane-' + tab + ' .returns-completion-card, #pane-' + tab + ' .dispute-row');
+        for (var i = 0; i < rows.length; i++) { if ((rows[i].textContent || '').indexOf(id) >= 0) { el = rows[i]; break; } }
+      }
+      if (el) {
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        if (typeof flashHighlight === 'function') { flashHighlight(el); }
+      }
+    }, 400);
+  }
+  window.goToRemitTarget = goToRemitTarget;
   window.renderRemitLineGroups = renderRemitLineGroups;
 
   // Fetch lines + matching returns for a remittance ref, then render grouped view into a host element.
@@ -6140,7 +6182,7 @@ async function loadReconciliation() {
         var vretNums = lines.filter(function(l){ return l.transaction_type === 'vret_return' && l.invoice_number; }).map(function(l){ return String(l.invoice_number); });
         var returnsList = [];
         if (vretNums.length) {
-          var rr = await sbQuery(sb.from('returns').select('return_id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, status, date_received').in('vret_number', vretNums));
+          var rr = await sbQuery(sb.from('returns').select('return_id, id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, model_sku, status, date_received').in('vret_number', vretNums));
           returnsList = (rr && rr.data) || [];
         }
         host.innerHTML = renderRemitLineGroups(invoices, lines, returnsList);
@@ -6229,7 +6271,7 @@ async function loadReconciliation() {
     if (vretNums.length) {
       var missing = vretNums.filter(function(n){ return !rets.some(function(r){ return String(r.vret_number || '') === n; }); });
       if (missing.length) {
-        var rr = await sbQuery(sb.from('returns').select('return_id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, status, date_received').in('vret_number', vretNums));
+        var rr = await sbQuery(sb.from('returns').select('return_id, id, vret_number, po_number, srt_number, prt_number, dispute_id_ref, model_sku, status, date_received').in('vret_number', vretNums));
         rets = (rr && rr.data) || rets;
       }
     }
