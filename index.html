@@ -5371,7 +5371,7 @@ async function loadReconciliation() {
   try {
     const remSel = ['remittance_ref','payment_date','gross_invoices_aed','coop_deductions_aed','vret_deductions_aed','shortage_deductions_aed','damage_deductions_aed','dispute_credits_aed','net_paid_aed','gross_amount_aed','invoice_count'].join(',');
     const invSel = ['invoice_number','invoice_date','amount_aed','po_number','payment_number','payment_status','source','deduction_status','resolution_note'].join(',');
-    const retSel = ['return_id','vret_number','tle_invoice_number','po_number','srt_number','prt_number','dispute_id_ref','model_sku','status','date_received','total_cost_aed'].join(',');
+    const retSel = ['return_id','vret_number','tle_invoice_number','po_number','srt_number','prt_number','dispute_id_ref','model_sku','status','stage','date_received','total_cost_aed'].join(',');
     const dspSel = ['dispute_number','tle_invoice_number','po_number','dispute_status','invoice_amount_aed','approved_amount_aed','gap_aed','credit_closed','credit_amount_aed','payment_number','dispute_type'].join(',');
     const [remRes, invRes, retRes, dspRes, aggGrossRes, aggPaidRes, aggAwaitRes, aggNeedsRes, aggNetRes] = await Promise.all([
       sb.from('remittances').select(remSel).gt('gross_invoices_aed', 0).order('payment_date', { ascending: false }),
@@ -5830,10 +5830,18 @@ async function loadReconciliation() {
       return '<span class="recon-badge recon-badge-gray">Review Required</span>';
     }
     if(type==='vret'){
-      var ret = RS.returns.find(function(r){ return r.srt_number && (r.srt_number===line.matched_return_id || r.return_id===line.matched_return_id); });
-      var hasSrt = ret ? !!ret.srt_number : false;
-      return hasSrt ? '<span class="recon-badge recon-badge-green">Verified</span>'
-                    : '<span class="recon-badge recon-badge-amber">Needs Verification</span>';
+      var ret = RS.returns.find(function(r){ return r.vret_number === line.invoice_number; });
+      if(!ret){
+        return '<span class="recon-badge recon-badge-red">● No return found</span>';
+      }
+      var rStatus = (ret.status||'').toLowerCase();
+      if(rStatus === 'closed'){
+        return '<span class="recon-badge recon-badge-green">● Return closed</span>';
+      }
+      if(ret.srt_number){
+        return '<span class="recon-badge recon-badge-blue">● '+escapeHtmlR(ret.stage||'In progress')+'</span>';
+      }
+      return '<span class="recon-badge recon-badge-amber">● SRT pending</span>';
     }
     if(type==='shortage'){
       var dsp = RS.disputes.find(function(d){ return d.dispute_number===line.matched_dispute || d.dispute_number===line.dspt_number; });
