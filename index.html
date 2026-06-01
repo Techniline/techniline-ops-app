@@ -6060,10 +6060,10 @@ async function loadReconciliation() {
           var wsNo = String(iv.invoice_number || '');
           var poNo = String(iv.po_number || '');
           var wsCell = wsNo
-            ? '<span class="remit-link" onclick="goToRemitTarget(\'reconciliation\',\'' + esc(wsNo) + '\')" style="cursor:pointer;color:#009198;">' + esc(wsNo) + '</span>'
+            ? '<span class="remit-link" onclick="goToRemitTarget(\'reconciliation\',\'' + esc(wsNo) + '\')" style="cursor:pointer;color:#009198;text-decoration:underline;">' + esc(wsNo) + '</span>'
             : '\u2014';
           var poCell = poNo
-            ? '<span class="remit-link" onclick="goToRemitTarget(\'notifications\',\'' + esc(poNo) + '\')" style="cursor:pointer;color:#009198;">PO ' + esc(poNo) + '</span>'
+            ? '<span class="remit-link" onclick="goToRemitTarget(\'notifications\',\'' + esc(poNo) + '\')" style="cursor:pointer;color:#009198;text-decoration:underline;">PO ' + esc(poNo) + '</span>'
             : 'PO \u2014';
           html += '<div class="remit-line">';
           html += '<span class="remit-inv">' + wsCell + '</span>';
@@ -6099,16 +6099,18 @@ async function loadReconciliation() {
           var parts = [];
           if (retIdHuman) {
             parts.push(retIdInternal
-              ? '<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(retIdInternal) + '\')" style="cursor:pointer;color:#009198;">Return ' + esc(retIdHuman) + '</span>'
+              ? '<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(retIdHuman) + '\')" style="cursor:pointer;color:#009198;text-decoration:underline;">Return ' + esc(retIdHuman) + '</span>'
               : 'Return ' + esc(retIdHuman));
           }
           if (modelSku) { parts.push('SKU ' + esc(modelSku)); }
+          var retPo = ret ? (ret.po_number || '') : '';
+          if (retPo) { parts.push('<span style="color:#64748b;font-size:12px;">PO ' + esc(retPo) + '</span>'); }
           if (srtNo) {
-            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(srtNo) + '\')" style="cursor:pointer;color:#009198;">SRT ' + esc(srtNo) + '</span>');
+            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'returns\',\'' + esc(srtNo) + '\')" style="cursor:pointer;color:#009198;text-decoration:underline;">SRT ' + esc(srtNo) + '</span>');
           }
           if (prtNo) { parts.push('PRT ' + esc(prtNo)); }
           if (dispId) {
-            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'disputes\',\'' + esc(dispId) + '\')" style="cursor:pointer;color:#009198;">Dispute ' + esc(dispId) + '</span>');
+            parts.push('<span class="remit-link" onclick="goToRemitTarget(\'disputes\',\'' + esc(dispId) + '\')" style="cursor:pointer;color:#009198;text-decoration:underline;">Dispute ' + esc(dispId) + '</span>');
           }
           var descInner = parts.length ? parts.join(' \u00b7 ') : '\u2014';
           html += '<div class="remit-line">';
@@ -6151,13 +6153,22 @@ async function loadReconciliation() {
     }
 
   function goToRemitTarget(tab, id) {
+    if (tab === 'notifications') {
+      var searchInput = document.getElementById('global-search') || document.querySelector('.search-input') || document.querySelector('input[type="search"]');
+      if (searchInput) {
+        searchInput.value = id;
+        searchInput.dispatchEvent(new Event('input', {bubbles: true}));
+        searchInput.focus();
+      }
+      return;
+    }
     var btn = document.querySelector('.sb-item[data-tab="' + tab + '"]') || document.querySelector('.tab-btn[data-tab="' + tab + '"]');
     if (typeof switchTab === 'function') { switchTab(tab, btn || {classList:{add:function(){}}}); }
     setTimeout(function() {
       var sel = '[data-dispute-number="' + id + '"], [data-id="' + id + '"], [data-return-id="' + id + '"], [data-rid="' + id + '"], [data-srt="' + id + '"], [data-invoice="' + id + '"], [data-inv="' + id + '"]';
       var el = document.querySelector(sel);
       if (!el) {
-        var rows = document.querySelectorAll('#pane-' + tab + ' tr, #pane-' + tab + ' .returns-completion-card, #pane-' + tab + ' .dispute-row');
+        var rows = document.querySelectorAll('#pane-' + tab + ' tr, #pane-' + tab + ' .returns-completion-card, #pane-' + tab + ' .dispute-row, #pane-' + tab + ' .return-card, #pane-' + tab + ' .notif-card');
         for (var i = 0; i < rows.length; i++) { if ((rows[i].textContent || '').indexOf(id) >= 0) { el = rows[i]; break; } }
       }
       if (el) {
