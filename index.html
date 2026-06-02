@@ -6578,3 +6578,128 @@ async function loadReconciliation() {
   setTimeout(function(){ var p=document.getElementById('pane-remittances'); if(p && getComputedStyle(p).display!=='none' && window.renderRemittancesUpgraded) window.renderRemittancesUpgraded(); }, 900);
 })();
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      </script>
+<script>
+/* ===== Techniline Ops: dispute notification wiring (additive, append-only) ===== */
+(function(){
+  if (window.__disputeWiringInstalled) return;
+  window.__disputeWiringInstalled = true;
+  window.__pendingDisputeType = null;
+
+  function normalizeInvoice(raw){
+    if(!raw) return null;
+    var m = String(raw).match(/WS\s*\/?\s*(\d{6,8})/i);
+    if(!m) return null;
+    return 'WS/' + m[1];
+  }
+  function parseDisputeNotif(n){
+    var subj=(n&&n.email_subject)||'', body=(n&&(n.raw_body_snippet||''))||'';
+    var text=subj+' '+body;
+    var dsptM=(n&&n.ref_number)||(text.match(/DSPT\d{6,}/i)||[])[0]||null;
+    return { dispute_number:dsptM, invoice:normalizeInvoice(text),
+             type:/vendor returns|return id/i.test(text)?'Vendor returns':'Shortage invoice' };
+  }
+
+  window.logDisputeFromNotif = async function(notifId){
+    try{
+      var n=(window.allNotifications||[]).find(function(x){return x.id===notifId;});
+      if(!n){ showToast('Notification not found'); return; }
+      var parsed=parseDisputeNotif(n);
+      if(!parsed.dispute_number){ showToast('No DSPT id found in this email'); return; }
+      var existing=await sb.from('disputes').select('id,dispute_status').eq('dispute_number',parsed.dispute_number).limit(1);
+      if(existing&&existing.data&&existing.data.length){
+        return window.applyDisputeUpdateFromNotif(notifId);
+      }
+      window.__pendingDisputeType = parsed.type || null;
+      openDisputeModal(notifId);
+      var setVal=function(id,v){var e=document.getElementById(id); if(e&&v!=null&&e.value!==undefined&&!e.value){e.value=v;}};
+      setVal('disp-number',parsed.dispute_number);
+      setVal('disp-invoice',parsed.invoice||'');
+    }catch(err){ console.error(err); showToast('Could not log dispute'); }
+  };
+
+  window.applyDisputeUpdateFromNotif = async function(notifId){
+    try{
+      var n=(window.allNotifications||[]).find(function(x){return x.id===notifId;});
+      if(!n){ showToast('Notification not found'); return; }
+      var parsed=parseDisputeNotif(n);
+      if(!parsed.dispute_number){ showToast('No DSPT id found'); return; }
+      var found=await sb.from('disputes').select('id,dispute_status').eq('dispute_number',parsed.dispute_number).limit(1);
+      if(!found||!found.data||!found.data.length){
+        if(confirm('No dispute exists yet for '+parsed.dispute_number+'. Log it now?')) return window.logDisputeFromNotif(notifId);
+        return;
+      }
+      var text=((n.email_subject||'')+' '+(n.raw_body_snippet||'')).toLowerCase();
+      var next=null;
+      if(/partial/.test(text)) next='amazon_partial';
+      else if(/reject|denied|deny/.test(text)) next='amazon_rejected';
+      else if(/approv/.test(text)) next='amazon_approved';
+      if(!next){
+        await sb.from('expected_actions').update({status:'actioned',actioned_at:new Date().toISOString()}).eq('id',notifId);
+        if(typeof loadNotifications==='function') await loadNotifications();
+        showToast('Acknowledged \u2014 dispute '+parsed.dispute_number+' stays open');
+        if(typeof goToDispute==='function') goToDispute(parsed.dispute_number);
+        return;
+      }
+      await sb.from('disputes').update({dispute_status:next}).eq('id',found.data[0].id);
+      await sb.from('expected_actions').update({status:'actioned',actioned_at:new Date().toISOString()}).eq('id',notifId);
+      if(typeof loadDisputes==='function') await loadDisputes();
+      if(typeof loadNotifications==='function') await loadNotifications();
+      showToast('Dispute '+parsed.dispute_number+' \u2192 '+next);
+    }catch(err){ console.error(err); showToast('Could not update dispute'); }
+  };
+
+  /* Additive wrapper: set dispute_type on the row submitDispute just inserted (Option B). */
+  (function(){
+    var orig=window.submitDispute;
+    if(typeof orig==='function' && !orig.__typeWrapped){
+      var wrapped=async function(){
+        var numEl=document.getElementById('disp-number');
+        var dnum=numEl?numEl.value:null;
+        var pending=window.__pendingDisputeType;
+        var r=await orig.apply(this,arguments);
+        try{
+          if(dnum && pending){
+            var row=await sb.from('disputes').select('id,dispute_type').eq('dispute_number',dnum).order('created_at',{ascending:false}).limit(1);
+            if(row&&row.data&&row.data.length&&!row.data[0].dispute_type){
+              await sb.from('disputes').update({dispute_type:pending}).eq('id',row.data[0].id);
+              if(typeof loadDisputes==='function') await loadDisputes();
+            }
+          }
+        }catch(e){ console.error(e); }
+        window.__pendingDisputeType=null;
+        return r;
+      };
+      wrapped.__typeWrapped=true;
+      window.submitDispute=wrapped;
+    }
+  })();
+
+  function injectButtons(){
+    var importBtn=Array.prototype.slice.call(document.querySelectorAll('button')).find(function(b){return /Import from Vendor Central/i.test(b.textContent);});
+    if(importBtn&&!document.getElementById('btn-add-dispute')){
+      var add=document.createElement('button');
+      add.id='btn-add-dispute'; add.type='button'; add.className=importBtn.className;
+      add.textContent='Add a dispute';
+      add.onclick=function(){ window.__pendingDisputeType=null; openDisputeModal(null); };
+      importBtn.parentElement.insertBefore(add,importBtn);
+    }
+    Array.prototype.slice.call(document.querySelectorAll('button')).forEach(function(b){
+      var oc=b.getAttribute('onclick')||'';
+      if(/actionNotif\(/.test(oc)&&/Status updated/.test(oc)&&!b.dataset.dispWired){
+        var idM=oc.match(/actionNotif\('([^']+)'/);
+        if(idM){ var nid=idM[1]; b.dataset.dispWired='1'; b.textContent='Log dispute';
+          b.onclick=function(ev){ ev.preventDefault(); window.logDisputeFromNotif(nid); };
+          b.removeAttribute('onclick'); }
+      }
+    });
+  }
+  ['loadNotifications','loadDisputes'].forEach(function(fnName){
+    var orig=window[fnName];
+    if(typeof orig==='function'&&!orig.__disputeHook){
+      var wrapped=async function(){ var r=await orig.apply(this,arguments); try{setTimeout(injectButtons,0);}catch(e){} return r; };
+      wrapped.__disputeHook=true; window[fnName]=wrapped;
+    }
+  });
+  setTimeout(injectButtons,0);
+})();
+</script>
