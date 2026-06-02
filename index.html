@@ -2357,7 +2357,7 @@ async function submitDispute() {
     maricel_comment: comment,
     submitted_for_approval_at: new Date().toISOString(),
     approval_status: 'pending',
-    dispute_status: 'open'
+    dispute_status: 'open', dispute_type: window.__pendingDisputeType || null
   });
   if (error) { alert('Error: ' + error.message); return; }
   await sb.from('expected_actions').update({ status: 'actioned', actioned_at: new Date().toISOString() }).eq('id', currentDisputeActionId);
