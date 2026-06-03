@@ -4848,9 +4848,9 @@ function flashHighlight(el) {
 let __gsTimer = null;
 function onGlobalSearchInput(e) {
   const q = (e.target.value || '').trim();
-  if (__gsTimer) clearTimeout(__gsTimer);
-  if (!q) { closeGlobalSearchPanel(); return; }
-  __gsTimer = setTimeout(() => runGlobalSearch(q), 400);
+  clearTimeout(__gsTimer);
+  if (q.length < 2) { renderGlobalSearchResults({}); return; }
+  __gsTimer = setTimeout(() => runGlobalSearch(q), 250);
 }
 
 function onGlobalSearchKey(e) {
@@ -4874,129 +4874,88 @@ function closeGlobalSearchPanel() {
 }
 
 async function runGlobalSearch(q) {
-  const panel = document.getElementById('global-search-panel');
-  if (!panel) return;
-  panel.style.display = 'block';
-  panel.innerHTML = '<div class="gs-loading">Searching…</div>';
-  const Q = q.trim();
-  const upper = Q.toUpperCase();
-  const isDspt = upper.startsWith('DSPT');
-  const isWs = upper.startsWith('WS');
-  const isPo8 = /^[A-Z0-9]{8}$/.test(upper);
-  const isReturnId = /^\d{10,}$/.test(Q);
-  const isAmazonInv = Q.startsWith('7500');
-  const queries = [];
-  try {
-    if (isDspt) {
-      queries.push(sb.from('disputes').select('*').ilike('dispute_number', '%' + Q + '%').limit(5));
-    } else if (isWs) {
-      queries.push(sb.from('disputes').select('*').ilike('tle_invoice_number', '%' + Q + '%').limit(5));
-      queries.push(sb.from('returns').select('*').ilike('tle_invoice_number', '%' + Q + '%').limit(5));
-    } else if (isPo8) {
-      queries.push(sb.from('disputes').select('*').eq('po_number', upper).limit(5));
-      queries.push(sb.from('returns').select('*').eq('po_number', upper).limit(5));
-      queries.push(sb.from('expected_actions').select('*').eq('ref_number', upper).limit(5));
-    } else if (isReturnId) {
-      queries.push(sb.from('returns').select('*').eq('return_id', Q).limit(5));
-      queries.push(sb.from('dispute_items').select('*').eq('return_id', Q).limit(5));
-    } else if (isAmazonInv) {
-      queries.push(sb.from('returns').select('*').ilike('amazon_invoice', '%' + Q + '%').limit(5));
-    } else {
-      queries.push(sb.from('disputes').select('*').or('dispute_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,raise_reason.ilike.%' + Q + '%').limit(5));
-      queries.push(sb.from('returns').select('*').or('return_id.ilike.%' + Q + '%,vret_number.ilike.%' + Q + '%,tle_invoice_number.ilike.%' + Q + '%,po_number.ilike.%' + Q + '%,model_sku.ilike.%' + Q + '%').limit(5));
-      queries.push(sb.from('expected_actions').select('*').or('ref_number.ilike.%' + Q + '%,description.ilike.%' + Q + '%').limit(5));
-    }
-    const results = await Promise.all(queries.map(p => p.then(r => r).catch(e => ({data: [], error: e}))));
-    renderGlobalSearchResults(results, {isDspt, isWs, isPo8, isReturnId, isAmazonInv});
-  } catch(e) {
-    panel.innerHTML = '<div class="gs-empty">Search failed</div>';
-  }
-}
-
-function renderGlobalSearchResults(results, hints) {
-  const panel = document.getElementById('global-search-panel');
-  if (!panel) return;
-  // Bucket results into disputes / returns / dispute_items / expected_actions
-  const disputes = [], returns = [], dispItems = [], expActs = [];
-  results.forEach(r => {
-    const d = (r && r.data) ? r.data : [];
-    d.forEach(row => {
-      if (row.dispute_number && row.dispute_status !== undefined) disputes.push(row);
-      else if (row.return_id !== undefined || row.vret_number !== undefined) returns.push(row);
-      else if (row.line_status !== undefined || (row.return_id && row.dispute_number)) dispItems.push(row);
-      else if (row.ref_number !== undefined || row.action_type !== undefined) expActs.push(row);
-    });
+  q = (q || '').trim();
+  if (q.length < 2) { renderGlobalSearchResults({}); return; }
+  window._gsSeq = (window._gsSeq || 0) + 1;
+  const seq = window._gsSeq;
+  window.sb.rpc('search_all', { q }).then(({ data, error }) => {
+    if (seq !== window._gsSeq) return;
+    if (error) { console.error('search_all', error); renderGlobalSearchResults({}); return; }
+    const grouped = {};
+    (data || []).forEach(r => { (grouped[r.category] = grouped[r.category] || []).push(r); });
+    renderGlobalSearchResults(grouped);
   });
-  let html = '';
-  if (disputes.length) {
-    html += '<div class="gs-group-title">Disputes</div>';
-    disputes.slice(0,5).forEach(d => {
-      const st = (d.dispute_status || '').toLowerCase();
-      const cls = st.includes('approved') || st === 'resolved' ? 'green' : (st.includes('rejected') ? 'red' : (st.includes('partial') ? 'amber' : 'navy'));
-      const amt = d.invoice_amount_aed != null ? Number(d.invoice_amount_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) + ' AED' : '';
-      html += '<div class="gs-result" onclick="goToSearchResult(\'dispute\', \'' + (d.dispute_number||'').replace(/\'/g,"\\'") + '\')">'
-        + '<div class="gs-result-main"><div class="gs-result-ref">' + (d.dispute_number || '—') + '</div>'
-        + '<div class="gs-result-sub">' + (d.tle_invoice_number || '') + (d.po_number ? ' · ' + d.po_number : '') + '</div></div>'
-        + '<span class="gs-pill ' + cls + '">' + (d.dispute_status || 'open') + '</span>'
-        + (amt ? '<span class="gs-result-amt">' + amt + '</span>' : '') + '</div>';
-    });
-  }
-  if (returns.length) {
-    html += '<div class="gs-group-title">Returns</div>';
-    returns.slice(0,5).forEach(r => {
-      const st = (r.status || '').toLowerCase();
-      const cls = st === 'closed' ? 'green' : (r.is_complete ? 'navy' : 'amber');
-      const amt = r.recovery_amt_aed != null ? Number(r.recovery_amt_aed).toLocaleString('en-AE',{minimumFractionDigits:2}) + ' AED' : '';
-      html += '<div class="gs-result" onclick="goToSearchResult(\'return\', \'' + r.id + '\', \'' + (r.return_id||'').replace(/\'/g,"\\'") + '\')">'
-        + '<div class="gs-result-main"><div class="gs-result-ref">' + (r.return_id || r.vret_number || '—') + '</div>'
-        + '<div class="gs-result-sub">' + (r.po_number ? r.po_number + ' · ' : '') + (r.model_sku || '') + '</div></div>'
-        + '<span class="gs-pill ' + cls + '">' + (r.status || (r.is_complete?'complete':'open')) + '</span>'
-        + (amt ? '<span class="gs-result-amt">' + amt + '</span>' : '') + '</div>';
-    });
-  }
-  if (dispItems.length) {
-    html += '<div class="gs-group-title">Dispute line items</div>';
-    dispItems.slice(0,5).forEach(it => {
-      const st = (it.line_status || 'pending').toLowerCase();
-      const cls = st === 'approved' ? 'green' : (st === 'rejected' ? 'red' : 'amber');
-      html += '<div class="gs-result" onclick="goToSearchResult(\'dispute\', \'' + (it.dispute_number||'').replace(/\'/g,"\\'") + '\')">'
-        + '<div class="gs-result-main"><div class="gs-result-ref">' + (it.return_id || '—') + '</div>'
-        + '<div class="gs-result-sub">' + (it.dispute_number || '') + '</div></div>'
-        + '<span class="gs-pill ' + cls + '">' + st + '</span></div>';
-    });
-  }
-  if (expActs.length) {
-    html += '<div class="gs-group-title">Notifications / Actions</div>';
-    expActs.slice(0,5).forEach(a => {
-      html += '<div class="gs-result" onclick="goToSearchResult(\'notif\', \'' + (a.id||'') + '\')">'
-        + '<div class="gs-result-main"><div class="gs-result-ref">' + (a.ref_number || a.action_type || '—') + '</div>'
-        + '<div class="gs-result-sub">' + (a.description || a.action_type || '') + '</div></div></div>';
-    });
-  }
-  if (!html) html = '<div class="gs-empty">No matches</div>';
-  panel.innerHTML = html;
 }
 
-function goToSearchResult(kind, refOrId, returnIdRef) {
+function renderGlobalSearchResults(grouped) {
+  const panel = document.getElementById('global-search-panel');
+  if (!panel) return;
+  const cats = Object.keys(grouped || {});
+  const total = cats.reduce((n, c) => n + grouped[c].length, 0);
+  if (!total) { panel.innerHTML = '<div class="gs-empty">No matches</div>'; showGlobalSearchResults(); return; }
+  const ORDER = ['Disputes','Returns','Expected actions','Invoices','Remittances','Remittance lines'];
+  const NAVIGABLE = { 'Disputes':1, 'Returns':1, 'Expected actions':1 };
+  const ordered = ORDER.filter(c => grouped[c]).concat(cats.filter(c => ORDER.indexOf(c) === -1));
+  const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]));
+  const money = v => (v == null || v === '') ? '' : Number(v).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' AED';
+  let html = '';
+  for (const cat of ordered) {
+    const rows = grouped[cat];
+    const navOk = !!NAVIGABLE[cat];
+    html += '<div class="gs-group-title">' + esc(cat) + ' (' + rows.length + ')</div>';
+    for (const r of rows) {
+      html += '<div class="gs-result' + (navOk ? '' : ' gs-result-static') + '"' +
+              (navOk ? ' role="button" tabindex="0"' : '') +
+              ' data-table="' + esc(r.source_table) + '"' +
+              ' data-nav="' + esc(r.nav_key) + '"' +
+              ' data-navok="' + (navOk ? '1' : '0') + '">' +
+                '<span class="gs-result-main">' + esc(r.primary_label) + '</span>' +
+                '<span class="gs-result-ref">' + esc(r.secondary_label) + '</span>' +
+                '<span class="gs-result-sub gs-pill">' + esc(r.matched_field) + '</span>' +
+                '<span class="gs-result-amt">' + esc(money(r.amount)) + '</span>' +
+              '</div>';
+    }
+  }
+  panel.innerHTML = html;
+  panel.querySelectorAll('.gs-result[data-navok="1"]').forEach(el => {
+    const go = () => goToSearchResult(el.dataset.table, el.dataset.nav);
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  });
+  showGlobalSearchResults();
+}
+
+function goToSearchResult(source_table, nav_key) {
   closeGlobalSearchPanel();
-  const sel = (txt) => Array.from(document.querySelectorAll('.tab-btn')).find(b => new RegExp(txt, 'i').test(b.textContent));
-  if (kind === 'dispute') {
-    const b = sel('disputes'); if (b) b.click();
-    setTimeout(() => {
-      const rows = document.querySelectorAll('#disp-list tr[data-id], #disp-list tr');
-      let target = null;
-      rows.forEach(r => { if ((r.textContent||'').indexOf(refOrId) >= 0 && !target) target = r; });
-      if (target) flashHighlight(target);
-    }, 350);
-  } else if (kind === 'return') {
-    const b = sel('returns'); if (b) b.click();
-    setTimeout(() => {
-      const row = document.getElementById('ret-row-' + refOrId);
-      if (row) flashHighlight(row);
-      else if (returnIdRef) jumpToReturn(returnIdRef);
-    }, 350);
-  } else if (kind === 'notif') {
-    const b = sel('notifications'); if (b) b.click(); setTimeout(() => { const card = document.querySelector('.notif-card[data-action-id="' + refOrId + '"]'); if (card) flashHighlight(card); }, 350);
+  if (!nav_key) return;
+  switch (source_table) {
+    case 'disputes': {
+      const tab = [...document.querySelectorAll('.tab-btn')].find(b => /dispute/i.test(b.textContent||''));
+      if (tab) tab.click();
+      setTimeout(() => {
+        const rows = document.querySelectorAll('#disp-list tr[data-id], #disp-list tr');
+        const target = [...rows].find(r => (r.textContent||'').indexOf(nav_key) !== -1);
+        if (target && typeof flashHighlight === 'function') flashHighlight(target);
+        else if (target) target.scrollIntoView({ block:'center' });
+      }, 60);
+      break;
+    }
+    case 'returns': {
+      const tab = [...document.querySelectorAll('.tab-btn')].find(b => /^returns\b/i.test((b.textContent||'').trim()));
+      if (tab) tab.click();
+      setTimeout(() => {
+        const row = document.getElementById('ret-row-' + nav_key)
+                 || document.querySelector('#returns-table-host tr[data-rid="' + nav_key + '"]');
+        if (row) { row.scrollIntoView({ block:'center' }); if (typeof flashHighlight === 'function') flashHighlight(row); }
+      }, 380);
+      break;
+    }
+    case 'expected_actions': {
+      const card = document.querySelector('.notif-card[data-action-id="' + nav_key + '"]');
+      if (card) { card.scrollIntoView({ block:'center' }); if (typeof flashHighlight === 'function') flashHighlight(card); }
+      break;
+    }
+    default: console.warn('goToSearchResult: no target for', source_table);
   }
 }
 
