@@ -2552,9 +2552,14 @@ async function submitOneTap(taskId, note) {
     is_nothing_to_action: true, nothing_to_action_note: note
   });
   if (error) { alert('Could not save your confirmation: ' + error.message + '\n\nThe task was NOT marked done. Please try again or report this.'); return; }
-  // 2) Only now mark the task done
-  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  // 2) Only now mark the task done. .select() returns the updated rows so we can
+  //    detect a silent zero-row update (RLS rejection returns no error but changes nothing).
+  const { data: updated, error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId).select();
   if (stErr) { alert('Could not update task: ' + stErr.message); return; }
+  if (!updated || updated.length === 0) {
+    alert('The task was NOT marked done \u2014 it looks like you don\'t have permission to submit this task (it may be assigned to someone else). Please tell Vihan.');
+    return;
+  }
   showToast('Confirmed');
   await loadChecklist();
 }
@@ -2596,9 +2601,14 @@ async function submitTagTask(taskId) {
     is_nothing_to_action: false
   });
   if (error) { alert('Could not save your work: ' + error.message + '\n\nThe task was NOT marked done so nothing is lost. Please try again or report this.'); return; }
-  // 2) Only now mark the task done
-  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  // 2) Only now mark the task done. .select() lets us catch a silent zero-row
+  //    update (RLS rejection returns no error but changes nothing).
+  const { data: updated, error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId).select();
   if (stErr) { alert('Could not update task: ' + stErr.message); return; }
+  if (!updated || updated.length === 0) {
+    alert('The task was NOT marked done \u2014 it looks like you don\'t have permission to submit this task (it may be assigned to someone else). Your work was recorded but the task stays open. Please tell Vihan.');
+    return;
+  }
   showToast('Submitted \u2014 ' + evidenceCount + ' items logged');
   await loadChecklist();
 }
