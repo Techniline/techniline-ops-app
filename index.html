@@ -2542,17 +2542,19 @@ function renderTags(taskId, sectionId) {
     `<div class="tag-chip">${t}<button onclick="removeTag('${taskId}','${sectionId}',${i})">×</button></div>`).join('');
 }
 
+// Explicit "nothing to action" path. This is the legitimate no-evidence route.
 async function submitOneTap(taskId, note) {
-  // 1) Mark the task done FIRST so the checklist always reflects completion
-  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
-  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
-  // 2) Record evidence (best-effort — don't block completion if this fails)
+  // 1) Record evidence FIRST. The task is only marked done if this succeeds,
+  //    so we never end up with a "done" task that has no record behind it.
   const { error } = await sb.from('submissions').insert({
     daily_task_id: taskId, submitted_by: currentUser.id,
     submitted_at: new Date().toISOString(),
     is_nothing_to_action: true, nothing_to_action_note: note
   });
-  if (error) console.warn('submission insert failed (status already saved):', error.message);
+  if (error) { alert('Could not save your confirmation: ' + error.message + '\n\nThe task was NOT marked done. Please try again or report this.'); return; }
+  // 2) Only now mark the task done
+  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
   showToast('Confirmed');
   await loadChecklist();
 }
@@ -2580,17 +2582,23 @@ async function submitTagTask(taskId) {
     evidenceText = allTags.join(', ');
     evidenceCount = allTags.length;
   }
-  // 1) Mark the task done FIRST
-  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
-  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
-  // 2) Record evidence (best-effort)
+  // GATE: a tagged/invoice task cannot be submitted with no evidence.
+  // If there is genuinely nothing to log, the user must use "Nothing to action".
+  if (evidenceCount === 0) {
+    showToast('Please log your work before submitting \u2014 add at least one tag or invoice count, or use "Nothing to action".');
+    return;
+  }
+  // 1) Record evidence FIRST. Task is only marked done if this succeeds.
   const { error } = await sb.from('submissions').insert({
     daily_task_id: taskId, submitted_by: currentUser.id,
     submitted_at: new Date().toISOString(),
     evidence_text: evidenceText, evidence_count: evidenceCount,
-    is_nothing_to_action: evidenceCount === 0
+    is_nothing_to_action: false
   });
-  if (error) console.warn('submission insert failed (status already saved):', error.message);
+  if (error) { alert('Could not save your work: ' + error.message + '\n\nThe task was NOT marked done so nothing is lost. Please try again or report this.'); return; }
+  // 2) Only now mark the task done
+  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
   showToast('Submitted \u2014 ' + evidenceCount + ' items logged');
   await loadChecklist();
 }
