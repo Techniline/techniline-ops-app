@@ -2543,13 +2543,16 @@ function renderTags(taskId, sectionId) {
 }
 
 async function submitOneTap(taskId, note) {
+  // 1) Mark the task done FIRST so the checklist always reflects completion
+  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
+  // 2) Record evidence (best-effort — don't block completion if this fails)
   const { error } = await sb.from('submissions').insert({
     daily_task_id: taskId, submitted_by: currentUser.id,
     submitted_at: new Date().toISOString(),
     is_nothing_to_action: true, nothing_to_action_note: note
   });
-  if (error) { alert('Error: ' + error.message); return; }
-  await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (error) console.warn('submission insert failed (status already saved):', error.message);
   showToast('Confirmed');
   await loadChecklist();
 }
@@ -2568,19 +2571,26 @@ async function submitTagTask(taskId) {
     let allTags = [];
     sections.forEach(s => {
       const chips = s.querySelectorAll('.tag-chip');
-      chips.forEach(c => allTags.push(c.textContent.replace('\u00d7','').trim()));
+      chips.forEach(c => {
+        // take only the text node, not the "×" button
+        const txt = (c.childNodes[0] && c.childNodes[0].textContent || '').trim();
+        if (txt) allTags.push(txt);
+      });
     });
     evidenceText = allTags.join(', ');
     evidenceCount = allTags.length;
   }
+  // 1) Mark the task done FIRST
+  const { error: stErr } = await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (stErr) { alert('Could not update task: ' + stErr.message); return; }
+  // 2) Record evidence (best-effort)
   const { error } = await sb.from('submissions').insert({
     daily_task_id: taskId, submitted_by: currentUser.id,
     submitted_at: new Date().toISOString(),
     evidence_text: evidenceText, evidence_count: evidenceCount,
     is_nothing_to_action: evidenceCount === 0
   });
-  if (error) { alert('Error: ' + error.message); return; }
-  await sb.from('daily_tasks').update({ status: 'submitted' }).eq('id', taskId);
+  if (error) console.warn('submission insert failed (status already saved):', error.message);
   showToast('Submitted \u2014 ' + evidenceCount + ' items logged');
   await loadChecklist();
 }
