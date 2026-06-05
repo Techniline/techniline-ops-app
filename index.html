@@ -1852,6 +1852,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
 
 // ── Tab switching ──────────────────────────────────────
 function isManager(){ return currentUserProfile && currentUserProfile.role === 'manager'; }function isMaricel(){ return currentUser && currentUser.email === 'purchasing@techniline.org'; }
+function isAaron(){ return currentUser && currentUser.email === 'eops@techniline.org'; }
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('pane-' + name).classList.add('active');
