@@ -1853,6 +1853,13 @@ sb.auth.onAuthStateChange(async (event, session) => {
 // ── Tab switching ──────────────────────────────────────
 function isManager(){ return currentUserProfile && currentUserProfile.role === 'manager'; }function isMaricel(){ return currentUser && currentUser.email === 'purchasing@techniline.org'; }
 function isAaron(){ return currentUser && currentUser.email === 'eops@techniline.org'; }
+function canViewFinanceModules(){ return isManager() || isMaricel(); }
+function canViewCocoblu(){ return isManager() || isAaron(); }
+function scopeToUser(query){ if(!isManager()){ query = query.eq('assigned_to', currentUser.id); } return query; }
+function scopePriorities(query){ if(!isManager()){ query = query.or(`assigned_to.eq.${currentUser.id},assigned_to_both.eq.true`); } return query; }
+function setNavVisible(tab, visible){ var el = document.querySelector('.sb-item[data-tab="'+tab+'"]'); if(el){ el.style.display = visible ? '' : 'none'; } }
+function applyTabVisibility(){ setNavVisible('disputes', canViewFinanceModules()); setNavVisible('reconciliation', canViewFinanceModules()); setNavVisible('remittances', canViewFinanceModules()); setNavVisible('returns', canViewFinanceModules()); setNavVisible('cocoblu', canViewCocoblu()); setNavVisible('manager', isManager()); var ab = document.querySelector('.sb-item.active'); if(ab && ab.style.display === 'none'){ var cl = document.querySelector('.sb-item[data-tab="checklist"]'); if(cl) switchTab('checklist', cl); } }
+function switchTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('pane-' + name).classList.add('active');
