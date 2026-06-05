@@ -8,7 +8,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?famhily=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
   --primary: #009198; --primary-mid: #007A80; --primary-light: #E6F8F8; --primary-border: #CCF0F1; --primary-hover: rgba(0,145,152,0.08);
@@ -2408,7 +2408,7 @@ async function submitReturn() {
 }
 
 // ── Checklist ──────────────────────────────────────────
-async function loadChecklist() {
+async function loadChecklist() { try { const { error: rpcError } = await sb.rpc('generate_daily_tasks'); if (rpcError) console.warn('generate_daily_tasks RPC failed:', rpcError); } catch (e) { console.warn('generate_daily_tasks RPC failed:', e); }
   const today = new Date().toISOString().split('T')[0];
   const { data: tasks, error } = await sbQuery(
     sb.from('daily_tasks')
