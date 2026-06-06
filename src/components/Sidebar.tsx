@@ -19,6 +19,7 @@ import {
   CocobluIcon,
   DashboardIcon,
   RemittancesIcon,
+  ReturnsIcon,
   Logo,
   LogoutIcon,
 } from "./icons";
@@ -69,6 +70,12 @@ export function Sidebar() {
       href: "/remittances",
       label: "Remittances",
       icon: RemittancesIcon,
+      show: canViewFinance(profile),
+    },
+    {
+      href: "/returns",
+      label: "Returns",
+      icon: ReturnsIcon,
       show: canViewFinance(profile),
     },
   ];

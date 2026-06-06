@@ -12,6 +12,7 @@ import {
   ChecklistIcon,
   CocobluIcon,
   RemittancesIcon,
+  ReturnsIcon,
 } from "@/components/icons";
 import { surface } from "@/components/ui";
 import {
@@ -73,6 +74,17 @@ function DashboardContent() {
       icon: RemittancesIcon,
       accent:
         "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+      show: canViewFinance(profile),
+      comingSoon: false,
+    },
+    {
+      key: "returns",
+      title: "Returns",
+      description: "Vendor returns logged from Amazon notifications.",
+      href: "/returns",
+      icon: ReturnsIcon,
+      accent:
+        "bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-300",
       show: canViewFinance(profile),
       comingSoon: false,
     },
