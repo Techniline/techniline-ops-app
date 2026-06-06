@@ -18,7 +18,7 @@ import {
   ChecklistIcon,
   CocobluIcon,
   DashboardIcon,
-  FinanceIcon,
+  RemittancesIcon,
   Logo,
   LogoutIcon,
 } from "./icons";
@@ -66,11 +66,10 @@ export function Sidebar() {
       show: canViewCocoblu(profile),
     },
     {
-      href: "/finance",
-      label: "Finance",
-      icon: FinanceIcon,
+      href: "/remittances",
+      label: "Remittances",
+      icon: RemittancesIcon,
       show: canViewFinance(profile),
-      disabled: true,
     },
   ];
 

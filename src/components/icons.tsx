@@ -74,6 +74,39 @@ export function FinanceIcon(props: IconProps) {
   );
 }
 
+export function RemittancesIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </svg>
+  );
+}
+
+export function ReturnsIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M3 7l9-4 9 4-9 4-9-4Z" />
+      <path d="M3 7v10l9 4 9-4V7" />
+      <path d="M9 13l-2-1.5L9 10" />
+      <path d="M7 11.5h4a3 3 0 0 1 3 3" />
+    </svg>
+  );
+}
+
+export function DisputesIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M12 3v18" />
+      <path d="M5 7l-3 6h6l-3-6Z" />
+      <path d="M19 7l-3 6h6l-3-6Z" />
+      <path d="M5 7h14" />
+      <path d="M8 21h8" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>

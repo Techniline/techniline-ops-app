@@ -11,7 +11,7 @@ import { RouteGuard } from "@/components/RouteGuard";
 import {
   ChecklistIcon,
   CocobluIcon,
-  FinanceIcon,
+  RemittancesIcon,
 } from "@/components/icons";
 import { surface } from "@/components/ui";
 import {
@@ -66,15 +66,15 @@ function DashboardContent() {
       comingSoon: false,
     },
     {
-      key: "finance",
-      title: "Finance",
-      description: "Financial overview and reporting.",
-      href: null,
-      icon: FinanceIcon,
+      key: "remittances",
+      title: "Remittances",
+      description: "Amazon payment remittances and line details.",
+      href: "/remittances",
+      icon: RemittancesIcon,
       accent:
         "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
       show: canViewFinance(profile),
-      comingSoon: true,
+      comingSoon: false,
     },
   ];
 
