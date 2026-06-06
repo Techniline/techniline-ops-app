@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      amazon_action_log: {
+        Row: {
+          action_type: string | null
+          amount_aed: number | null
+          confidence: string | null
+          created_at: string
+          created_by: string
+          duplicate_warning: boolean
+          expected_action_id: string
+          follow_up_date: string | null
+          id: string
+          outcome: string
+          reason_note: string | null
+          recovered_aed: number | null
+          reference_type: string | null
+          reference_value: string | null
+          workflow_status: string
+        }
+        Insert: {
+          action_type?: string | null
+          amount_aed?: number | null
+          confidence?: string | null
+          created_at?: string
+          created_by: string
+          duplicate_warning?: boolean
+          expected_action_id: string
+          follow_up_date?: string | null
+          id?: string
+          outcome: string
+          reason_note?: string | null
+          recovered_aed?: number | null
+          reference_type?: string | null
+          reference_value?: string | null
+          workflow_status: string
+        }
+        Update: {
+          action_type?: string | null
+          amount_aed?: number | null
+          confidence?: string | null
+          created_at?: string
+          created_by?: string
+          duplicate_warning?: boolean
+          expected_action_id?: string
+          follow_up_date?: string | null
+          id?: string
+          outcome?: string
+          reason_note?: string | null
+          recovered_aed?: number | null
+          reference_type?: string | null
+          reference_value?: string | null
+          workflow_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "amazon_action_log_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "amazon_action_log_expected_action_id_fkey"
+            columns: ["expected_action_id"]
+            isOneToOne: false
+            referencedRelation: "expected_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       breach_log: {
         Row: {
           aed_at_risk: number | null
