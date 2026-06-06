@@ -12,11 +12,19 @@ export function parsePO(
   type: Extract<IngestType, "vendor_po" | "po_cancellation">
 ): ParseResult {
   const text = combinedText(payload);
+  const lower = text.toLowerCase();
 
+  // Count of POs to confirm — handle number-after ("to confirm 0", "to confirm: 0"),
+  // number-before ("5 new purchase orders"), "unconfirmed N", "count = N", "N no action needed".
   const countStr =
-    matchOne(text, /unconfirmed[^0-9]{0,20}(\d+)/i) ??
-    matchOne(text, /count[^0-9]{0,6}=?\s*(\d+)/i);
+    matchOne(text, /to\s*confirm[:\s]+([0-9]+)/i) ??
+    matchOne(text, /([0-9]+)\s+(?:new\s+)?(?:purchase orders?|pos)\b/i) ??
+    matchOne(text, /unconfirmed[^0-9]{0,20}([0-9]+)/i) ??
+    matchOne(text, /count[^0-9]{0,8}=?\s*([0-9]+)/i) ??
+    matchOne(text, /([0-9]+)\s*no action needed/i);
   const unconfirmedCount = countStr != null ? Number(countStr) : null;
+  const noActionNeeded = /no action needed/.test(lower);
+
   const poNumber =
     matchOne(text, /\bPO[\s#:-]*([0-9]{5,})/i) ??
     matchOne(text, /purchase order[\s#:-]*([0-9]{5,})/i);
@@ -24,16 +32,28 @@ export function parsePO(
   const receivedAt = payload.receivedAt ?? new Date().toISOString();
   const notes: string[] = [];
 
-  // Rule: a PO summary with 0 unconfirmed POs must NOT create an open action.
-  if (type === "vendor_po" && unconfirmedCount === 0) {
-    notes.push("Unconfirmed PO count is 0 — no open PO action created.");
-    return {
-      type,
-      matched: true,
-      fields: { unconfirmedCount: 0, poNumber },
-      operations: [],
-      notes,
-    };
+  // Gate (vendor_po): only create an action when there's a PO number OR a
+  // positive count. Zero count / "no action needed" / nothing parseable → none.
+  if (type === "vendor_po") {
+    const positiveCount = unconfirmedCount != null && unconfirmedCount > 0;
+    if (!poNumber && !positiveCount) {
+      const zeroish = unconfirmedCount === 0 || noActionNeeded;
+      notes.push(
+        zeroish
+          ? "No PO action required (0 to confirm / no action needed)."
+          : "No PO number and no positive unconfirmed count — no open PO action created."
+      );
+      return {
+        type,
+        matched: true,
+        fields: {
+          unconfirmedCount: unconfirmedCount ?? (noActionNeeded ? 0 : null),
+          poNumber: null,
+        },
+        operations: [],
+        notes,
+      };
+    }
   }
 
   const eaValues: ExpectedActionInsert = {
@@ -59,7 +79,11 @@ export function parsePO(
     type === "po_cancellation"
       ? "PO cancellation → expected_actions type po_cancellation (open)."
       : `PO confirmation needed${
-          unconfirmedCount != null ? ` (${unconfirmedCount} unconfirmed)` : ""
+          unconfirmedCount != null
+            ? ` (${unconfirmedCount} to confirm)`
+            : poNumber
+              ? ` (PO ${poNumber})`
+              : ""
         } → expected_actions type vendor_po (open).`
   );
 

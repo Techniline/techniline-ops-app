@@ -46,4 +46,44 @@ export const SAMPLE_PAYLOADS: Record<string, IngestPayload> = {
     bodyText: "You have unconfirmed POs: count = 0. No action required at this time.",
     dryRun: true,
   },
+
+  // 3b. "to confirm 0 No action needed" → no operations.
+  poZeroToConfirm: {
+    messageId: "sample-po-confirm-zero",
+    from: "Amazon",
+    subject: "You have new purchase orders to confirm",
+    receivedAt: "2026-06-07T00:00:00Z",
+    bodyText: "You have new purchase orders to confirm 0 No action needed",
+    dryRun: true,
+  },
+
+  // 3c. "No action needed" with no count → no operations.
+  poNoActionNeeded: {
+    messageId: "sample-po-noaction",
+    from: "Amazon",
+    subject: "Purchase orders to confirm",
+    receivedAt: "2026-06-07T00:00:00Z",
+    bodyText: "You have new purchase orders to confirm. No action needed.",
+    dryRun: true,
+  },
+
+  // 3d. Explicit PO number → creates an action.
+  poWithNumber: {
+    messageId: "sample-po-number",
+    from: "Amazon",
+    subject: "Confirm purchase order",
+    receivedAt: "2026-06-07T00:00:00Z",
+    bodyText: "Please confirm purchase order 12345678 by end of day.",
+    dryRun: true,
+  },
+
+  // 3e. Positive unconfirmed count → creates an action.
+  poPositiveCount: {
+    messageId: "sample-po-positive",
+    from: "Amazon",
+    subject: "You have new purchase orders to confirm",
+    receivedAt: "2026-06-07T00:00:00Z",
+    bodyText: "You have 5 new purchase orders to confirm.",
+    dryRun: true,
+  },
 };
