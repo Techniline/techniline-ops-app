@@ -15,6 +15,7 @@ import {
 } from "@/lib/permissions";
 
 import {
+  ActionsIcon,
   ChecklistIcon,
   CocobluIcon,
   DashboardIcon,
@@ -66,6 +67,12 @@ export function Sidebar() {
       label: "Cocoblu",
       icon: CocobluIcon,
       show: canViewCocoblu(profile),
+    },
+    {
+      href: "/amazon-actions",
+      label: "Amazon Actions",
+      icon: ActionsIcon,
+      show: canViewFinance(profile),
     },
     {
       href: "/remittances",

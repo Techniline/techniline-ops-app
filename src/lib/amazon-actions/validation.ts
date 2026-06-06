@@ -35,6 +35,17 @@ export function validateActionLog(input: ActionLogInput): string | null {
       if (!ref) return "A quantity is required.";
       if (!note) return "A reason is required.";
       break;
+    case "recovered":
+      if (input.recoveredAed == null || input.recoveredAed <= 0) {
+        return "A recovered amount is required.";
+      }
+      break;
+    case "recovered_and_note":
+      if (input.recoveredAed == null || input.recoveredAed <= 0) {
+        return "A recovered amount is required.";
+      }
+      if (!note) return "A note is required.";
+      break;
     case "none":
       break;
   }

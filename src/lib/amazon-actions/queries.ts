@@ -16,11 +16,22 @@ import { deriveConfidence, validateActionLog } from "./validation";
 interface ExpectedActionRow {
   id: string;
   type: string;
+  status: string;
   ref_number: string | null;
   invoice_ref: string | null;
   aed_amount: number | null;
   email_subject: string | null;
   email_received_at: string;
+}
+
+/**
+ * When no structured log exists yet, fall back to the legacy
+ * `expected_actions.status`: items already `actioned` in v1 are treated as
+ * resolved (so they don't flood the queue); `open`/`breached`/`escalated`
+ * still need action.
+ */
+function baseWorkflowFromStatus(status: string): WorkflowStatus {
+  return status === "actioned" ? "resolved" : "action_required";
 }
 
 /** Load the inbound action feed (RLS scopes to assignee / manager). */
@@ -29,7 +40,7 @@ export async function fetchExpectedActions(): Promise<ExpectedActionRow[]> {
     supabase
       .from("expected_actions")
       .select(
-        "id, type, ref_number, invoice_ref, aed_amount, email_subject, email_received_at"
+        "id, type, status, ref_number, invoice_ref, aed_amount, email_subject, email_received_at"
       )
       .range(from, to)
   );
@@ -116,7 +127,8 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
     const category = categoryForType(ea.type);
     const log = latestByEa.get(ea.id) ?? null;
     const workflowStatus: WorkflowStatus =
-      (log?.workflow_status as WorkflowStatus | undefined) ?? "action_required";
+      (log?.workflow_status as WorkflowStatus | undefined) ??
+      baseWorkflowFromStatus(ea.status);
 
     const ageDays = ageInDays(ea.email_received_at, now);
     const sla = slaStatus(ageDays);

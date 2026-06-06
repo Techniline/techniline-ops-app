@@ -9,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import {
+  ActionsIcon,
   ChecklistIcon,
   CocobluIcon,
   DisputesIcon,
@@ -65,6 +66,17 @@ function DashboardContent() {
       accent:
         "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",
       show: canViewCocoblu(profile),
+      comingSoon: false,
+    },
+    {
+      key: "amazon-actions",
+      title: "Amazon Actions",
+      description: "Act on Amazon issues — log references and drive closure.",
+      href: "/amazon-actions",
+      icon: ActionsIcon,
+      accent:
+        "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300",
+      show: canViewFinance(profile),
       comingSoon: false,
     },
     {

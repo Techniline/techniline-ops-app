@@ -60,19 +60,21 @@ export const OUTCOMES: Record<ActionCategory, OutcomeOption[]> = {
     { key: "waiting_stock", label: "Waiting Stock", requires: "eta", workflowStatus: "waiting_amazon" },
     { key: "cancelled", label: "Cancelled", requires: "reason", workflowStatus: "resolved" },
   ],
-  // Proposed (confirm): dispute follow-up outcomes
   dispute: [
-    { key: "credit_received", label: "Credit Received", requires: "reference", referenceType: "credit", workflowStatus: "resolved" },
-    { key: "amazon_rejected", label: "Amazon Rejected", requires: "reason", workflowStatus: "resolved" },
-    { key: "waiting_amazon", label: "Waiting Amazon", requires: "note", workflowStatus: "waiting_amazon" },
-    { key: "closed", label: "Closed", requires: "note", workflowStatus: "closed" },
-  ],
-  // Proposed (confirm): remittance review outcomes
-  remittance: [
-    { key: "reviewed_ok", label: "Reviewed — OK", requires: "note", workflowStatus: "resolved" },
-    { key: "variance_found", label: "Variance Found", requires: "reason", workflowStatus: "waiting_amazon" },
     { key: "dispute_raised", label: "Dispute Raised", requires: "reference", referenceType: "dispute", workflowStatus: "waiting_amazon" },
     { key: "waiting_amazon", label: "Waiting Amazon", requires: "note", workflowStatus: "waiting_amazon" },
+    { key: "credit_received", label: "Credit Received", requires: "recovered", workflowStatus: "resolved" },
+    { key: "partial_credit_received", label: "Partial Credit Received", requires: "recovered_and_note", workflowStatus: "waiting_amazon" },
+    { key: "amazon_rejected", label: "Amazon Rejected", requires: "reason", workflowStatus: "resolved" },
+    { key: "closed_no_recovery", label: "Closed No Recovery", requires: "reason", workflowStatus: "closed" },
+  ],
+  remittance: [
+    { key: "reviewed_ok", label: "Reviewed OK", requires: "none", workflowStatus: "resolved" },
+    { key: "variance_found", label: "Variance Found", requires: "reason", workflowStatus: "waiting_amazon" },
+    { key: "linked_to_return", label: "Linked to Return", requires: "reference", referenceType: "return", workflowStatus: "resolved" },
+    { key: "linked_to_dispute", label: "Linked to Dispute", requires: "reference", referenceType: "dispute", workflowStatus: "resolved" },
+    { key: "needs_investigation", label: "Needs Investigation", requires: "note", workflowStatus: "waiting_amazon" },
+    { key: "closed", label: "Closed", requires: "note", workflowStatus: "closed" },
   ],
 };
 

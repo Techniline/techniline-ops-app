@@ -107,6 +107,16 @@ export function DisputesIcon(props: IconProps) {
   );
 }
 
+export function ActionsIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M4 4v16" />
+      <path d="M4 4h11l-1.5 3L15 10H4" />
+      <circle cx="4" cy="20" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>

@@ -18,7 +18,14 @@ export type WorkflowStatus =
   | "resolved"
   | "closed";
 
-export type ReferenceType = "srt" | "prt" | "dispute" | "po_confirmation" | "qty" | "credit";
+export type ReferenceType =
+  | "srt"
+  | "prt"
+  | "dispute"
+  | "po_confirmation"
+  | "qty"
+  | "credit"
+  | "return";
 
 export type SlaStatus = "green" | "amber" | "red" | "escalated";
 
@@ -31,6 +38,8 @@ export type OutcomeRequirement =
   | "note"
   | "eta"
   | "qty_and_reason"
+  | "recovered"
+  | "recovered_and_note"
   | "none";
 
 export interface OutcomeOption {
