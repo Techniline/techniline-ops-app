@@ -27,8 +27,7 @@ function DashboardContent() {
   // RouteGuard guarantees a profile here, but narrow defensively.
   if (!profile) return null;
 
-  const userId = profile.id;
-  const role = isManager(userId) ? "Manager" : "Staff";
+  const role = isManager(profile) ? "Manager" : "Staff";
 
   const cards: ModuleCard[] = [
     {
@@ -36,7 +35,7 @@ function DashboardContent() {
       title: "Checklist",
       description: "Daily operational checklists.",
       href: "/checklist",
-      show: canViewChecklist(userId),
+      show: canViewChecklist(profile),
       comingSoon: false,
     },
     {
@@ -44,7 +43,7 @@ function DashboardContent() {
       title: "Cocoblu",
       description: "Cocoblu operations.",
       href: "/cocoblu",
-      show: canViewCocoblu(userId),
+      show: canViewCocoblu(profile),
       comingSoon: false,
     },
     {
@@ -52,7 +51,7 @@ function DashboardContent() {
       title: "Finance",
       description: "Financial overview and reporting.",
       href: null,
-      show: canViewFinance(userId),
+      show: canViewFinance(profile),
       comingSoon: true,
     },
   ];

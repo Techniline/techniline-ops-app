@@ -1,76 +1,93 @@
-import type { Capability } from "@/lib/types";
+import type { Capability, UserProfile } from "@/lib/types";
 
 import { ALL_CAPABILITIES, CAPABILITY_MAP } from "./capabilities";
 
 export { ALL_CAPABILITIES, CAPABILITY_MAP } from "./capabilities";
 export type { CapabilityGrant } from "./capabilities";
 
-type UserId = string | null | undefined;
+type ProfileArg = UserProfile | null | undefined;
 
-/** True when the user holds an unrestricted ("all") grant. */
-function hasAllGrant(userId: UserId): boolean {
-  if (!userId) return false;
-  return CAPABILITY_MAP[userId] === "all";
+/** The role value that grants cross-user (manager override) access. */
+const MANAGER_ROLE = "manager";
+
+/**
+ * Manager override is driven by the profile's `role`, NOT by the capability
+ * map. The capability map governs only which feature *modules* a user can see.
+ */
+export function isManager(profile: ProfileArg): boolean {
+  return profile?.role === MANAGER_ROLE;
 }
 
 /**
- * Resolve the concrete list of capabilities a user holds. An "all" grant is
- * expanded into every known capability. Unknown users hold nothing.
+ * Resolve the concrete list of *module* capabilities a profile holds, looked
+ * up from the capability map by user id. An "all" grant expands into every
+ * known capability. Unknown users hold nothing.
  */
-export function getCapabilities(userId: UserId): Capability[] {
-  if (!userId) return [];
-  const grant = CAPABILITY_MAP[userId];
+export function getCapabilities(profile: ProfileArg): Capability[] {
+  if (!profile) return [];
+  const grant = CAPABILITY_MAP[profile.id];
   if (!grant) return [];
   if (grant === "all") return [...ALL_CAPABILITIES];
   return [...grant];
 }
 
+/** True when the profile holds the given module capability. */
+export function hasCapability(
+  profile: ProfileArg,
+  capability: Capability
+): boolean {
+  return getCapabilities(profile).includes(capability);
+}
+
+export function canViewChecklist(profile: ProfileArg): boolean {
+  return hasCapability(profile, "checklist");
+}
+
+export function canViewFinance(profile: ProfileArg): boolean {
+  return hasCapability(profile, "finance");
+}
+
+export function canViewCocoblu(profile: ProfileArg): boolean {
+  return hasCapability(profile, "cocoblu");
+}
+
 /**
- * A "manager" is any user present in the capability map — i.e. a user who has
- * been explicitly granted elevated access to one or more feature areas.
+ * Whether `profile` is allowed to see data belonging to `targetUserId`.
+ * Users may always view their own data; managers (role === "manager") may view
+ * any user's data.
  */
-export function isManager(userId: UserId): boolean {
-  if (!userId) return false;
-  return userId in CAPABILITY_MAP;
-}
-
-/** True when the user holds the given capability. */
-export function hasCapability(userId: UserId, capability: Capability): boolean {
-  return getCapabilities(userId).includes(capability);
-}
-
-export function canViewChecklist(userId: UserId): boolean {
-  return hasCapability(userId, "checklist");
-}
-
-export function canViewFinance(userId: UserId): boolean {
-  return hasCapability(userId, "finance");
-}
-
-export function canViewCocoblu(userId: UserId): boolean {
-  return hasCapability(userId, "cocoblu");
+export function canViewUser(
+  profile: ProfileArg,
+  targetUserId: string | null | undefined
+): boolean {
+  if (!profile || !targetUserId) return false;
+  if (profile.id === targetUserId) return true;
+  return isManager(profile);
 }
 
 /**
- * Whether `viewerId` is allowed to see data belonging to `targetUserId`.
- * Users may always view their own data; only holders of an "all" grant may
- * view other users' data.
+ * Minimal shape of a chainable query (e.g. a Supabase PostgrestFilterBuilder)
+ * that {@link scopeToUser} can constrain. Keeping this structural avoids a hard
+ * dependency on the concrete builder type while staying free of `any`.
  */
-export function canViewUser(viewerId: UserId, targetUserId: UserId): boolean {
-  if (!viewerId || !targetUserId) return false;
-  if (viewerId === targetUserId) return true;
-  return hasAllGrant(viewerId);
+interface ScopableQuery<T> {
+  eq(column: string, value: string): T;
 }
 
 /**
- * Returns the user id that data queries should be scoped to for `viewerId`.
+ * Scope a query to the data the given profile is allowed to read.
  *
- * - `null` means "no scoping" — the viewer holds an "all" grant and may see
- *   every user's data.
- * - Otherwise the viewer's own id is returned, restricting results to data
- *   that belongs to them.
+ * - Managers (role === "manager") get the query back unchanged — they may read
+ *   every user's rows.
+ * - Everyone else is constrained to rows they own via `column` (default
+ *   `user_id`). When no profile is present the query is constrained to an empty
+ *   owner id so it matches nothing (fail closed).
  */
-export function scopeToUser(viewerId: UserId): string | null {
-  if (hasAllGrant(viewerId)) return null;
-  return viewerId ?? null;
+export function scopeToUser<T extends ScopableQuery<T>>(
+  query: T,
+  profile: ProfileArg,
+  column = "user_id"
+): T {
+  if (isManager(profile)) return query;
+  return query.eq(column, profile?.id ?? "");
 }

@@ -29,17 +29,16 @@ export function Sidebar() {
 
   if (!profile) return null;
 
-  const userId = profile.id;
-  const role = isManager(userId) ? "Manager" : "Staff";
+  const role = isManager(profile) ? "Manager" : "Staff";
 
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", show: true },
-    { href: "/checklist", label: "Checklist", show: canViewChecklist(userId) },
-    { href: "/cocoblu", label: "Cocoblu", show: canViewCocoblu(userId) },
+    { href: "/checklist", label: "Checklist", show: canViewChecklist(profile) },
+    { href: "/cocoblu", label: "Cocoblu", show: canViewCocoblu(profile) },
     {
       href: "/finance",
       label: "Finance",
-      show: canViewFinance(userId),
+      show: canViewFinance(profile),
       disabled: true,
     },
   ];

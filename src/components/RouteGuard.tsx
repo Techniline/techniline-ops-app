@@ -32,7 +32,7 @@ export function RouteGuard({ children, requireCapability }: RouteGuardProps) {
   const authorized =
     !!user &&
     !!profile &&
-    (!requireCapability || hasCapability(profile.id, requireCapability));
+    (!requireCapability || hasCapability(profile, requireCapability));
 
   useEffect(() => {
     if (loading) return;
@@ -42,7 +42,7 @@ export function RouteGuard({ children, requireCapability }: RouteGuardProps) {
       return;
     }
 
-    if (requireCapability && !hasCapability(profile.id, requireCapability)) {
+    if (requireCapability && !hasCapability(profile, requireCapability)) {
       router.replace("/dashboard");
     }
   }, [loading, user, profile, requireCapability, router]);
