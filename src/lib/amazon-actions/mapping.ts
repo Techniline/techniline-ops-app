@@ -54,7 +54,7 @@ export const OUTCOMES: Record<ActionCategory, OutcomeOption[]> = {
     { key: "accepted_write_off", label: "Accepted Write-Off", requires: "reason", managerOnly: true, workflowStatus: "closed" },
   ],
   po: [
-    { key: "confirmed", label: "Confirmed", requires: "note", workflowStatus: "resolved" },
+    { key: "confirmed", label: "Confirmed", requires: "note", workflowStatus: "closed" },
     { key: "rejected", label: "Rejected", requires: "reason", workflowStatus: "resolved" },
     { key: "partial_confirmed", label: "Partial Confirmed", requires: "qty_and_reason", referenceType: "qty", workflowStatus: "resolved" },
     { key: "waiting_stock", label: "Waiting Stock", requires: "eta", workflowStatus: "waiting_amazon" },
