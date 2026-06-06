@@ -91,6 +91,8 @@ export interface AmazonAction {
 
   ageDays: number;
   sla: SlaStatus;
+  /** Legacy v1 `expected_actions.status === 'breached'` (SLA already missed). */
+  breached: boolean;
   confidence: Confidence;
   resolved: boolean;
   missingDocumentation: boolean;

@@ -171,6 +171,7 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
       recovered: log?.recovered_aed ?? null,
       ageDays,
       sla,
+      breached: ea.status === "breached",
       confidence,
       resolved,
       missingDocumentation,

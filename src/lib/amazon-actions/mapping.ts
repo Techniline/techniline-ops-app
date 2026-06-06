@@ -73,7 +73,7 @@ export const OUTCOMES: Record<ActionCategory, OutcomeOption[]> = {
     { key: "variance_found", label: "Variance Found", requires: "reason", workflowStatus: "waiting_amazon" },
     { key: "linked_to_return", label: "Linked to Return", requires: "reference", referenceType: "return", workflowStatus: "resolved" },
     { key: "linked_to_dispute", label: "Linked to Dispute", requires: "reference", referenceType: "dispute", workflowStatus: "resolved" },
-    { key: "needs_investigation", label: "Needs Investigation", requires: "note", workflowStatus: "waiting_amazon" },
+    { key: "needs_investigation", label: "Needs Investigation", requires: "note", workflowStatus: "action_required" },
     { key: "closed", label: "Closed", requires: "note", workflowStatus: "closed" },
   ],
 };

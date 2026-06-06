@@ -91,13 +91,26 @@ export function computeActionSummary(actions: AmazonAction[]): ActionSummary {
   };
 }
 
-/** The Missing Documentation queue, oldest first. */
+/**
+ * Priority for the Missing Documentation queue:
+ * 0 = escalated (15+ days), 1 = breached or SLA red, 2 = everything else.
+ */
+function queuePriority(a: AmazonAction): number {
+  if (a.sla === "escalated") return 0;
+  if (a.breached || a.sla === "red") return 1;
+  return 2;
+}
+
+/**
+ * The Missing Documentation queue: escalated first, then breached/red, then the
+ * rest — oldest first within each tier. Breached items are kept visible.
+ */
 export function missingDocumentationQueue(
   actions: AmazonAction[]
 ): AmazonAction[] {
   return actions
     .filter((a) => a.missingDocumentation)
-    .sort((a, b) => b.ageDays - a.ageDays);
+    .sort((a, b) => queuePriority(a) - queuePriority(b) || b.ageDays - a.ageDays);
 }
 
 /** Escalated (15+ day) actions, oldest first — for the manager view. */
