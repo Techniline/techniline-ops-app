@@ -24,11 +24,14 @@ function todayISODate(): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Statuses that count as "done" toward completion. */
-const DONE_STATUSES: ReadonlySet<string> = new Set<TaskStatus>([
-  "submitted",
-  "verified",
-]);
+/**
+ * Statuses that count as "done" toward completion.
+ *
+ * Phase 1: only `submitted` counts. `verified` is excluded because the
+ * verification workflow is not part of Phase 1, and `breached` is a missed
+ * task, not a completed one.
+ */
+const DONE_STATUSES: ReadonlySet<string> = new Set<TaskStatus>(["submitted"]);
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
