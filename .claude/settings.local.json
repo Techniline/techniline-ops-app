@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(npm --version)",
-      "Bash(npx --yes create-next-app@latest . --typescript --eslint --tailwind --src-dir --app --turbopack --import-alias \"@/*\" --use-npm)"
+      "Bash(npx --yes create-next-app@latest . --typescript --eslint --tailwind --src-dir --app --turbopack --import-alias \"@/*\" --use-npm)",
+      "Bash(git commit *)",
+      "Bash(npm install *)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"\\(exit $?\\)\")",
+      "Bash(echo \"exit $? \\(1 = not ignored, good\\)\")",
+      "Bash(git add *)"
     ]
   }
 }
