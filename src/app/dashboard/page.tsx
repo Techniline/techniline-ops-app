@@ -12,9 +12,6 @@ import {
   ActionsIcon,
   ChecklistIcon,
   CocobluIcon,
-  DisputesIcon,
-  RemittancesIcon,
-  ReturnsIcon,
 } from "@/components/icons";
 import { surface } from "@/components/ui";
 import {
@@ -76,39 +73,6 @@ function DashboardContent() {
       icon: ActionsIcon,
       accent:
         "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300",
-      show: canViewFinance(profile),
-      comingSoon: false,
-    },
-    {
-      key: "remittances",
-      title: "Remittances",
-      description: "Amazon payment remittances and line details.",
-      href: "/remittances",
-      icon: RemittancesIcon,
-      accent:
-        "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
-      show: canViewFinance(profile),
-      comingSoon: false,
-    },
-    {
-      key: "returns",
-      title: "Returns",
-      description: "Vendor returns logged from Amazon notifications.",
-      href: "/returns",
-      icon: ReturnsIcon,
-      accent:
-        "bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-300",
-      show: canViewFinance(profile),
-      comingSoon: false,
-    },
-    {
-      key: "disputes",
-      title: "Disputes",
-      description: "Vendor disputes and related dispute items.",
-      href: "/disputes",
-      icon: DisputesIcon,
-      accent:
-        "bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-300",
       show: canViewFinance(profile),
       comingSoon: false,
     },

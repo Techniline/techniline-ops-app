@@ -19,9 +19,6 @@ import {
   ChecklistIcon,
   CocobluIcon,
   DashboardIcon,
-  DisputesIcon,
-  RemittancesIcon,
-  ReturnsIcon,
   Logo,
   LogoutIcon,
 } from "./icons";
@@ -72,24 +69,6 @@ export function Sidebar() {
       href: "/amazon-actions",
       label: "Amazon Actions",
       icon: ActionsIcon,
-      show: canViewFinance(profile),
-    },
-    {
-      href: "/remittances",
-      label: "Remittances",
-      icon: RemittancesIcon,
-      show: canViewFinance(profile),
-    },
-    {
-      href: "/returns",
-      label: "Returns",
-      icon: ReturnsIcon,
-      show: canViewFinance(profile),
-    },
-    {
-      href: "/disputes",
-      label: "Disputes",
-      icon: DisputesIcon,
       show: canViewFinance(profile),
     },
   ];
