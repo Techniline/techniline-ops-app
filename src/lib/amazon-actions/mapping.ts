@@ -1,4 +1,4 @@
-import type { ActionCategory, OutcomeOption } from "./types";
+import type { ActionCategory, OutcomeOption, WorkflowStatus } from "./types";
 
 /** Map the DB `expected_actions.type` onto a business category. */
 export function categoryForType(type: string): ActionCategory {
@@ -67,6 +67,7 @@ export const OUTCOMES: Record<ActionCategory, OutcomeOption[]> = {
     { key: "partial_credit_received", label: "Partial Credit Received", requires: "recovered_and_note", workflowStatus: "waiting_amazon" },
     { key: "amazon_rejected", label: "Amazon Rejected", requires: "reason", workflowStatus: "resolved" },
     { key: "closed_no_recovery", label: "Closed No Recovery", requires: "reason", workflowStatus: "closed" },
+    { key: "reopened", label: "Reopened", requires: "reason", workflowStatus: "action_required" },
   ],
   remittance: [
     { key: "reviewed_ok", label: "Reviewed OK", requires: "none", workflowStatus: "resolved" },
@@ -83,6 +84,60 @@ export function findOutcome(
   key: string
 ): OutcomeOption | undefined {
   return OUTCOMES[category].find((o) => o.key === key);
+}
+
+/**
+ * Operational status label shown in the UI, derived from the latest outcome.
+ * Dispute and return categories use bespoke business labels; others fall back
+ * to the humanized workflow status.
+ */
+export function operationalStatusLabel(input: {
+  category: ActionCategory;
+  latestOutcome: string | null;
+  workflowStatus: WorkflowStatus;
+  resolved: boolean;
+}): string {
+  const { category, latestOutcome, workflowStatus, resolved } = input;
+
+  if (category === "dispute") {
+    if (!latestOutcome) return "Open";
+    switch (latestOutcome) {
+      case "credit_received":
+        return "Approved";
+      case "partial_credit_received":
+        return "Partial Credit";
+      case "amazon_rejected":
+        return "Rejected";
+      case "closed_no_recovery":
+        return "Closed";
+      case "reopened":
+        return "Reopened";
+      case "dispute_raised":
+      case "waiting_amazon":
+        return "Pending Amazon";
+    }
+  }
+
+  if (category === "return") {
+    if (!latestOutcome) return "Open";
+    switch (latestOutcome) {
+      case "srt_raised":
+        return "Pending SRT";
+      case "prt_raised":
+        return "Pending PRT";
+      case "dispute_raised":
+        return "Dispute Raised";
+      case "waiting_amazon":
+        return "Pending Amazon";
+      case "return_accepted":
+        return "Accepted";
+      case "invalid_return":
+        return "Invalid";
+    }
+    if (resolved) return "Closed";
+  }
+
+  return workflowStatus.replace(/_/g, " ");
 }
 
 /** Human label for what's missing when an action is not yet documented. */

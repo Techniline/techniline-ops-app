@@ -27,6 +27,7 @@ import {
   findOutcome,
   logAction,
   missingDocumentationQueue,
+  operationalStatusLabel,
   OUTCOMES,
   searchAll,
   validateActionLog,
@@ -71,10 +72,10 @@ const STATUS_STYLES: Record<string, string> = {
   resolved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   closed: "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ label, status }: { label: string; status: string }) {
   return (
     <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? STATUS_STYLES.closed}`}>
-      {status.replace(/_/g, " ")}
+      {label}
     </span>
   );
 }
@@ -148,7 +149,9 @@ function LogActionModal({
       action.enrichment.approvedAmountAed != null ? String(action.enrichment.approvedAmountAed) : "",
     notes: action.enrichment.notes ?? "",
   });
-  const [showEnrichment, setShowEnrichment] = useState(category === "dispute");
+  const [showEnrichment, setShowEnrichment] = useState(
+    category === "dispute" || category === "return"
+  );
 
   function setEnrField(key: keyof typeof enr, value: string): void {
     setEnr((prev) => ({ ...prev, [key]: value }));
@@ -654,7 +657,17 @@ function AmazonActionsContent() {
                       <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>{CATEGORY_LABELS[a.category]}</td>
                       <td className={`${tdCell} font-mono text-xs`}>{a.amazonRef ?? "—"}</td>
                       <td className={tdCell}><SlaBadge sla={a.sla} ageDays={a.ageDays} /></td>
-                      <td className={tdCell}><StatusBadge status={a.workflowStatus} /></td>
+                      <td className={tdCell}>
+                        <StatusBadge
+                          label={operationalStatusLabel({
+                            category: a.category,
+                            latestOutcome: a.latestOutcome,
+                            workflowStatus: a.workflowStatus,
+                            resolved: a.resolved,
+                          })}
+                          status={a.workflowStatus}
+                        />
+                      </td>
                       <td className={tdCell}>{a.latestOutcome ? a.latestOutcome.replace(/_/g, " ") : "—"}</td>
                       <td className={`${tdCell} font-mono text-xs`}>{a.referenceValue ?? "—"}</td>
                       <td className={tdCell}>{formatAED(a.amount)}</td>

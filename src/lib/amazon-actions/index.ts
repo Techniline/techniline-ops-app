@@ -20,6 +20,7 @@ export {
   OUTCOMES,
   findOutcome,
   missingKindFor,
+  operationalStatusLabel,
 } from "./mapping";
 
 export { ageInDays, slaStatus } from "./sla";
