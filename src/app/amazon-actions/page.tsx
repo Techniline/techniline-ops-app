@@ -28,11 +28,14 @@ import {
   logAction,
   missingDocumentationQueue,
   OUTCOMES,
+  searchAll,
   validateActionLog,
   type ActionCategory,
+  type ActionEnrichment,
   type ActionLogInput,
   type AmazonAction,
   type ReferenceType,
+  type SearchResult,
 } from "@/lib/amazon-actions";
 import { isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
@@ -131,6 +134,26 @@ function LogActionModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [enr, setEnr] = useState({
+    tleInvoiceNumber: action.enrichment.tleInvoiceNumber ?? "",
+    paymentNumber: action.enrichment.paymentNumber ?? "",
+    returnId: action.enrichment.returnId ?? "",
+    srtNumber: action.enrichment.srtNumber ?? "",
+    prtNumber: action.enrichment.prtNumber ?? "",
+    invoiceDate: action.enrichment.invoiceDate ?? "",
+    invoiceValueAed:
+      action.enrichment.invoiceValueAed != null ? String(action.enrichment.invoiceValueAed) : "",
+    sku: action.enrichment.sku ?? "",
+    approvedAmountAed:
+      action.enrichment.approvedAmountAed != null ? String(action.enrichment.approvedAmountAed) : "",
+    notes: action.enrichment.notes ?? "",
+  });
+  const [showEnrichment, setShowEnrichment] = useState(category === "dispute");
+
+  function setEnrField(key: keyof typeof enr, value: string): void {
+    setEnr((prev) => ({ ...prev, [key]: value }));
+  }
+
   const option = outcome ? findOutcome(category, outcome) : undefined;
   const requires = option?.requires;
 
@@ -171,6 +194,32 @@ function LogActionModal({
       option.workflowStatus === "resolved" || option.workflowStatus === "closed";
     const refValue = usesRef ? referenceValue.trim() : null;
 
+    const invoiceValueNum =
+      enr.invoiceValueAed.trim() === "" ? null : Number(enr.invoiceValueAed);
+    if (invoiceValueNum != null && (!Number.isFinite(invoiceValueNum) || invoiceValueNum < 0)) {
+      setError("Invoice value must be a non-negative number.");
+      return;
+    }
+    const approvedNum =
+      enr.approvedAmountAed.trim() === "" ? null : Number(enr.approvedAmountAed);
+    if (approvedNum != null && (!Number.isFinite(approvedNum) || approvedNum < 0)) {
+      setError("Approved amount must be a non-negative number.");
+      return;
+    }
+
+    const enrichment: ActionEnrichment = {
+      tleInvoiceNumber: enr.tleInvoiceNumber.trim() || null,
+      paymentNumber: enr.paymentNumber.trim() || null,
+      returnId: enr.returnId.trim() || null,
+      srtNumber: enr.srtNumber.trim() || null,
+      prtNumber: enr.prtNumber.trim() || null,
+      invoiceDate: enr.invoiceDate || null,
+      invoiceValueAed: invoiceValueNum,
+      sku: enr.sku.trim() || null,
+      approvedAmountAed: approvedNum,
+      notes: enr.notes.trim() || null,
+    };
+
     const input: ActionLogInput = {
       expectedActionId: action.id,
       actionType: category,
@@ -189,6 +238,7 @@ function LogActionModal({
       duplicateWarning: dupWarning,
       createdBy: profile.id,
       isManager: managerFlag,
+      enrichment,
     };
 
     const validation = validateActionLog(input);
@@ -287,6 +337,55 @@ function LogActionModal({
           <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={inputClass} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional — enter if invoice amount unavailable" />
         </label>
 
+        {/* Manual enrichment (optional) */}
+        <div className="rounded-lg border border-slate-200 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setShowEnrichment((v) => !v)}
+            className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
+            Enrichment (optional)
+            <span className="text-slate-400">{showEnrichment ? "−" : "+"}</span>
+          </button>
+          {showEnrichment ? (
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
+              {[
+                ["tleInvoiceNumber", "TLE Invoice"],
+                ["paymentNumber", "Payment Number"],
+                ["returnId", "Return ID"],
+                ["srtNumber", "SRT Number"],
+                ["prtNumber", "PRT Number"],
+                ["sku", "SKU"],
+              ].map(([key, label]) => (
+                <label key={key} className="flex flex-col gap-1 text-xs">
+                  <span className="font-medium text-slate-600 dark:text-slate-400">{label}</span>
+                  <input
+                    className={inputClass}
+                    value={enr[key as keyof typeof enr]}
+                    onChange={(e) => setEnrField(key as keyof typeof enr, e.target.value)}
+                  />
+                </label>
+              ))}
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-medium text-slate-600 dark:text-slate-400">Invoice Date</span>
+                <input type="date" className={inputClass} value={enr.invoiceDate} onChange={(e) => setEnrField("invoiceDate", e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-medium text-slate-600 dark:text-slate-400">Invoice Value (AED)</span>
+                <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={inputClass} value={enr.invoiceValueAed} onChange={(e) => setEnrField("invoiceValueAed", e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-medium text-slate-600 dark:text-slate-400">Approved Amount (AED)</span>
+                <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={inputClass} value={enr.approvedAmountAed} onChange={(e) => setEnrField("approvedAmountAed", e.target.value)} />
+              </label>
+              <label className="col-span-1 flex flex-col gap-1 text-xs sm:col-span-2">
+                <span className="font-medium text-slate-600 dark:text-slate-400">Notes</span>
+                <textarea rows={2} className={inputClass} value={enr.notes} onChange={(e) => setEnrField("notes", e.target.value)} />
+              </label>
+            </div>
+          ) : null}
+        </div>
+
         {error ? (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}</p>
         ) : null}
@@ -300,7 +399,89 @@ function LogActionModal({
   );
 }
 
+/* --------------------------- advanced search --------------------------- */
+
+function AdvancedSearch() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    setErr(null);
+    setSearched(true);
+    try {
+      setResults(await searchAll(q));
+    } catch (e) {
+      setErr(errorMessage(e));
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <div className={`${surface} mb-6 p-3`}>
+      <form onSubmit={run} className="flex gap-2">
+        <input
+          className={inputClass}
+          placeholder="Search dispute #, payment #, return ID, SRT, PRT, invoice #, PO #, SKU…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <button type="submit" className={btnPrimary} disabled={searching}>
+          {searching ? "Searching…" : "Search"}
+        </button>
+      </form>
+      {err ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p> : null}
+      {searched && !searching && !err && results.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">No matches found.</p>
+      ) : null}
+      {results.length > 0 ? (
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className={thCell}>Type</th>
+                <th className={thCell}>Reference</th>
+                <th className={thCell}>Detail</th>
+                <th className={thCell}>Amount</th>
+                <th className={thCell}>Matched on</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => (
+                <tr key={`${r.sourceTable}-${r.id}-${i}`} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                  <td className={tdCell}>{r.category}</td>
+                  <td className={`${tdCell} font-mono text-xs`}>{r.primaryLabel ?? "—"}</td>
+                  <td className={`${tdCell} max-w-xs truncate`}>{r.secondaryLabel ?? "—"}</td>
+                  <td className={tdCell}>{formatAED(r.amount)}</td>
+                  <td className={tdCell}>{r.matchedField ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /* ------------------------------- content ------------------------------- */
+
+const CATEGORY_TABS: ReadonlyArray<{ key: ActionCategory | "all"; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "po", label: "PO Confirmation" },
+  { key: "dispute", label: "Disputes" },
+  { key: "return", label: "Returns" },
+  { key: "shortage", label: "Shortage" },
+  { key: "remittance", label: "Remittance" },
+];
 
 function AmazonActionsContent() {
   const { profile } = useAuth();
@@ -311,6 +492,7 @@ function AmazonActionsContent() {
   const [banner, setBanner] = useState<string | null>(null);
   const [selected, setSelected] = useState<AmazonAction | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<ActionCategory | "all">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -339,9 +521,12 @@ function AmazonActionsContent() {
   }, [actions]);
 
   const list = useMemo(() => {
-    const rows = showResolved ? actions : actions.filter((a) => !a.resolved);
+    let rows = showResolved ? actions : actions.filter((a) => !a.resolved);
+    if (categoryFilter !== "all") {
+      rows = rows.filter((a) => a.category === categoryFilter);
+    }
     return [...rows].sort((a, b) => b.ageDays - a.ageDays);
-  }, [actions, showResolved]);
+  }, [actions, showResolved, categoryFilter]);
 
   if (!profile) return null;
   const managerFlag = isManager(profile);
@@ -358,6 +543,8 @@ function AmazonActionsContent() {
         title="Amazon Actions"
         subtitle="Drive Amazon issues to closure — log a reference or reason for each."
       />
+
+      <AdvancedSearch />
 
       {banner ? (
         <div className="mb-4 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -409,9 +596,32 @@ function AmazonActionsContent() {
             )}
           </section>
 
+          {/* Category tabs */}
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {CATEGORY_TABS.map((tab) => {
+              const active = categoryFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setCategoryFilter(tab.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Full actions list */}
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">All Actions ({list.length})</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              {categoryFilter === "all" ? "All Actions" : CATEGORY_LABELS[categoryFilter]} ({list.length})
+            </h2>
             <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
               Show resolved

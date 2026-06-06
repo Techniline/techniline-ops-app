@@ -6,12 +6,29 @@ import { buildReferenceIndex, isDuplicateReference } from "./duplicate";
 import { categoryForType, findOutcome, missingKindFor } from "./mapping";
 import { ageInDays, slaStatus } from "./sla";
 import type {
+  ActionEnrichment,
   ActionLog,
   ActionLogInput,
   AmazonAction,
+  SearchResult,
   WorkflowStatus,
 } from "./types";
 import { deriveConfidence, validateActionLog } from "./validation";
+
+function enrichmentFromLog(log: ActionLog | null): ActionEnrichment {
+  return {
+    tleInvoiceNumber: log?.tle_invoice_number ?? null,
+    paymentNumber: log?.payment_number ?? null,
+    returnId: log?.return_id ?? null,
+    srtNumber: log?.srt_number ?? null,
+    prtNumber: log?.prt_number ?? null,
+    invoiceDate: log?.invoice_date ?? null,
+    invoiceValueAed: log?.invoice_value_aed ?? null,
+    sku: log?.sku ?? null,
+    approvedAmountAed: log?.approved_amount_aed ?? null,
+    notes: log?.notes ?? null,
+  };
+}
 
 interface ExpectedActionRow {
   id: string;
@@ -82,6 +99,17 @@ export async function logAction(input: ActionLogInput): Promise<void> {
     duplicate_warning: input.duplicateWarning ?? false,
     confidence: input.confidence ?? null,
     created_by: input.createdBy,
+    // Manual enrichment (all optional)
+    tle_invoice_number: input.enrichment?.tleInvoiceNumber?.trim() || null,
+    payment_number: input.enrichment?.paymentNumber?.trim() || null,
+    return_id: input.enrichment?.returnId?.trim() || null,
+    srt_number: input.enrichment?.srtNumber?.trim() || null,
+    prt_number: input.enrichment?.prtNumber?.trim() || null,
+    invoice_date: input.enrichment?.invoiceDate || null,
+    invoice_value_aed: input.enrichment?.invoiceValueAed ?? null,
+    sku: input.enrichment?.sku?.trim() || null,
+    approved_amount_aed: input.enrichment?.approvedAmountAed ?? null,
+    notes: input.enrichment?.notes?.trim() || null,
   };
 
   // 1) Evidence/audit row first.
@@ -177,6 +205,29 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
       missingDocumentation,
       missingKind: missingDocumentation ? missingKindFor(category) : null,
       duplicateWarning,
+      enrichment: enrichmentFromLog(log),
     };
   });
+}
+
+/**
+ * Advanced search via the existing read-only `search_all` RPC. Matches across
+ * dispute/payment/return/SRT/PRT/invoice/PO/SKU references (incl. historical).
+ */
+export async function searchAll(query: string): Promise<SearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const { data, error } = await supabase.rpc("search_all", { q });
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    category: row.category ?? "",
+    sourceTable: row.source_table ?? "",
+    id: row.id ?? "",
+    primaryLabel: row.primary_label,
+    secondaryLabel: row.secondary_label,
+    amount: row.amount,
+    matchedField: row.matched_field,
+  }));
 }

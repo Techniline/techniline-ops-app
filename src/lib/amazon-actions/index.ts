@@ -9,7 +9,9 @@ export type {
   OutcomeRequirement,
   OutcomeOption,
   ActionLogInput,
+  ActionEnrichment,
   AmazonAction,
+  SearchResult,
 } from "./types";
 
 export {
@@ -29,6 +31,7 @@ export {
   fetchActionLogs,
   logAction,
   fetchAmazonActions,
+  searchAll,
 } from "./queries";
 
 export {

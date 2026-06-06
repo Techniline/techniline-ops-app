@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           action_type: string | null
           amount_aed: number | null
+          approved_amount_aed: number | null
           confidence: string | null
           created_at: string
           created_by: string
@@ -25,16 +26,26 @@ export type Database = {
           expected_action_id: string
           follow_up_date: string | null
           id: string
+          invoice_date: string | null
+          invoice_value_aed: number | null
+          notes: string | null
           outcome: string
+          payment_number: string | null
+          prt_number: string | null
           reason_note: string | null
           recovered_aed: number | null
           reference_type: string | null
           reference_value: string | null
+          return_id: string | null
+          sku: string | null
+          srt_number: string | null
+          tle_invoice_number: string | null
           workflow_status: string
         }
         Insert: {
           action_type?: string | null
           amount_aed?: number | null
+          approved_amount_aed?: number | null
           confidence?: string | null
           created_at?: string
           created_by: string
@@ -42,16 +53,26 @@ export type Database = {
           expected_action_id: string
           follow_up_date?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_value_aed?: number | null
+          notes?: string | null
           outcome: string
+          payment_number?: string | null
+          prt_number?: string | null
           reason_note?: string | null
           recovered_aed?: number | null
           reference_type?: string | null
           reference_value?: string | null
+          return_id?: string | null
+          sku?: string | null
+          srt_number?: string | null
+          tle_invoice_number?: string | null
           workflow_status: string
         }
         Update: {
           action_type?: string | null
           amount_aed?: number | null
+          approved_amount_aed?: number | null
           confidence?: string | null
           created_at?: string
           created_by?: string
@@ -59,11 +80,20 @@ export type Database = {
           expected_action_id?: string
           follow_up_date?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_value_aed?: number | null
+          notes?: string | null
           outcome?: string
+          payment_number?: string | null
+          prt_number?: string | null
           reason_note?: string | null
           recovered_aed?: number | null
           reference_type?: string | null
           reference_value?: string | null
+          return_id?: string | null
+          sku?: string | null
+          srt_number?: string | null
+          tle_invoice_number?: string | null
           workflow_status?: string
         }
         Relationships: [

@@ -67,6 +67,22 @@ export interface ActionLogInput {
   createdBy: string;
   /** Whether the acting user is a manager (gates manager-only outcomes). */
   isManager: boolean;
+  /** Optional manual enrichment captured alongside the action. */
+  enrichment?: ActionEnrichment;
+}
+
+/** Editable enrichment fields stored on the log row. */
+export interface ActionEnrichment {
+  tleInvoiceNumber?: string | null;
+  paymentNumber?: string | null;
+  returnId?: string | null;
+  srtNumber?: string | null;
+  prtNumber?: string | null;
+  invoiceDate?: string | null;
+  invoiceValueAed?: number | null;
+  sku?: string | null;
+  approvedAmountAed?: number | null;
+  notes?: string | null;
 }
 
 /** A composed action: the notification plus its latest logged state + derived fields. */
@@ -98,4 +114,18 @@ export interface AmazonAction {
   missingDocumentation: boolean;
   missingKind: string | null;
   duplicateWarning: boolean;
+
+  /** Latest logged enrichment (for display + modal prefill). */
+  enrichment: ActionEnrichment;
+}
+
+/** A row returned by the read-only search_all RPC. */
+export interface SearchResult {
+  category: string;
+  sourceTable: string;
+  id: string;
+  primaryLabel: string | null;
+  secondaryLabel: string | null;
+  amount: number | null;
+  matchedField: string | null;
 }
