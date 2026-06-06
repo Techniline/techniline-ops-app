@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 import { fetchAll } from "./load";
 import { normalizeRef } from "./normalize";
+import { effectiveInScope } from "./scope";
 import type {
   AccuracyFlags,
   Confidence,
@@ -18,10 +19,13 @@ interface ReturnRow {
   amazon_invoice: string | null;
   total_cost_aed: number | null;
   date_received: string | null;
+  created_at: string | null;
   status: string | null;
 }
 interface InvoiceRow {
   invoice_number: string;
+  invoice_date: string | null;
+  synced_at: string | null;
 }
 
 function dupKey(sku: string, invoice: string): string {
@@ -34,19 +38,30 @@ function dupKey(sku: string, invoice: string): string {
  * returns, lists missing fields, and derives flags + confidence.
  */
 export async function analyzeReturnsAccuracy(): Promise<ReturnsAccuracyResult> {
-  const [returns, invoices] = await Promise.all([
+  const [allReturns, allInvoices] = await Promise.all([
     fetchAll<ReturnRow>((from, to) =>
       supabase
         .from("returns")
         .select(
-          "return_id, model_sku, tle_invoice_number, amazon_invoice, total_cost_aed, date_received, status"
+          "return_id, model_sku, tle_invoice_number, amazon_invoice, total_cost_aed, date_received, created_at, status"
         )
         .range(from, to)
     ),
     fetchAll<InvoiceRow>((from, to) =>
-      supabase.from("invoices").select("invoice_number").range(from, to)
+      supabase
+        .from("invoices")
+        .select("invoice_number, invoice_date, synced_at")
+        .range(from, to)
     ),
   ]);
+
+  // Scope: 2025+ only.
+  const returns = allReturns.filter((r) =>
+    effectiveInScope(r.date_received, r.created_at)
+  );
+  const invoices = allInvoices.filter((i) =>
+    effectiveInScope(i.invoice_date, i.synced_at)
+  );
 
   const invoiceExact = new Set<string>();
   const invoiceNorm = new Set<string>();

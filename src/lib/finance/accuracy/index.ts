@@ -1,5 +1,6 @@
 export { normalizeRef } from "./normalize";
 export { tolerance, withinTolerance } from "./tolerance";
+export { SCOPE_START, inScope, effectiveInScope } from "./scope";
 
 export { analyzeRemittanceAccuracy } from "./remittanceAccuracy";
 export { analyzeReturnsAccuracy } from "./returnsAccuracy";

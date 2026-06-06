@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 import { fetchAll } from "./load";
 import { normalizeRef } from "./normalize";
+import { effectiveInScope } from "./scope";
 import { tolerance, withinTolerance } from "./tolerance";
 import type {
   AccuracyFlags,
@@ -19,6 +20,8 @@ interface DisputeRow {
   tle_invoice_number: string | null;
   payment_number: string | null;
   dispute_status: string | null;
+  raised_at: string | null;
+  created_at: string | null;
   resolved_at: string | null;
 }
 interface DisputeItemRow {
@@ -27,6 +30,8 @@ interface DisputeItemRow {
 interface InvoiceRow {
   invoice_number: string;
   payment_number: string | null;
+  invoice_date: string | null;
+  synced_at: string | null;
 }
 
 const TERMINAL = new Set([
@@ -43,12 +48,12 @@ const TERMINAL = new Set([
  * constant `approval_status`), and flags over-credits and sparse items.
  */
 export async function analyzeDisputeAccuracy(): Promise<DisputeAccuracyResult> {
-  const [disputes, items, invoices] = await Promise.all([
+  const [allDisputes, items, allInvoices] = await Promise.all([
     fetchAll<DisputeRow>((from, to) =>
       supabase
         .from("disputes")
         .select(
-          "dispute_number, invoice_amount_aed, credit_amount_aed, tle_invoice_number, payment_number, dispute_status, resolved_at"
+          "dispute_number, invoice_amount_aed, credit_amount_aed, tle_invoice_number, payment_number, dispute_status, raised_at, created_at, resolved_at"
         )
         .range(from, to)
     ),
@@ -56,9 +61,25 @@ export async function analyzeDisputeAccuracy(): Promise<DisputeAccuracyResult> {
       supabase.from("dispute_items").select("dispute_number").range(from, to)
     ),
     fetchAll<InvoiceRow>((from, to) =>
-      supabase.from("invoices").select("invoice_number, payment_number").range(from, to)
+      supabase
+        .from("invoices")
+        .select("invoice_number, payment_number, invoice_date, synced_at")
+        .range(from, to)
     ),
   ]);
+
+  // Scope: 2025+ only.
+  const disputes = allDisputes.filter((d) =>
+    effectiveInScope(d.raised_at, d.created_at)
+  );
+  const invoices = allInvoices.filter((i) =>
+    effectiveInScope(i.invoice_date, i.synced_at)
+  );
+  const scopedDisputeNumbers = new Set(
+    disputes
+      .map((d) => d.dispute_number)
+      .filter((n): n is string => n != null)
+  );
 
   const invoiceExact = new Set<string>();
   const invoiceNorm = new Set<string>();
@@ -71,6 +92,7 @@ export async function analyzeDisputeAccuracy(): Promise<DisputeAccuracyResult> {
 
   const itemCount = new Map<string, number>();
   for (const it of items) {
+    if (!scopedDisputeNumbers.has(it.dispute_number)) continue; // inherit parent scope
     itemCount.set(it.dispute_number, (itemCount.get(it.dispute_number) ?? 0) + 1);
   }
 

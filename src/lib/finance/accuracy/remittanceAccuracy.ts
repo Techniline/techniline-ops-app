@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 import { fetchAll } from "./load";
 import { normalizeRef } from "./normalize";
+import { effectiveInScope } from "./scope";
 import { withinTolerance } from "./tolerance";
 import type {
   AccuracyFlags,
@@ -16,6 +17,7 @@ const PAYABLE = "invoice_payable";
 interface RemittanceRow {
   remittance_ref: string;
   payment_date: string | null;
+  created_at: string | null;
   gross_amount_aed: number | null;
   deductions_aed: number | null;
   net_paid_aed: number | null;
@@ -27,19 +29,23 @@ interface LineRow {
 }
 interface InvoiceRow {
   invoice_number: string;
+  invoice_date: string | null;
+  synced_at: string | null;
 }
 
 /**
- * Read-only accuracy analysis for remittances. Links payable lines to invoices
- * (exact then normalized), computes header variance, and derives flags +
- * confidence. Does NOT trust the stored `match_status` (constant "unmatched").
+ * Read-only accuracy analysis for remittances (2025+ scope). Links payable
+ * lines to in-scope invoices (exact then normalized), computes header variance,
+ * and derives flags + confidence. Ignores stored `match_status`.
  */
 export async function analyzeRemittanceAccuracy(): Promise<RemittanceAccuracyResult> {
-  const [remittances, lines, invoices] = await Promise.all([
+  const [allRemittances, lines, allInvoices] = await Promise.all([
     fetchAll<RemittanceRow>((from, to) =>
       supabase
         .from("remittances")
-        .select("remittance_ref, payment_date, gross_amount_aed, deductions_aed, net_paid_aed")
+        .select(
+          "remittance_ref, payment_date, created_at, gross_amount_aed, deductions_aed, net_paid_aed"
+        )
         .range(from, to)
     ),
     fetchAll<LineRow>((from, to) =>
@@ -49,9 +55,20 @@ export async function analyzeRemittanceAccuracy(): Promise<RemittanceAccuracyRes
         .range(from, to)
     ),
     fetchAll<InvoiceRow>((from, to) =>
-      supabase.from("invoices").select("invoice_number").range(from, to)
+      supabase
+        .from("invoices")
+        .select("invoice_number, invoice_date, synced_at")
+        .range(from, to)
     ),
   ]);
+
+  // Scope: 2025+ only.
+  const remittances = allRemittances.filter((r) =>
+    effectiveInScope(r.payment_date, r.created_at)
+  );
+  const invoices = allInvoices.filter((i) =>
+    effectiveInScope(i.invoice_date, i.synced_at)
+  );
 
   const invoiceExact = new Set<string>();
   const invoiceNorm = new Set<string>();
@@ -60,9 +77,11 @@ export async function analyzeRemittanceAccuracy(): Promise<RemittanceAccuracyRes
     invoiceNorm.add(normalizeRef(inv.invoice_number));
   }
 
+  const scopedRefs = new Set(remittances.map((r) => r.remittance_ref));
   const payableByRef = new Map<string, (string | null)[]>();
   for (const line of lines) {
     if (line.transaction_type !== PAYABLE) continue;
+    if (!scopedRefs.has(line.remittance_ref)) continue; // inherit parent scope
     const arr = payableByRef.get(line.remittance_ref) ?? [];
     arr.push(line.invoice_number);
     payableByRef.set(line.remittance_ref, arr);
