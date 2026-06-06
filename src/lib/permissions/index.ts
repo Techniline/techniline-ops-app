@@ -80,13 +80,14 @@ interface ScopableQuery<T> {
  * - Managers (role === "manager") get the query back unchanged — they may read
  *   every user's rows.
  * - Everyone else is constrained to rows they own via `column` (default
- *   `user_id`). When no profile is present the query is constrained to an empty
+ *   `assigned_to`, matching the Phase 1 `daily_tasks` / `task_definitions`
+ *   schema). When no profile is present the query is constrained to an empty
  *   owner id so it matches nothing (fail closed).
  */
 export function scopeToUser<T extends ScopableQuery<T>>(
   query: T,
   profile: ProfileArg,
-  column = "user_id"
+  column = "assigned_to"
 ): T {
   if (isManager(profile)) return query;
   return query.eq(column, profile?.id ?? "");
