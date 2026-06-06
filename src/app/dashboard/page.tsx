@@ -11,6 +11,7 @@ import { RouteGuard } from "@/components/RouteGuard";
 import {
   ChecklistIcon,
   CocobluIcon,
+  DisputesIcon,
   RemittancesIcon,
   ReturnsIcon,
 } from "@/components/icons";
@@ -85,6 +86,17 @@ function DashboardContent() {
       icon: ReturnsIcon,
       accent:
         "bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-300",
+      show: canViewFinance(profile),
+      comingSoon: false,
+    },
+    {
+      key: "disputes",
+      title: "Disputes",
+      description: "Vendor disputes and related dispute items.",
+      href: "/disputes",
+      icon: DisputesIcon,
+      accent:
+        "bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-300",
       show: canViewFinance(profile),
       comingSoon: false,
     },

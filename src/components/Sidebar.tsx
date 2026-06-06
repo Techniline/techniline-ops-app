@@ -18,6 +18,7 @@ import {
   ChecklistIcon,
   CocobluIcon,
   DashboardIcon,
+  DisputesIcon,
   RemittancesIcon,
   ReturnsIcon,
   Logo,
@@ -76,6 +77,12 @@ export function Sidebar() {
       href: "/returns",
       label: "Returns",
       icon: ReturnsIcon,
+      show: canViewFinance(profile),
+    },
+    {
+      href: "/disputes",
+      label: "Disputes",
+      icon: DisputesIcon,
       show: canViewFinance(profile),
     },
   ];
