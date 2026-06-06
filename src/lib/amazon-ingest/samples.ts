@@ -13,6 +13,19 @@ export const SAMPLE_PAYLOADS: Record<string, IngestPayload> = {
     dryRun: true,
   },
 
+  // 1b. Resolved dispute with TWO unlabeled AED amounts (claim + approved).
+  //     Expected: invoice_amount=1771, approvedAmount=1771.
+  disputeResolvedTwoAmounts: {
+    messageId: "test-dspt-20065219423",
+    threadId: "manual-test",
+    from: "Amazon",
+    subject: "DSPT20065219423 Resolved",
+    receivedAt: "2026-06-07T00:00:00Z",
+    bodyText:
+      "DSPT20065219423 AE Vendor returns Shipment - Have not received this return 4/6/2026 Resolved 1,771.00 AED 1,771.00 AED",
+    dryRun: true,
+  },
+
   // 2. Shortage invoice, pending Amazon, 960 AED (carries a DSPT ref).
   shortagePending: {
     messageId: "sample-shortage-pending",

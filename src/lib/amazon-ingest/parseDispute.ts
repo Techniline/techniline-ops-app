@@ -1,4 +1,5 @@
 import {
+  allAmounts,
   amountNear,
   combinedText,
   DEFAULT_ASSIGNEE_ID,
@@ -18,8 +19,7 @@ export function parseDispute(payload: IngestPayload): ParseResult {
   const lower = text.toLowerCase();
 
   const disputeNumber = matchOne(text, /\bDSPT\d+/i);
-  const approvedAmount = amountNear(text, /approved\s*amount/i);
-  const amount = amountNear(text, /amount/i) ?? firstAmount(text);
+  const labeledApproved = amountNear(text, /approved\s*amount/i);
 
   let disputeStatus: string;
   let eaStatus: "open" | "actioned";
@@ -46,6 +46,21 @@ export function parseDispute(payload: IngestPayload): ParseResult {
     outcome = "open";
   }
 
+  // Amount resolution.
+  // - Prefer an explicitly labeled "approved amount".
+  // - For approved/resolved with two unlabeled AED amounts, the first is the
+  //   claim/invoice amount and the second is the approved amount.
+  // - With a single amount on an approved/resolved dispute, approved = amount.
+  const amounts = allAmounts(text);
+  const invoiceAmount =
+    amounts[0] ?? amountNear(text, /amount/i) ?? firstAmount(text) ?? null;
+
+  let approvedAmount: number | null = labeledApproved;
+  if (approvedAmount == null && outcome === "approved") {
+    if (amounts.length >= 2) approvedAmount = amounts[1];
+    else if (amounts.length === 1) approvedAmount = amounts[0];
+  }
+
   const receivedAt = payload.receivedAt ?? new Date().toISOString();
   const operations: UpsertOperation[] = [];
   const notes: string[] = [];
@@ -54,7 +69,7 @@ export function parseDispute(payload: IngestPayload): ParseResult {
     const disputeValues: DisputeInsert = {
       dispute_number: disputeNumber,
       dispute_status: disputeStatus,
-      invoice_amount_aed: amount ?? 0, // NOT NULL column — default to 0 when unknown
+      invoice_amount_aed: invoiceAmount ?? 0, // NOT NULL column — default to 0 when unknown
       approved_amount_aed: approvedAmount ?? null,
     };
     operations.push({
@@ -71,7 +86,7 @@ export function parseDispute(payload: IngestPayload): ParseResult {
     type: "dispute_update",
     status: eaStatus,
     ref_number: disputeNumber ?? null,
-    aed_amount: amount ?? null,
+    aed_amount: invoiceAmount ?? null,
     email_received_at: receivedAt,
     email_subject: payload.subject ?? null,
     email_sender: payload.from ?? null,
@@ -91,7 +106,7 @@ export function parseDispute(payload: IngestPayload): ParseResult {
   return {
     type: "dispute_update",
     matched: true,
-    fields: { disputeNumber, amount, approvedAmount, outcome },
+    fields: { disputeNumber, amount: invoiceAmount, approvedAmount, outcome },
     operations,
     notes,
   };

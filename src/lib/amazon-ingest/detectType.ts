@@ -32,6 +32,18 @@ export function amountNear(text: string, label: RegExp): number | null {
   return m ? parseAed(m[1]) : null;
 }
 
+/** All AED amounts in the text, in order of appearance. */
+export function allAmounts(text: string): number[] {
+  const re = /([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*aed|aed\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/gi;
+  const out: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const n = parseAed(m[1] ?? m[2] ?? null);
+    if (n != null) out.push(n);
+  }
+  return out;
+}
+
 /** First standalone amount in the text (fallback when no label matches). */
 export function firstAmount(text: string): number | null {
   const m = text.match(/([0-9][0-9,]{2,}(?:\.[0-9]{1,2})?)\s*aed|aed\s*([0-9][0-9,]{2,}(?:\.[0-9]{1,2})?)/i);
