@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
-import { btnPrimary, btnSecondary, surface } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import {
   fetchChecklistForDate,
   generateDailyTasks,
-  setDailyTaskStatus,
+  submitTaskWithEvidence,
   type DailyTaskWithDefinition,
+  type TaskEvidence,
   type TaskStatus,
 } from "@/lib/checklist";
 import { canViewUser, isManager } from "@/lib/permissions";
@@ -71,12 +73,17 @@ function formatCreatedAt(value: string | null): string {
   return date.toLocaleString();
 }
 
-interface TaskRowProps {
+/* --------------------------- evidence inputs --------------------------- */
+
+const chipClass =
+  "inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300";
+
+interface TaskCardProps {
   task: DailyTaskWithDefinition;
   profile: UserProfile;
   isManagerView: boolean;
   submitting: boolean;
-  onSubmit: (taskId: string) => void;
+  onSubmit: (taskId: string, evidence: TaskEvidence) => void;
 }
 
 function TaskCard({
@@ -85,14 +92,112 @@ function TaskCard({
   isManagerView,
   submitting,
   onSubmit,
-}: TaskRowProps) {
+}: TaskCardProps) {
   const definition = task.task_definitions;
   const title = definition?.title ?? "Untitled task";
+  const evType = definition?.evidence_type ?? "text";
+  const hint = definition?.evidence_hint ?? "";
 
   const canAct = task.assigned_to
     ? canViewUser(profile, task.assigned_to)
     : isManager(profile);
-  const canSubmit = task.status === "open" && canAct;
+
+  // Per-type evidence input state.
+  const [text, setText] = useState("");
+  const [count, setCount] = useState("");
+  const [chips, setChips] = useState<string[]>([]);
+  const [chipInput, setChipInput] = useState("");
+
+  // Map evidence_type to a concrete input. Unknown types fall back to text.
+  const inputKind: "text" | "count" | "id_list" =
+    evType === "id_list" ? "id_list" : evType === "count" ? "count" : "text";
+
+  const isOpen = task.status === "open";
+
+  function addChip() {
+    const value = chipInput.trim();
+    if (!value) return;
+    setChips((prev) => [...prev, value]);
+    setChipInput("");
+  }
+
+  function removeChip(index: number) {
+    setChips((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function onChipKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addChip();
+    }
+  }
+
+  const countNum = Number(count);
+  const countValid =
+    count.trim() !== "" && Number.isFinite(countNum) && countNum >= 0;
+
+  const hasProof =
+    evType === "one_tap"
+      ? true
+      : inputKind === "id_list"
+        ? chips.length > 0
+        : inputKind === "count"
+          ? countValid
+          : text.trim() !== "";
+
+  /** Build the evidence payload for a positive submission, or null if invalid. */
+  function buildEvidence(): TaskEvidence | null {
+    if (evType === "one_tap") {
+      return {
+        evidenceText: "Confirmed",
+        evidenceCount: null,
+        isNothingToAction: false,
+        nothingToActionNote: null,
+      };
+    }
+    if (evType === "id_list") {
+      if (chips.length === 0) return null;
+      return {
+        evidenceText: chips.join(", "),
+        evidenceCount: chips.length,
+        isNothingToAction: false,
+        nothingToActionNote: null,
+      };
+    }
+    if (evType === "count") {
+      if (!countValid) return null;
+      return {
+        evidenceText: `Count: ${countNum}`,
+        evidenceCount: countNum,
+        isNothingToAction: false,
+        nothingToActionNote: null,
+      };
+    }
+    // text + any unknown type → treat as free text
+    const value = text.trim();
+    if (value === "") return null;
+    return {
+      evidenceText: value,
+      evidenceCount: null,
+      isNothingToAction: false,
+      nothingToActionNote: null,
+    };
+  }
+
+  function handleSubmitProof() {
+    const evidence = buildEvidence();
+    if (!evidence) return;
+    onSubmit(task.id, evidence);
+  }
+
+  function handleNothingToAction() {
+    onSubmit(task.id, {
+      evidenceText: null,
+      evidenceCount: null,
+      isNothingToAction: true,
+      nothingToActionNote: hint || "Nothing to action today",
+    });
+  }
 
   return (
     <li className={`${surface} p-4`}>
@@ -110,7 +215,7 @@ function TaskCard({
               <dt className="font-medium text-slate-600 dark:text-slate-400">
                 Evidence:
               </dt>
-              <dd>{definition?.evidence_type ?? "—"}</dd>
+              <dd>{evType}</dd>
             </div>
             <div className="flex gap-1">
               <dt className="font-medium text-slate-600 dark:text-slate-400">
@@ -118,12 +223,12 @@ function TaskCard({
               </dt>
               <dd>{task.source}</dd>
             </div>
-            {definition?.evidence_hint ? (
+            {hint ? (
               <div className="flex gap-1 sm:col-span-2">
                 <dt className="font-medium text-slate-600 dark:text-slate-400">
                   Hint:
                 </dt>
-                <dd>{definition.evidence_hint}</dd>
+                <dd>{hint}</dd>
               </div>
             ) : null}
             <div className="flex gap-1">
@@ -144,16 +249,109 @@ function TaskCard({
             ) : null}
           </dl>
         </div>
-
-        <button
-          type="button"
-          onClick={() => onSubmit(task.id)}
-          disabled={!canSubmit || submitting}
-          className={`${btnPrimary} shrink-0`}
-        >
-          {submitting ? "Submitting…" : "Mark as Submitted"}
-        </button>
       </div>
+
+      {/* Evidence / submit area — only for open tasks the user may act on. */}
+      {!isOpen ? null : !canAct ? (
+        <p className="mt-3 text-xs text-slate-400">
+          Assigned to another user — you can&apos;t submit this task.
+        </p>
+      ) : (
+        <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+          {evType === "one_tap" ? (
+            <button
+              type="button"
+              onClick={handleSubmitProof}
+              disabled={submitting}
+              className={btnPrimary}
+            >
+              {submitting ? "Confirming…" : "Confirm"}
+            </button>
+          ) : (
+            <>
+              {inputKind === "text" ? (
+                <textarea
+                  className={inputClass}
+                  rows={2}
+                  placeholder="Enter proof / notes…"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                />
+              ) : null}
+
+              {inputKind === "count" ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className={`${inputClass} max-w-[160px]`}
+                  placeholder="0"
+                  value={count}
+                  onChange={(e) => setCount(e.target.value)}
+                />
+              ) : null}
+
+              {inputKind === "id_list" ? (
+                <div>
+                  <div className="flex gap-2">
+                    <input
+                      className={inputClass}
+                      placeholder="Enter an ID and press Enter…"
+                      value={chipInput}
+                      onChange={(e) => setChipInput(e.target.value)}
+                      onKeyDown={onChipKeyDown}
+                    />
+                    <button
+                      type="button"
+                      onClick={addChip}
+                      className={btnSecondary}
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {chips.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {chips.map((chip, index) => (
+                        <span key={`${chip}-${index}`} className={chipClass}>
+                          {chip}
+                          <button
+                            type="button"
+                            onClick={() => removeChip(index)}
+                            className="text-indigo-500 hover:text-indigo-700"
+                            aria-label={`Remove ${chip}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSubmitProof}
+                  disabled={!hasProof || submitting}
+                  className={btnPrimary}
+                >
+                  {submitting ? "Submitting…" : "Submit"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNothingToAction}
+                  disabled={submitting}
+                  className={btnSecondary}
+                >
+                  Nothing to action today
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -225,14 +423,19 @@ function ChecklistContent() {
     void load();
   }, [load]);
 
-  async function handleSubmit(taskId: string) {
+  async function handleSubmit(taskId: string, evidence: TaskEvidence) {
+    if (!profile) return;
     setSubmittingId(taskId);
     setActionError(null);
     try {
-      await setDailyTaskStatus({ id: taskId, status: "submitted" });
+      await submitTaskWithEvidence({
+        taskId,
+        submittedBy: profile.id,
+        ...evidence,
+      });
       await load();
-    } catch (updateError) {
-      setActionError(errorMessage(updateError));
+    } catch (submitError) {
+      setActionError(errorMessage(submitError));
     } finally {
       setSubmittingId(null);
     }

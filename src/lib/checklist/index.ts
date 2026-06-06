@@ -18,3 +18,10 @@ export {
   fetchChecklistForDate,
   setDailyTaskStatus,
 } from "./queries";
+
+export { submitTaskWithEvidence } from "./submissions";
+export type {
+  TaskEvidence,
+  SubmitTaskArgs,
+  SubmissionInsert,
+} from "./submissions";
