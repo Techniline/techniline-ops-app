@@ -203,7 +203,7 @@ No known runtime bugs in the deployed app (auth, checklist, cocoblu, amazon-acti
 1. ~~**Promote to Production.**~~ ✅ DONE 2026-06-07. `249d9c0` deployed via Deploy Hook (after the cron fix). Verified `/api/amazon-ingest-poll` → 401, `/login` → 200.
 2. ~~**Fix `AZURE_CLIENT_SECRET`.**~~ ✅ DONE 2026-06-07 (Bug #5 resolved).
 3. ~~**Dry-run the poller.**~~ ✅ DONE 2026-06-07 → [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) (400 fetched / 106 Amazon / 0 writes).
-4. **🟡 Refine parser regexes** for the dry-run misses (dry-run only, no writes). See report §"Recommended fixes". **First decide the PO design question** (should the ingester write PO `expected_actions`, or do POs come only from the backend feed?) — it gates the `parsePO` fix.
+4. ~~**Refine parser regexes.**~~ ✅ DONE 2026-06-07 (`21f817b`, `b72dcc5`), re-validated by a 2nd dry-run: 25/25 POs captured, 11/11 appointments ignored, cancellation/dispute/return/remittance rules tightened. Owner chose **ingester writes PO `expected_actions` (deduped on PO number)**. See [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) §Resolution. **Still open:** Graph fetch caps at 200/mailbox — raise before high-volume go-live.
 5. **Run the `ingest_log` SQL** (§8) — needed only for live writes, not for more dry-runs.
 6. **Verify auto-deploy-on-push** now that builds are valid; if still broken, redeliver GitHub webhook / reconnect Git (owner OAuth).
 7. **Go-live (Phase 2):** set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` → redeploy. Cron runs daily on Hobby (`0 9 * * *`) — restore `*/30` if moving to Pro, or use an external scheduler hitting the endpoint with `CRON_SECRET`.
