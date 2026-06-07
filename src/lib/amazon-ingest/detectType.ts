@@ -90,6 +90,17 @@ export function detectType(payload: IngestPayload): IngestType {
   if (/shortage/.test(text)) {
     return "shortage_claim";
   }
+  // Delivery/inbound appointment notifications ("Appointment Confirmed/Deleted",
+  // reschedules) are not POs even though their bodies carry confirm/cancel/po
+  // boilerplate. Exclude before the PO/dispute rules — unless a real Amazon.ae PO.
+  if (/\bappointment\b/.test(text) && !/amazon\.ae\s+po\b/.test(text)) {
+    return "unknown";
+  }
+  // PO cancellation before dispute: "PO(s) have been cancelled" notices cite a
+  // DSPT id in boilerplate that would otherwise mis-route them to a dispute.
+  if (/cancel/.test(text) && /amazon\.ae\s+po\b|purchase order|\bpo\(s\)|\bpo\b/.test(text)) {
+    return "po_cancellation";
+  }
   // Real disputes carry a DSPT id; the bare word "dispute" appears in PO and
   // payment boilerplate, so don't classify on it alone.
   if (/\bdspt\d+/.test(text) || /chargeback/.test(text)) {
@@ -99,15 +110,6 @@ export function detectType(payload: IngestPayload): IngestType {
   // not the bare word "return" (which shows up in unrelated payment notices).
   if (/\bvret\d+|\brma\b|\bprt\b|\bsrt\b|vendor return|return processed|return id/.test(text)) {
     return "return_processed";
-  }
-  // Delivery/inbound appointment notifications ("Appointment Confirmed/Deleted",
-  // reschedules) are not POs even though their bodies carry confirm/cancel/po
-  // boilerplate. Exclude before the PO rules — unless it's a real Amazon.ae PO.
-  if (/\bappointment\b/.test(text) && !/amazon\.ae\s+po\b/.test(text)) {
-    return "unknown";
-  }
-  if (/cancel/.test(text) && /amazon\.ae\s+po\b|purchase order|\bpo\(s\)|\bpo\b/.test(text)) {
-    return "po_cancellation";
   }
   // vendor_po without the bare word "confirm" (which matched "Appointment
   // Confirmed"); keep "unconfirmed" and explicit PO references.
