@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/amazon-ingest-poll",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
