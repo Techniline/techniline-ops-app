@@ -66,4 +66,19 @@ itself to remittances/disputes/returns/shortages? This decides whether we fix
 5. **Resolve the PO 0-ops question** (a vs b) — this drives whether `parsePO` needs real-format work.
 6. **Graph paging**: confirm `fetchMessages` pages beyond 200/mailbox so a busy lookback window doesn't silently drop the oldest mail.
 
-_All findings are from a zero-write dry-run; no production data was modified._
+## Resolution — fixes applied + re-validated (2026-06-07)
+Fixes shipped in `21f817b` + `b72dcc5`, re-validated by a second dry-run (zero writes):
+
+| Finding | Status |
+|---|---|
+| Real POs yield 0 ops (numeric-only id regex) | ✅ Fixed — `parsePO` now extracts 8-char alphanumeric ids; **25/25 `Amazon.ae PO` emails captured** (was 0/25). Owner chose: ingester writes PO `expected_actions`, deduped on PO number (`ref_number` natural key, upsert). |
+| Delivery-appointment mail mis-classified | ✅ Fixed — **11/11 appointment emails → `unknown`** (was vendor_po/po_cancellation). |
+| `PO(s) have been cancelled` → dispute | ✅ Fixed — now `po_cancellation` (cancellation rule ordered before dispute). |
+| Dispute over-broad (bare "dispute") | ✅ Fixed — requires a `DSPT` id. |
+| Return over-broad (bare "return") | ✅ Fixed — requires return id / PRT / SRT / RMA / "vendor return". |
+| Remittance over-broad ("payment advice"/"net paid") | ✅ Fixed — requires "remittance". |
+| Graph fetch caps at 200/mailbox | 🟡 **Open** — `fetched: 400` means both mailboxes are at the cap; a busy window drops the oldest mail. Raise `cap` (and/or shorten the cron lookback) before high-volume go-live. |
+
+Post-fix tally (106 Amazon emails): remittance 11 · vendor_po 33 (30 ops) · return 3 · dispute 2 · po_cancellation 1 · shortage 1 · unknown 55. **0 writes, 0 errors.**
+
+_All findings are from zero-write dry-runs; no production data was modified._
