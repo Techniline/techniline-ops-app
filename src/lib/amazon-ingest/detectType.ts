@@ -3,9 +3,33 @@ import type { IngestPayload, IngestType } from "./types";
 /** Maricel — the default operational assignee for inbound actions (id-based). */
 export const DEFAULT_ASSIGNEE_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
-/** Combined subject + body, for matching. */
+/**
+ * Convert an HTML email body to plain text so the regex parsers work on real
+ * forwarded emails (Outlook/Power Automate send HTML). Plain text passes through
+ * unchanged.
+ */
+export function htmlToText(input: string | null | undefined): string {
+  if (!input) return "";
+  if (!/<[a-z!/]/i.test(input)) return input; // already plain text
+  return input
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<(?:br|\/p|\/div|\/tr|\/td|\/li|\/h[1-6])\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t ]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+/** Combined subject + body (body normalized from HTML), for matching. */
 export function combinedText(p: IngestPayload): string {
-  return `${p.subject ?? ""}\n${p.bodyText ?? ""}`;
+  return `${p.subject ?? ""}\n${htmlToText(p.bodyText)}`;
 }
 
 /** First capture group (or full match) of `re` against `text`. */
