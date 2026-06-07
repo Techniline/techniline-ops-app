@@ -73,8 +73,10 @@ interface GraphListResponse {
 }
 
 /**
- * Fetch inbox messages for a mailbox received on/after `sinceIso`, newest first,
- * up to `cap`. Body is requested as plain text via the Prefer header.
+ * Fetch inbox message HEADERS for a mailbox received on/after `sinceIso`, newest
+ * first, up to `cap`. Bodies are intentionally NOT requested here — downloading
+ * bodies for every inbox email is the slow part, and `isAmazonEmail` only needs
+ * subject + sender. Call `fetchBody` for the few messages that actually match.
  */
 export async function fetchMessages(
   mailbox: string,
@@ -84,7 +86,7 @@ export async function fetchMessages(
   const token = await getGraphToken();
 
   const params = new URLSearchParams();
-  params.set("$select", "id,internetMessageId,subject,from,receivedDateTime,body");
+  params.set("$select", "id,internetMessageId,subject,from,receivedDateTime");
   params.set("$top", "50");
   params.set("$orderby", "receivedDateTime desc");
   params.set("$filter", `receivedDateTime ge ${sinceIso}`);
@@ -98,10 +100,7 @@ export async function fetchMessages(
   const out: GraphMessage[] = [];
   while (url && out.length < cap) {
     const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Prefer: 'outlook.body-content-type="text"',
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
       const text = await res.text();
@@ -117,10 +116,35 @@ export async function fetchMessages(
         subject: r.subject ?? null,
         fromAddress: r.from?.emailAddress?.address ?? null,
         receivedDateTime: r.receivedDateTime ?? null,
-        bodyContent: r.body?.content ?? null,
+        bodyContent: null,
       });
     }
     url = json["@odata.nextLink"];
   }
   return out;
+}
+
+/**
+ * Fetch the plain-text body for a single message. Returns null on any failure
+ * (the parser tolerates a missing body — it can still classify from the subject).
+ */
+export async function fetchBody(
+  mailbox: string,
+  messageId: string
+): Promise<string | null> {
+  const token = await getGraphToken();
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
+      mailbox
+    )}/messages/${encodeURIComponent(messageId)}?$select=body`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Prefer: 'outlook.body-content-type="text"',
+      },
+    }
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as { body?: { content?: string } };
+  return json.body?.content ?? null;
 }
