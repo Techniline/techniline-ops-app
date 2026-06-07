@@ -12,7 +12,7 @@ _Last updated 2026-06-07. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Item | State |
 |---|---|
 | Live URL | https://techniline-ops-app.vercel.app — 200, serving |
-| Live build commit | **`249d9c0`** ("Use Hobby-compatible daily cron") — deployed 2026-06-07 via Deploy Hook, now current with `origin/main`. |
+| Live build commit | **`cfbbd8b`** ("Optimize poller…") — deployed 2026-06-07 via Vercel CLI (`vercel deploy --prod`). **System is LIVE and writing.** |
 | `origin/main` (GitHub) | **`249d9c0`** (HANDOVER commit `7495be1` + cron fix `249d9c0`, both pushed) |
 | **Gap** | **None** — Production == `origin/main`. (Was behind because the `*/30` cron in `vercel.json` failed every Hobby-plan deploy; see §10 Bug #1.) |
 | Live routes | `/login` 200 · `/dashboard` `/checklist` `/cocoblu` `/amazon-actions` live · `/api/amazon-email-ingest` live (405 on GET) · **`/api/amazon-ingest-poll` → 401 (LIVE, deployed 2026-06-07)** |
@@ -204,7 +204,9 @@ No known runtime bugs in the deployed app (auth, checklist, cocoblu, amazon-acti
 2. ~~**Fix `AZURE_CLIENT_SECRET`.**~~ ✅ DONE 2026-06-07 (Bug #5 resolved).
 3. ~~**Dry-run the poller.**~~ ✅ DONE 2026-06-07 → [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) (400 fetched / 106 Amazon / 0 writes).
 4. ~~**Refine parser regexes.**~~ ✅ DONE 2026-06-07 (`21f817b`, `b72dcc5`), re-validated by a 2nd dry-run: 25/25 POs captured, 11/11 appointments ignored, cancellation/dispute/return/remittance rules tightened. Owner chose **ingester writes PO `expected_actions` (deduped on PO number)**. See [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) §Resolution. **Still open:** Graph fetch caps at 200/mailbox — raise before high-volume go-live.
-5. **Go live** — follow [GO-LIVE.md](GO-LIVE.md): run `ingest_log` SQL, set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET`, then a controlled live ingest + duplicate check before the daily cron is trusted. Also covers removing Aaron's duplicate checklist definition.
+5. ~~**Go live.**~~ ✅ DONE 2026-06-07. `ingest_log` created, `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` set (CRON_SECRET held securely; secrets were re-set via Vercel CLI after a UI sensitive-var mixup). Both auth paths verified (manual `x-ingest-secret` + cron `Bearer`). **14-day 2026 backfill complete** (237 Amazon emails, 0 errors, idempotent). Daily cron (`0 9 * * *`, 48h lookback) armed and confirmed. Poller optimized (header-only fetch + parallel bodies + bulk dedup) so a full 14-day window runs in ~12s.
+   - **⚠️ STILL OWED — owner data-accuracy check:** run the verification SQL in [GO-LIVE.md](GO-LIVE.md) (esp. query #3 — duplicate `ref_number` must be ZERO) to confirm the ingester didn't duplicate any backend-fed rows. Claude cannot read the DB (Supabase mgmt token 401).
+   - **STILL OWED — remove Aaron's duplicate checklist** (SQL in [GO-LIVE.md](GO-LIVE.md); owner to run).
 
 **UI shipped 2026-06-07 (`7df2b66`):** Amazon Actions now has a **Cancellations** filter tab (split from PO via `rawType`, no DB change) and **click-to-expand inline detail rows** (full enrichment, staff remarks, dispute status, clickable cross-links to related PO/dispute/return records, "Add missing details" → log modal). Graph fetch cap raised 200→1000 (`INGEST_FETCH_CAP`).
 6. **Verify auto-deploy-on-push** now that builds are valid; if still broken, redeliver GitHub webhook / reconnect Git (owner OAuth).
