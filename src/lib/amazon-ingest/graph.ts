@@ -79,7 +79,7 @@ interface GraphListResponse {
 export async function fetchMessages(
   mailbox: string,
   sinceIso: string,
-  cap = 200
+  cap = Number(process.env.INGEST_FETCH_CAP ?? "1000") || 1000
 ): Promise<GraphMessage[]> {
   const token = await getGraphToken();
 

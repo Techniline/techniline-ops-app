@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, WheelEvent } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
@@ -104,6 +104,176 @@ function referenceLabel(type: ReferenceType | undefined): string {
     case "qty": return "Quantity";
     default: return "Reference";
   }
+}
+
+/* --------------------- categories & cross-links ------------------------ */
+
+/**
+ * UI filters. `cancellation` is a display-only split of the `po` category
+ * (rawType `po_cancellation`) — the persisted action_type stays within the
+ * existing five categories, so nothing in the write/closure path changes.
+ */
+type UiFilter = ActionCategory | "all" | "cancellation";
+
+const CATEGORY_TABS: ReadonlyArray<{ key: UiFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "po", label: "PO Confirmation" },
+  { key: "cancellation", label: "Cancellations" },
+  { key: "dispute", label: "Disputes" },
+  { key: "return", label: "Returns" },
+  { key: "shortage", label: "Shortage" },
+  { key: "remittance", label: "Remittance" },
+];
+
+/** Is this action a PO cancellation (vs a PO confirmation)? */
+function isCancellation(a: AmazonAction): boolean {
+  return a.rawType === "po_cancellation";
+}
+
+/** Display label that distinguishes cancellations from PO confirmations. */
+function displayCategoryLabel(a: AmazonAction): string {
+  if (isCancellation(a)) return "PO Cancellation";
+  return CATEGORY_LABELS[a.category];
+}
+
+/** Does the action match the selected UI filter tab? */
+function matchesFilter(a: AmazonAction, filter: UiFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "cancellation") return isCancellation(a);
+  if (filter === "po") return a.category === "po" && !isCancellation(a);
+  return a.category === filter;
+}
+
+/** Normalized reference keys an action can be linked to other records by. */
+function actionKeys(a: AmazonAction): string[] {
+  const raw = [
+    a.amazonRef,
+    a.invoiceRef,
+    a.referenceValue,
+    a.enrichment.returnId,
+    a.enrichment.srtNumber,
+    a.enrichment.prtNumber,
+    a.enrichment.paymentNumber,
+    a.enrichment.tleInvoiceNumber,
+  ];
+  return Array.from(
+    new Set(
+      raw
+        .filter((v): v is string => !!v && v.trim() !== "")
+        .map((v) => normalizeRef(v))
+        .filter((k) => k.length >= 3)
+    )
+  );
+}
+
+/** Other actions that share a reference with this one (cancellation↔PO, return↔dispute…). */
+function relatedActions(a: AmazonAction, all: AmazonAction[]): AmazonAction[] {
+  const keys = new Set(actionKeys(a));
+  if (keys.size === 0) return [];
+  return all.filter((b) => b.id !== a.id && actionKeys(b).some((k) => keys.has(k)));
+}
+
+/* ----------------------- inline detail panel --------------------------- */
+
+function DetailRow({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className={`text-sm text-slate-800 dark:text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>
+        {value && value.trim() !== "" ? value : "—"}
+      </dd>
+    </div>
+  );
+}
+
+/** Expanded, read-only detail for a row, with cross-links and a "log/update" action. */
+function ActionDetail({
+  action,
+  all,
+  onOpenLink,
+  onLog,
+}: {
+  action: AmazonAction;
+  all: AmazonAction[];
+  onOpenLink: (id: string) => void;
+  onLog: (a: AmazonAction) => void;
+}) {
+  const e = action.enrichment;
+  const related = relatedActions(action, all);
+  const statusLabel = operationalStatusLabel({
+    category: action.category,
+    latestOutcome: action.latestOutcome,
+    workflowStatus: action.workflowStatus,
+    resolved: action.resolved,
+  });
+
+  return (
+    <div className="border-t border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+        <DetailRow label="Category" value={displayCategoryLabel(action)} />
+        <DetailRow label="Status" value={statusLabel} />
+        <DetailRow label="Latest outcome" value={action.latestOutcome ? action.latestOutcome.replace(/_/g, " ") : null} />
+        <DetailRow label="SLA" value={`${action.sla} · ${action.ageDays}d`} />
+        <DetailRow label="Amazon Ref / PO" value={action.amazonRef} mono />
+        <DetailRow label="Invoice Ref" value={action.invoiceRef} mono />
+        <DetailRow label="Received" value={`${formatDate(action.emailReceivedAt)}`} />
+        <DetailRow label="Follow-up / ETA" value={action.followUpDate ? formatDate(action.followUpDate) : null} />
+        <DetailRow label="Reference" value={action.referenceValue} mono />
+        <DetailRow label="Return ID" value={e.returnId} mono />
+        <DetailRow label="SRT Number" value={e.srtNumber} mono />
+        <DetailRow label="PRT Number" value={e.prtNumber} mono />
+        <DetailRow label="Dispute / Payment #" value={e.paymentNumber} mono />
+        <DetailRow label="TLE Invoice" value={e.tleInvoiceNumber} mono />
+        <DetailRow label="SKU" value={e.sku} mono />
+        <DetailRow label="Invoice value" value={e.invoiceValueAed != null ? formatAED(e.invoiceValueAed) : null} />
+        <DetailRow label="Action value" value={action.amount != null ? formatAED(action.amount) : null} />
+        <DetailRow label="Recovered" value={action.recovered != null ? formatAED(action.recovered) : null} />
+        <DetailRow label="Approved amount" value={e.approvedAmountAed != null ? formatAED(e.approvedAmountAed) : null} />
+        <DetailRow label="Confidence" value={action.confidence} />
+      </div>
+
+      {action.emailSubject ? (
+        <div className="mt-3">
+          <dt className="text-xs text-slate-500">Email subject</dt>
+          <dd className="text-sm text-slate-800 dark:text-slate-200">{action.emailSubject}</dd>
+        </div>
+      ) : null}
+
+      <div className="mt-3">
+        <dt className="text-xs text-slate-500">Staff remarks / reason</dt>
+        <dd className="text-sm text-slate-800 dark:text-slate-200">
+          {action.reasonNote && action.reasonNote.trim() !== "" ? action.reasonNote : "—"}
+        </dd>
+      </div>
+
+      {/* Cross-linked records (same PO / dispute / return / invoice reference). */}
+      {related.length > 0 ? (
+        <div className="mt-4">
+          <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Linked records</dt>
+          <div className="flex flex-wrap gap-1.5">
+            {related.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onOpenLink(r.id)}
+                className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300"
+                title={r.emailSubject ?? undefined}
+              >
+                <span className="font-semibold">{displayCategoryLabel(r)}</span>
+                <span className="font-mono opacity-80">{r.amazonRef ?? r.referenceValue ?? r.id.slice(0, 8)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex justify-end">
+        <button type="button" onClick={() => onLog(action)} className={btnSmall}>
+          {action.missingDocumentation ? "Add missing details" : action.resolved ? "Update action" : "Log action"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ----------------------------- action modal ---------------------------- */
@@ -477,15 +647,6 @@ function AdvancedSearch() {
 
 /* ------------------------------- content ------------------------------- */
 
-const CATEGORY_TABS: ReadonlyArray<{ key: ActionCategory | "all"; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "po", label: "PO Confirmation" },
-  { key: "dispute", label: "Disputes" },
-  { key: "return", label: "Returns" },
-  { key: "shortage", label: "Shortage" },
-  { key: "remittance", label: "Remittance" },
-];
-
 function AmazonActionsContent() {
   const { profile } = useAuth();
 
@@ -495,7 +656,8 @@ function AmazonActionsContent() {
   const [banner, setBanner] = useState<string | null>(null);
   const [selected, setSelected] = useState<AmazonAction | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState<ActionCategory | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<UiFilter>("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -525,11 +687,26 @@ function AmazonActionsContent() {
 
   const list = useMemo(() => {
     let rows = showResolved ? actions : actions.filter((a) => !a.resolved);
-    if (categoryFilter !== "all") {
-      rows = rows.filter((a) => a.category === categoryFilter);
-    }
+    rows = rows.filter((a) => matchesFilter(a, categoryFilter));
     return [...rows].sort((a, b) => b.ageDays - a.ageDays);
   }, [actions, showResolved, categoryFilter]);
+
+  /** Open a linked record: select its tab if needed, expand it, scroll to it. */
+  const openLinked = useCallback(
+    (id: string) => {
+      const target = actions.find((a) => a.id === id);
+      if (target && !matchesFilter(target, categoryFilter)) {
+        setCategoryFilter("all");
+      }
+      if (target && target.resolved && !showResolved) setShowResolved(true);
+      setExpandedId(id);
+      // Scroll the row into view after it renders.
+      setTimeout(() => {
+        document.getElementById(`action-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    },
+    [actions, categoryFilter, showResolved]
+  );
 
   if (!profile) return null;
   const managerFlag = isManager(profile);
@@ -583,7 +760,7 @@ function AmazonActionsContent() {
                   <li key={a.id} className={`${surface} flex flex-wrap items-center justify-between gap-3 p-3`}>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">{CATEGORY_LABELS[a.category]}</span>
+                        <span className="font-medium text-slate-900 dark:text-slate-100">{displayCategoryLabel(a)}</span>
                         <SlaBadge sla={a.sla} ageDays={a.ageDays} />
                         <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{a.missingKind}</span>
                       </div>
@@ -623,7 +800,7 @@ function AmazonActionsContent() {
           {/* Full actions list */}
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              {categoryFilter === "all" ? "All Actions" : CATEGORY_LABELS[categoryFilter]} ({list.length})
+              {(CATEGORY_TABS.find((t) => t.key === categoryFilter)?.label ?? "All")} ({list.length})
             </h2>
             <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
@@ -652,33 +829,61 @@ function AmazonActionsContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {list.map((a) => (
-                    <tr key={a.id} className="border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                      <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>{CATEGORY_LABELS[a.category]}</td>
-                      <td className={`${tdCell} font-mono text-xs`}>{a.amazonRef ?? "—"}</td>
-                      <td className={tdCell}><SlaBadge sla={a.sla} ageDays={a.ageDays} /></td>
-                      <td className={tdCell}>
-                        <StatusBadge
-                          label={operationalStatusLabel({
-                            category: a.category,
-                            latestOutcome: a.latestOutcome,
-                            workflowStatus: a.workflowStatus,
-                            resolved: a.resolved,
-                          })}
-                          status={a.workflowStatus}
-                        />
-                      </td>
-                      <td className={tdCell}>{a.latestOutcome ? a.latestOutcome.replace(/_/g, " ") : "—"}</td>
-                      <td className={`${tdCell} font-mono text-xs`}>{a.referenceValue ?? "—"}</td>
-                      <td className={tdCell}>{formatAED(a.amount)}</td>
-                      <td className={tdCell}><ConfidenceBadge value={a.confidence} /></td>
-                      <td className={tdCell}>
-                        <button type="button" onClick={() => setSelected(a)} className={btnSmall}>
-                          {a.resolved ? "Update" : "Log action"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {list.map((a) => {
+                    const open = expandedId === a.id;
+                    return (
+                      <Fragment key={a.id}>
+                        <tr
+                          id={`action-${a.id}`}
+                          onClick={() => setExpandedId(open ? null : a.id)}
+                          className={`cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/30 ${open ? "bg-slate-50 dark:bg-slate-800/30" : ""}`}
+                        >
+                          <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>
+                            <span className="mr-1.5 inline-block text-slate-400">{open ? "▾" : "▸"}</span>
+                            {displayCategoryLabel(a)}
+                          </td>
+                          <td className={`${tdCell} font-mono text-xs`}>{a.amazonRef ?? "—"}</td>
+                          <td className={tdCell}><SlaBadge sla={a.sla} ageDays={a.ageDays} /></td>
+                          <td className={tdCell}>
+                            <StatusBadge
+                              label={operationalStatusLabel({
+                                category: a.category,
+                                latestOutcome: a.latestOutcome,
+                                workflowStatus: a.workflowStatus,
+                                resolved: a.resolved,
+                              })}
+                              status={a.workflowStatus}
+                            />
+                          </td>
+                          <td className={tdCell}>{a.latestOutcome ? a.latestOutcome.replace(/_/g, " ") : "—"}</td>
+                          <td className={`${tdCell} font-mono text-xs`}>{a.referenceValue ?? "—"}</td>
+                          <td className={tdCell}>{formatAED(a.amount)}</td>
+                          <td className={tdCell}><ConfidenceBadge value={a.confidence} /></td>
+                          <td className={tdCell}>
+                            <button
+                              type="button"
+                              onClick={(ev) => { ev.stopPropagation(); setSelected(a); }}
+                              className={btnSmall}
+                            >
+                              {a.resolved ? "Update" : "Log action"}
+                            </button>
+                          </td>
+                        </tr>
+                        {open ? (
+                          <tr className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                            <td colSpan={9} className="p-0">
+                              <ActionDetail
+                                action={a}
+                                all={actions}
+                                onOpenLink={openLinked}
+                                onLog={(x) => setSelected(x)}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
