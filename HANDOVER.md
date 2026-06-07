@@ -16,7 +16,7 @@ _Last updated 2026-06-07. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | `origin/main` (GitHub) | **`249d9c0`** (HANDOVER commit `7495be1` + cron fix `249d9c0`, both pushed) |
 | **Gap** | **None** — Production == `origin/main`. (Was behind because the `*/30` cron in `vercel.json` failed every Hobby-plan deploy; see §10 Bug #1.) |
 | Live routes | `/login` 200 · `/dashboard` `/checklist` `/cocoblu` `/amazon-actions` live · `/api/amazon-email-ingest` live (405 on GET) · **`/api/amazon-ingest-poll` → 401 (LIVE, deployed 2026-06-07)** |
-| **Active blocker** | Dry-run reaches Graph but fails: **`AZURE_CLIENT_SECRET` in Vercel holds the secret *ID*, not the secret *VALUE*** (AADSTS7000215). Owner must set the value + redeploy. See §10 Bug #5. |
+| **Dry-run** | ✅ First real-email dry-run done 2026-06-07: 400 fetched, 106 Amazon, 0 writes. Graph auth fixed (correct `AZURE_CLIENT_SECRET` value set). Findings → [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md). |
 
 **Bottom line:** app is live and working; the **email ingestion poller is committed but not yet deployed/promoted**.
 
@@ -179,7 +179,8 @@ Two generated secrets (`AMAZON_INGEST_SECRET`, `CRON_SECRET`) are held outside t
 2. **~~Production lag~~** — resolved by the `249d9c0` deploy (poller live, HTML normalization now in Production).
 3. **Parser unverified against real emails** (coverage risk, not a code bug yet) — still true; blocked on Bug #5.
 4. CRLF warnings on commit (cosmetic).
-5. **🔴 `AZURE_CLIENT_SECRET` wrong value in Vercel.** Dry-run (2026-06-07) authenticated and reached Graph, then failed with **AADSTS7000215: "Invalid client secret provided… send the secret VALUE, not the secret ID."** The Vercel env var holds the secret's **ID** (or a stale/expired value), not the **VALUE**. Fix (owner): Azure Portal → App registrations → "Techniline Ops Amazon Ingest" (`6dc96d87-9427-4615-b810-9e90dca1ab3d`) → Certificates & secrets → copy an existing secret's **Value** (only visible at creation — create a new one if not saved) → set `AZURE_CLIENT_SECRET` in Vercel (Production+Preview) → **redeploy** (env changes need a new deploy) → re-run the dry-run. Until then the poller cannot fetch mail.
+5. **✅ RESOLVED — `AZURE_CLIENT_SECRET` was the secret ID, not the value.** The first dry-run (2026-06-07) hit AADSTS7000215. Owner set the correct secret **value** in Vercel; after redeploy the Graph token exchange succeeded (400 fetched / 106 Amazon / 0 writes). *Note the secret's **Expires** date — rotate before it lapses or the poller silently stops fetching.*
+6. **🟡 Parser accuracy gaps (from the first real-email dry-run).** Real POs yield 0 ops (numeric-only PO-id regex vs 8-char alphanumeric Amazon.ae ids); delivery-appointment mail mis-classified as vendor_po/po_cancellation; dispute/remittance/return rules over-broad. Full list + fixes in [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md). Dry-run only; no writes occurred.
 
 No known runtime bugs in the deployed app (auth, checklist, cocoblu, amazon-actions verified live for Maricel/Aaron/Vihan).
 
@@ -200,10 +201,10 @@ No known runtime bugs in the deployed app (auth, checklist, cocoblu, amazon-acti
 ## 12. Next Recommended Steps (in order)
 
 1. ~~**Promote to Production.**~~ ✅ DONE 2026-06-07. `249d9c0` deployed via Deploy Hook (after the cron fix). Verified `/api/amazon-ingest-poll` → 401, `/login` → 200.
-2. **🔴 Fix `AZURE_CLIENT_SECRET` in Vercel** (Bug #5) — set the secret **VALUE** (not ID) for the Azure app, redeploy. *Immediate blocker for the dry-run.*
-3. **Run the `ingest_log` SQL** (§8) — needed only for live writes, not the dry-run.
-4. **Dry-run the poller**: `POST /api/amazon-ingest-poll?lookbackHours=336` with `x-ingest-secret` → confirm it fetches + classifies real Amazon emails, zero writes. *(Attempted 2026-06-07; route + auth OK, blocked on Bug #5.)* Use output as the real-email parser-gap report.
-5. **Refine parser regexes** for any misses (dry-run iterations).
+2. ~~**Fix `AZURE_CLIENT_SECRET`.**~~ ✅ DONE 2026-06-07 (Bug #5 resolved).
+3. ~~**Dry-run the poller.**~~ ✅ DONE 2026-06-07 → [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) (400 fetched / 106 Amazon / 0 writes).
+4. **🟡 Refine parser regexes** for the dry-run misses (dry-run only, no writes). See report §"Recommended fixes". **First decide the PO design question** (should the ingester write PO `expected_actions`, or do POs come only from the backend feed?) — it gates the `parsePO` fix.
+5. **Run the `ingest_log` SQL** (§8) — needed only for live writes, not for more dry-runs.
 6. **Verify auto-deploy-on-push** now that builds are valid; if still broken, redeliver GitHub webhook / reconnect Git (owner OAuth).
 7. **Go-live (Phase 2):** set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` → redeploy. Cron runs daily on Hobby (`0 9 * * *`) — restore `*/30` if moving to Pro, or use an external scheduler hitting the endpoint with `CRON_SECRET`.
 8. **Monitor first live runs** (`ingest_log`, `expected_actions`, `amazon_action_log`), then optionally add least-privilege Exchange Application Access Policy for the two mailboxes.
