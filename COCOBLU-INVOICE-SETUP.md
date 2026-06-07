@@ -15,6 +15,10 @@ insert into storage.buckets (id, name, public)
 values ('cocoblu-invoices', 'cocoblu-invoices', false)
 on conflict (id) do nothing;
 
+-- drop-then-create so the block is safely re-runnable
+drop policy if exists "cocoblu invoices upload" on storage.objects;
+drop policy if exists "cocoblu invoices read"   on storage.objects;
+
 create policy "cocoblu invoices upload"
   on storage.objects for insert to authenticated
   with check (bucket_id = 'cocoblu-invoices');
