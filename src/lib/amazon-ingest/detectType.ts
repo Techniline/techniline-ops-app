@@ -77,27 +77,41 @@ export function firstAmount(text: string): number | null {
 
 /**
  * Classify an inbound email. Order matters: shortage is checked before dispute
- * (a shortage email may carry a DSPT ref), and cancellation before vendor_po.
+ * (a shortage email may carry a DSPT ref). Keyword rules are kept tight because
+ * real Amazon mail carries "dispute"/"confirm"/"po"/"return" in boilerplate that
+ * otherwise mis-routes unrelated notices (see PARSER-GAP-REPORT.md, 2026-06-07).
  */
 export function detectType(payload: IngestPayload): IngestType {
   const text = combinedText(payload).toLowerCase();
 
-  if (/remittance|payment advice|net\s*paid|remittance advice/.test(text)) {
+  if (/\bremittance\b|remittance advice/.test(text)) {
     return "remittance";
   }
   if (/shortage/.test(text)) {
     return "shortage_claim";
   }
-  if (/\bdspt\d+/.test(text) || /\bdispute\b|chargeback/.test(text)) {
+  // Real disputes carry a DSPT id; the bare word "dispute" appears in PO and
+  // payment boilerplate, so don't classify on it alone.
+  if (/\bdspt\d+/.test(text) || /chargeback/.test(text)) {
     return "dispute_update";
   }
-  if (/\breturn\b|return processed|\bvret\d+|\brma\b/.test(text)) {
+  // Returns: require a return id / PRT / SRT / RMA / explicit "vendor return",
+  // not the bare word "return" (which shows up in unrelated payment notices).
+  if (/\bvret\d+|\brma\b|\bprt\b|\bsrt\b|vendor return|return processed|return id/.test(text)) {
     return "return_processed";
   }
-  if (/cancel/.test(text) && /\bpo\b|purchase order/.test(text)) {
+  // Delivery/inbound appointment notifications ("Appointment Confirmed/Deleted",
+  // reschedules) are not POs even though their bodies carry confirm/cancel/po
+  // boilerplate. Exclude before the PO rules — unless it's a real Amazon.ae PO.
+  if (/\bappointment\b/.test(text) && !/amazon\.ae\s+po\b/.test(text)) {
+    return "unknown";
+  }
+  if (/cancel/.test(text) && /amazon\.ae\s+po\b|purchase order|\bpo\(s\)|\bpo\b/.test(text)) {
     return "po_cancellation";
   }
-  if (/purchase order|unconfirmed|confirm|\bpo\b/.test(text)) {
+  // vendor_po without the bare word "confirm" (which matched "Appointment
+  // Confirmed"); keep "unconfirmed" and explicit PO references.
+  if (/purchase order|unconfirmed|amazon\.ae\s+po\b|\bpo\(s\)|\bpo\b/.test(text)) {
     return "vendor_po";
   }
   return "unknown";

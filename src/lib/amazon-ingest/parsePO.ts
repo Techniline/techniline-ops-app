@@ -25,9 +25,15 @@ export function parsePO(
   const unconfirmedCount = countStr != null ? Number(countStr) : null;
   const noActionNeeded = /no action needed/.test(lower);
 
+  // Real Amazon.ae PO ids are 8-char alphanumeric (e.g. 6SETIFRF); some notices
+  // use numeric ids. Require at least one digit so plain words ("Orders", "Box")
+  // can't match, and normalize to upper-case for a stable dedup key.
   const poNumber =
-    matchOne(text, /\bPO[\s#:-]*([0-9]{5,})/i) ??
-    matchOne(text, /purchase order[\s#:-]*([0-9]{5,})/i);
+    (matchOne(text, /\bPO\(?s?\)?[\s#:.-]*((?=[A-Z0-9]*[0-9])[A-Z0-9]{5,12})\b/i) ??
+      matchOne(
+        text,
+        /purchase order[\s#:.-]*((?=[A-Z0-9]*[0-9])[A-Z0-9]{5,12})\b/i
+      ))?.toUpperCase() ?? null;
 
   const receivedAt = payload.receivedAt ?? new Date().toISOString();
   const notes: string[] = [];
