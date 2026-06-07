@@ -14,7 +14,12 @@ export {
   updateCocobluQty,
 } from "./queries";
 
-export type { InvoiceDraft, InvoiceLineItem } from "./invoiceTypes";
+export type {
+  InvoiceDraft,
+  InvoiceLineItem,
+  CaptureEngine,
+  ParsedInvoice,
+} from "./invoiceTypes";
 export {
   parseInvoiceViaApi,
   uploadInvoicePdf,

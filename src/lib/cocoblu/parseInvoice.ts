@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extractText, getDocumentProxy } from "unpdf";
 
-import type { InvoiceDraft, InvoiceLineItem } from "./invoiceTypes";
+import { parseInvoiceBasic } from "./basicParse";
+import type { InvoiceDraft, InvoiceLineItem, ParsedInvoice } from "./invoiceTypes";
 
 /**
  * JSON Schema for the structured extraction. Structured outputs require every
@@ -71,15 +72,12 @@ interface RawDraft {
 }
 
 /**
- * Extract text from the PDF and use Claude (Sonnet 4.6, structured output) to
- * capture the invoice header + line items. Returns a draft for human
- * verification — it does NOT write to the database.
+ * Extract text from the PDF and capture the invoice header + line items for
+ * human verification. Uses the free built-in parser by default; if
+ * ANTHROPIC_API_KEY is configured it upgrades to AI extraction (Claude Sonnet
+ * 4.6). Never writes to the database.
  */
-export async function parseInvoicePdf(pdf: Uint8Array): Promise<InvoiceDraft> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
-  }
-
+export async function parseInvoicePdf(pdf: Uint8Array): Promise<ParsedInvoice> {
   const doc = await getDocumentProxy(pdf);
   const { text } = await extractText(doc, { mergePages: true });
   const invoiceText = (text ?? "").trim();
@@ -89,6 +87,14 @@ export async function parseInvoicePdf(pdf: Uint8Array): Promise<InvoiceDraft> {
     );
   }
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { draft: parseInvoiceBasic(invoiceText), engine: "basic" };
+  }
+  return { draft: await parseWithAI(invoiceText), engine: "ai" };
+}
+
+/** AI extraction via Claude Sonnet 4.6 (structured output). */
+async function parseWithAI(invoiceText: string): Promise<InvoiceDraft> {
   const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
   // output_config is a newer Messages param; cast keeps us compatible across
