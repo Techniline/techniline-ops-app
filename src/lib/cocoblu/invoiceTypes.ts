@@ -16,3 +16,12 @@ export interface InvoiceDraft {
   suppliedDate: string | null; // ISO YYYY-MM-DD or null
   lineItems: InvoiceLineItem[];
 }
+
+/** Which capture engine produced a draft. */
+export type CaptureEngine = "ai" | "basic";
+
+/** Parse result: the draft plus which engine produced it. */
+export interface ParsedInvoice {
+  draft: InvoiceDraft;
+  engine: CaptureEngine;
+}

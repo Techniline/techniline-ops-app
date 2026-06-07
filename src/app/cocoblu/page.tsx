@@ -26,6 +26,7 @@ import {
   updateCocobluQty,
   updateCocobluRecord,
   uploadInvoicePdf,
+  type CaptureEngine,
   type CocobluAgeingRow,
   type CocobluCreateInput,
   type InvoiceAudit,
@@ -477,12 +478,14 @@ function draftToLines(draft: InvoiceDraft): ReviewLine[] {
 function ReviewInvoiceModal({
   file,
   draft,
+  engine,
   verifiedById,
   onClose,
   onSaved,
 }: {
   file: File;
   draft: InvoiceDraft;
+  engine: CaptureEngine;
   verifiedById: string;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -559,8 +562,9 @@ function ReviewInvoiceModal({
   return (
     <ModalShell title="Verify Invoice — auto-captured from PDF" onClose={onClose}>
       <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-        Auto-captured from <span className="font-medium">{file.name}</span>. Review every field,
-        correct anything wrong, then save. Each line becomes one Cocoblu record.
+        {engine === "ai" ? "✨ AI-captured" : "Basic capture (free) — review line items carefully"} from{" "}
+        <span className="font-medium">{file.name}</span>. Check every field, correct anything wrong,
+        then save. Each line becomes one Cocoblu record.
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -915,7 +919,11 @@ function CocobluContent() {
   const [updateRow, setUpdateRow] = useState<CocobluAgeingRow | null>(null);
   const [editRow, setEditRow] = useState<CocobluAgeingRow | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [review, setReview] = useState<{ file: File; draft: InvoiceDraft } | null>(null);
+  const [review, setReview] = useState<{
+    file: File;
+    draft: InvoiceDraft;
+    engine: CaptureEngine;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -952,8 +960,8 @@ function CocobluContent() {
     setBanner(null);
     setParsing(true);
     try {
-      const draft = await parseInvoiceViaApi(file);
-      setReview({ file, draft });
+      const { draft, engine } = await parseInvoiceViaApi(file);
+      setReview({ file, draft, engine });
     } catch (err) {
       setUploadError(errorMessage(err));
     } finally {
@@ -1093,6 +1101,7 @@ function CocobluContent() {
         <ReviewInvoiceModal
           file={review.file}
           draft={review.draft}
+          engine={review.engine}
           verifiedById={profile.id}
           onClose={() => setReview(null)}
           onSaved={handleSaved}

@@ -1,12 +1,14 @@
 import { supabase } from "@/lib/supabaseClient";
 
-import type { InvoiceDraft } from "./invoiceTypes";
+import type { CaptureEngine, InvoiceDraft } from "./invoiceTypes";
 
 /** Supabase Storage bucket holding the original invoice PDFs. */
 const BUCKET = "cocoblu-invoices";
 
 /** Send a PDF to the server parse endpoint (auto-capture). No DB write. */
-export async function parseInvoiceViaApi(file: File): Promise<InvoiceDraft> {
+export async function parseInvoiceViaApi(
+  file: File
+): Promise<{ draft: InvoiceDraft; engine: CaptureEngine }> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -21,11 +23,16 @@ export async function parseInvoiceViaApi(file: File): Promise<InvoiceDraft> {
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
-  const json = (await res.json()) as { ok?: boolean; draft?: InvoiceDraft; error?: string };
+  const json = (await res.json()) as {
+    ok?: boolean;
+    draft?: InvoiceDraft;
+    engine?: CaptureEngine;
+    error?: string;
+  };
   if (!res.ok || !json.ok || !json.draft) {
     throw new Error(json.error ?? "Failed to read the invoice.");
   }
-  return json.draft;
+  return { draft: json.draft, engine: json.engine ?? "basic" };
 }
 
 /** Upload the original PDF to storage; returns the stored object path. */

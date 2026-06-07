@@ -51,8 +51,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const draft = await parseInvoicePdf(bytes);
-    return Response.json({ ok: true, draft });
+    const { draft, engine } = await parseInvoicePdf(bytes);
+    return Response.json({ ok: true, draft, engine });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "Failed to parse the invoice." },
