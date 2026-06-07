@@ -492,7 +492,11 @@ function ReviewInvoiceModal({
 }) {
   const [invoiceNumber, setInvoiceNumber] = useState(draft.invoiceNumber ?? "");
   const [invoiceDate, setInvoiceDate] = useState(draft.invoiceDate ?? "");
-  const [suppliedDate, setSuppliedDate] = useState(draft.suppliedDate ?? "");
+  // These invoices carry a single date; default Supplied Date to the invoice
+  // date (goods supplied on invoice) — still editable if delivery differs.
+  const [suppliedDate, setSuppliedDate] = useState(
+    draft.suppliedDate ?? draft.invoiceDate ?? ""
+  );
   const [lines, setLines] = useState<ReviewLine[]>(draftToLines(draft));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
