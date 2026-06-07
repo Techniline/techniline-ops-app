@@ -204,7 +204,9 @@ No known runtime bugs in the deployed app (auth, checklist, cocoblu, amazon-acti
 2. ~~**Fix `AZURE_CLIENT_SECRET`.**~~ ✅ DONE 2026-06-07 (Bug #5 resolved).
 3. ~~**Dry-run the poller.**~~ ✅ DONE 2026-06-07 → [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) (400 fetched / 106 Amazon / 0 writes).
 4. ~~**Refine parser regexes.**~~ ✅ DONE 2026-06-07 (`21f817b`, `b72dcc5`), re-validated by a 2nd dry-run: 25/25 POs captured, 11/11 appointments ignored, cancellation/dispute/return/remittance rules tightened. Owner chose **ingester writes PO `expected_actions` (deduped on PO number)**. See [PARSER-GAP-REPORT.md](PARSER-GAP-REPORT.md) §Resolution. **Still open:** Graph fetch caps at 200/mailbox — raise before high-volume go-live.
-5. **Run the `ingest_log` SQL** (§8) — needed only for live writes, not for more dry-runs.
+5. **Go live** — follow [GO-LIVE.md](GO-LIVE.md): run `ingest_log` SQL, set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET`, then a controlled live ingest + duplicate check before the daily cron is trusted. Also covers removing Aaron's duplicate checklist definition.
+
+**UI shipped 2026-06-07 (`7df2b66`):** Amazon Actions now has a **Cancellations** filter tab (split from PO via `rawType`, no DB change) and **click-to-expand inline detail rows** (full enrichment, staff remarks, dispute status, clickable cross-links to related PO/dispute/return records, "Add missing details" → log modal). Graph fetch cap raised 200→1000 (`INGEST_FETCH_CAP`).
 6. **Verify auto-deploy-on-push** now that builds are valid; if still broken, redeliver GitHub webhook / reconnect Git (owner OAuth).
 7. **Go-live (Phase 2):** set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` → redeploy. Cron runs daily on Hobby (`0 9 * * *`) — restore `*/30` if moving to Pro, or use an external scheduler hitting the endpoint with `CRON_SECRET`.
 8. **Monitor first live runs** (`ingest_log`, `expected_actions`, `amazon_action_log`), then optionally add least-privilege Exchange Application Access Policy for the two mailboxes.
