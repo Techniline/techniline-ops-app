@@ -81,3 +81,50 @@ export async function recordProcessedMessage(args: {
     } as never);
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Bulk dedup: given candidate message ids, return the set already in ingest_log.
+ * One query instead of one-per-message, so a wide backfill stays under the
+ * serverless time limit.
+ */
+export async function alreadyProcessed(
+  messageIds: string[]
+): Promise<Set<string>> {
+  const seen = new Set<string>();
+  if (messageIds.length === 0) return seen;
+  // Chunk the IN list to keep URLs/queries reasonable.
+  const CHUNK = 200;
+  for (let i = 0; i < messageIds.length; i += CHUNK) {
+    const batch = messageIds.slice(i, i + CHUNK);
+    const { data, error } = await client()
+      .from("ingest_log")
+      .select("message_id")
+      .in("message_id", batch);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) seen.add((row as { message_id: string }).message_id);
+  }
+  return seen;
+}
+
+/** Batch-record processed messages (one insert for the whole run). */
+export async function recordProcessedMessages(
+  rows: Array<{
+    messageId: string;
+    mailbox: string;
+    receivedAt: string | null;
+    emailType: string;
+  }>
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await client()
+    .from("ingest_log")
+    .insert(
+      rows.map((r) => ({
+        message_id: r.messageId,
+        mailbox: r.mailbox,
+        received_at: r.receivedAt,
+        email_type: r.emailType,
+      })) as never
+    );
+  if (error) throw new Error(error.message);
+}
