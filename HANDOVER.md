@@ -12,8 +12,8 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Item | State |
 |---|---|
 | Live URL | https://techniline-ops-app.vercel.app — serving |
-| Production commit | **`5d130e9`** ("Priorities module + handover") — current with `origin/main`; deployed via Vercel CLI. |
-| `origin/main` | **`5d130e9`** — in sync. |
+| Production commit | **`52475b5`** ("Cocoblu free parser: 2nd invoice layout") — current with `origin/main`; deployed via Vercel CLI. |
+| `origin/main` | **`52475b5`** — in sync. |
 | Live routes | `/login` · `/dashboard` (+ KPI strip) · `/checklist` · `/cocoblu` (+ PDF capture) · `/amazon-actions` · `/api/amazon-email-ingest` · `/api/amazon-ingest-poll` (401 w/o secret) · `/api/cocoblu/parse` (401 w/o auth) |
 | Amazon ingestion | **LIVE & writing.** Daily Vercel cron `0 9 * * *` (48h lookback). 14-day 2026 backfill complete (237 Amazon emails, 0 errors). |
 | Cocoblu PDF capture | **LIVE.** Free built-in parser by default; auto-upgrades to AI if `ANTHROPIC_API_KEY` set. |
@@ -35,7 +35,7 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Dashboard | `/dashboard` | all | Module cards + **KPI strip** scoped to the user's modules (checklist/cocoblu/amazon). |
 | Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`) + **Work Log** (surfaces `submissions`; per-task "✓ submitted…" + a daily log). |
 | Priorities | `/priorities` | any user (RLS-scoped) | Standalone module (`priorities` table). Managers create & assign to Aaron/Maricel/Both with title/description/due/`priority_level` P1-P3/notes; staff see + update their own (progress %, in-progress, complete, notes). Status open/in_progress/overdue(derived)/completed. **Assignment email + weekly summary via Microsoft Graph** (`/api/priorities/notify`, manager-only, fail-soft). Names shown, never UUIDs. |
-| Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** + **Invoices browser** + manager **Edit**. |
+| Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** (free parser handles the Microless/Cocoblu **and** Dulam/Nevin layouts; AI for any layout when keyed) + **Invoices browser** + manager **Edit**. |
 | Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. |
 | Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | Guarded but **removed from nav** — do not re-promote. |
 
@@ -53,7 +53,8 @@ Schema source of truth = generated `src/lib/database.types.ts` (does **not** yet
 | `ingest_log` table (email dedup for poller) | ✅ Created (message_id PK, mailbox, received_at, email_type, processed_at). RLS on; service-role writes. |
 | `cocoblu_ageing` audit columns: `source`, `pdf_url`, `verified_by`(→users), `verified_at` | ✅ Created. Read from the base table (the ageing view doesn't carry them). |
 | Storage bucket `cocoblu-invoices` (private) + authenticated insert/select policies | ✅ Created. Holds invoice PDFs; app reads via signed URLs. |
-| RLS for newly-surfaced tables: `priorities` (read/insert/update), `submissions` (read), `breach_log` (read), `users` (read) | ⏳ **Owner to run** — SQL in [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md). These tables existed already; the app now reads/writes them. Fail-soft until applied. |
+| RLS for newly-surfaced tables: `priorities` (read/insert/update), `submissions` (read), `breach_log` (read), `users` (read) | ✅ Run 2026-06-08. |
+| `priorities` columns `priority_level`, `notes` (§0 of CHECKLIST-PRIORITIES-SETUP) | ✅ Run 2026-06-08. Priorities module fully live. |
 
 The checklist work surfaces tables the backend team already built (`priorities`, `submissions`, `breach_log`) — **no schema changes**, only the RLS above. No pre-existing tables/enums/RPCs were modified.
 
@@ -101,7 +102,8 @@ Two server-side pieces (Node runtime, service-role writes, fail-closed) under `s
 Flow: `/cocoblu` → **Upload Invoice (PDF)** → `POST /api/cocoblu/parse` (auth via Supabase JWT) extracts text with **unpdf** and captures header + line items → editable **Verify** modal → **Verify & Save** writes one `cocoblu_ageing` row per line, uploads the PDF to storage, and records `source`/`pdf_url`/`verified_by`/`verified_at`.
 
 - **Capture engine:** free built-in parser (`src/lib/cocoblu/basicParse.ts`) **by default — no key, no cost**. If `ANTHROPIC_API_KEY` is set, auto-upgrades to **AI extraction (Claude Sonnet 4.6, structured output)** in `parseInvoice.ts` (~3¢/invoice) — no code change. The Verify modal labels which engine ran.
-- **Verify step** is the safety net: every field is editable before saving (line items as labeled cards), so heuristic misses are corrected by a human. Validated on the sample invoice (`WS/2502628`): header + 11/11 line items.
+- **Free parser is format-by-format** (regex). It now handles **two** layouts: **Microless/Cocoblu** (`Price·Qty·Model·Brand·Desc·Amount`, slash dates) and **Dulam/Nevin** (`Sr·Model·Desc·Qty·Price+Brand·Amount`, dash dates, glued invoice no.). Validated on both samples (`WS/2502628` → 11/11 lines; `INV/001995` → 2/2 lines). A genuinely new vendor layout may need either another regex branch in `basicParse.ts` or — the robust path — turning on AI capture.
+- **Verify step** is the safety net: every field is editable before saving (line items as labeled cards), so heuristic misses are corrected by a human.
 - **Invoices browser:** the "Invoices" button lists every stored PDF (View/Download via signed URLs); each saved row also has a 📎 link.
 - **Permissions:** upload/verify/save = `cocoblu` cap (Aaron, Vihan); **Edit saved records = managers**.
 - **Setup:** see [COCOBLU-INVOICE-SETUP.md](COCOBLU-INVOICE-SETUP.md) (storage bucket + audit columns done; `ANTHROPIC_API_KEY` optional).
@@ -111,7 +113,8 @@ Flow: `/cocoblu` → **Upload Invoice (PDF)** → `POST /api/cocoblu/parse` (aut
 ## 8. UI / Shell
 
 - **Collapsible sidebar** on desktop (icon rail via chevron) + **off-canvas drawer on mobile** (hamburger in a sticky top bar, backdrop). `AppShell.tsx` (client) + `Sidebar.tsx`.
-- **Dashboard KPI strip** (`/dashboard`): per-module metric tiles, each module loaded independently (`Promise.allSettled`), shown only for capabilities the user holds.
+- **Dashboard KPI strip** (`/dashboard`): per-module metric tiles, each module loaded independently (`Promise.allSettled`), shown only for capabilities the user holds — includes a **Priorities & Breaches** group.
+- **Weekly summary** (`src/components/WeeklySummaryModal.tsx`, shared, self-contained): a manager **"Send weekly summary"** button appears on **both** the Dashboard header and `/priorities` → live cross-module preview → emails to the manager via the Graph route.
 - Shared `Modal` / cocoblu `ModalShell` support a `wide` layout; premium spacing, gradients, transitions.
 - New dependencies: `@anthropic-ai/sdk`, `unpdf`.
 
@@ -139,7 +142,7 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Parser is heuristic** (both Amazon ingestion and Cocoblu basic capture) — re-validate against new real samples periodically. Cocoblu's Verify step mitigates this.
 2. **Auto-deploy-on-git-push** historically flaky — the CLI/deploy-hook is the dependable path (§1). If you want push-to-deploy, redeliver the GitHub webhook / reconnect Git (owner OAuth).
 3. **Cron cadence is daily** (Hobby). Fine for steady mail; move to Pro (`*/30`) or an external scheduler for near-real-time.
-4. **`database.types.ts` is stale** for the new columns (`ingest_log`, `cocoblu_ageing` audit). Code compensates with local types / casts; regenerate to clean up.
+4. **`database.types.ts` is stale** for the new columns (`ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`). Code compensates with local types / casts; regenerate to clean up.
 5. CRLF warnings on commit (cosmetic).
 
 ---
@@ -159,18 +162,19 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 ## 12. Outstanding / Next Steps
 
 **Owner data tasks (Claude can't reach the DB — Supabase mgmt token returns 401; provide SQL, owner runs):**
-1. **Data-accuracy check on the ingestion go-live:** run the verification SQL in [GO-LIVE.md](GO-LIVE.md) — especially the **duplicate `ref_number`** query (must return zero) — to confirm the ingester didn't duplicate backend-fed rows.
-2. **Remove Aaron's duplicate checklist** definition (diagnostic + fix SQL in [GO-LIVE.md](GO-LIVE.md)).
+1. ~~**Data-accuracy check on the ingestion go-live**~~ ✅ DONE 2026-06-08 — duplicate `ref_number` query returned zero rows; no duplication vs backend feed.
+2. ~~**Remove Aaron's duplicate checklist**~~ ✅ DONE 2026-06-08 — duplicate active definition deactivated.
 3. **Monitor the first daily cron runs** (`ingest_log`, `expected_actions`); optionally add a least-privilege Exchange Application Access Policy for the two mailboxes.
-4. **Run the Priorities/Checklist SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md). **RLS for `priorities`/`submissions`/`breach_log`/`users` = ✅ run** (2026-06-08). **Still owed: §0 `ALTER TABLE priorities ADD priority_level, notes`** (added to the doc after the RLS was run — the Priorities module needs these columns). Confirm `current_user_role()` behaves as assumed.
-5. ~~**Enable priority emails**~~ ✅ DONE 2026-06-08 — Azure app granted **Mail.Send (Application)** + admin consent (sender defaults to `vihan@techniline.org`; set `PRIORITY_MAIL_FROM` to change). Pending a live send test. If a send 403s, check for an Exchange Application Access Policy restricting the sender mailbox.
+4. ~~**Run the Priorities/Checklist SQL**~~ ✅ DONE 2026-06-08 — RLS (`priorities`/`submissions`/`breach_log`/`users`) + §0 `ALTER TABLE priorities ADD priority_level, notes` both applied. Priorities module fully live.
+5. ~~**Enable priority emails**~~ ✅ DONE 2026-06-08 — Azure app granted **Mail.Send (Application)** + admin consent (sender `vihan@techniline.org`; `PRIORITY_MAIL_FROM` to change). **Live send test passed** — assignment email delivered, no 403, no Exchange Application Access Policy needed.
 
 **Optional / when needed:**
-4. **AI invoice capture:** add `ANTHROPIC_API_KEY` in Vercel → Cocoblu upgrades from free parser to Sonnet 4.6 automatically.
-5. **Tune the Cocoblu parser** when real (non-sample) invoices arrive — `basicParse.ts` (free) and the prompt in `parseInvoice.ts` (AI) are both easy to adjust.
-6. **Regenerate `src/lib/database.types.ts`** now that `ingest_log` + `cocoblu_ageing` audit columns exist, then drop the local mini-types/casts.
-7. **Rotate `AZURE_CLIENT_SECRET`** before it expires.
-8. Move ingestion cron to `*/30` if upgrading to Vercel Pro.
+1. **AI invoice capture** (recommended once multiple vendors are in play): add `ANTHROPIC_API_KEY` in Vercel → Cocoblu auto-upgrades from the free parser to Sonnet 4.6 (reads any layout). Mail.Send/Graph already work.
+2. **Tune the Cocoblu free parser** for a new vendor layout — `basicParse.ts` has per-layout regex branches (Microless + Dulam/Nevin so far); add a branch, or just enable AI (#1).
+3. **Regenerate `src/lib/database.types.ts`** now that the new columns exist (`ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`), then drop the local mini-types/casts.
+4. **Rotate `AZURE_CLIENT_SECRET`** before it expires.
+5. **Weekly summary scheduling** — currently manual ("Send weekly summary" on Dashboard/Priorities). Add a Vercel cron + a manager-recipient send if an automatic weekly email is wanted.
+6. Move ingestion cron to `*/30` if upgrading to Vercel Pro.
 
 **Deferred:** Manager Overview dashboard (recovery reporting), broader KPI history/trends.
 
