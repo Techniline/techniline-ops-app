@@ -103,23 +103,37 @@ function ModalShell({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+        className={`my-auto max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-slate-800 dark:bg-slate-900 ${
+          wide ? "max-w-3xl" : "max-w-lg"
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {title}
-        </h2>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 -mt-1 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          >
+            ✕
+          </button>
+        </div>
         {children}
       </div>
     </div>
@@ -566,65 +580,78 @@ function ReviewInvoiceModal({
   }
 
   return (
-    <ModalShell title="Verify Invoice — auto-captured from PDF" onClose={onClose}>
+    <ModalShell title="Verify Invoice — auto-captured from PDF" onClose={onClose} wide>
       <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
         {engine === "ai" ? "✨ AI-captured" : "Basic capture (free) — review line items carefully"} from{" "}
         <span className="font-medium">{file.name}</span>. Check every field, correct anything wrong,
         then save. Each line becomes one Cocoblu record.
       </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <FormRow label="Invoice Number *">
-            <input className={inputClass} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required />
-          </FormRow>
-          <FormRow label="Invoice Date *">
-            <input type="date" className={inputClass} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
-          </FormRow>
-          <FormRow label="Supplied Date">
-            <input type="date" className={inputClass} value={suppliedDate} onChange={(e) => setSuppliedDate(e.target.value)} />
-          </FormRow>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Invoice details
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <FormRow label="Invoice Number *">
+              <input className={inputClass} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required />
+            </FormRow>
+            <FormRow label="Invoice Date *">
+              <input type="date" className={inputClass} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
+            </FormRow>
+            <FormRow label="Supplied Date">
+              <input type="date" className={inputClass} value={suppliedDate} onChange={(e) => setSuppliedDate(e.target.value)} />
+            </FormRow>
+          </div>
         </div>
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Line items ({lines.length})
-            </span>
+            </p>
             <button type="button" onClick={addLine} className={btnSmall}>+ Add line</button>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/40">
-                <tr>
-                  <th className="px-2 py-2 text-left font-medium text-slate-500">SKU *</th>
-                  <th className="px-2 py-2 text-left font-medium text-slate-500">Description</th>
-                  <th className="px-2 py-2 text-left font-medium text-slate-500">Qty *</th>
-                  <th className="px-2 py-2 text-left font-medium text-slate-500">Unit Cost</th>
-                  <th className="px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l, i) => (
-                  <tr key={i} className="border-t border-slate-100 dark:border-slate-800/60">
-                    <td className="px-2 py-1.5">
-                      <input className={`${inputClass} min-w-[120px]`} value={l.sku} onChange={(e) => updateLine(i, "sku", e.target.value)} />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input className={`${inputClass} min-w-[180px]`} value={l.description} onChange={(e) => updateLine(i, "description", e.target.value)} />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" step="1" onWheel={blurOnWheel} className={`${inputClass} w-20`} value={l.qty} onChange={(e) => updateLine(i, "qty", e.target.value)} />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={`${inputClass} w-24`} value={l.unitCost} onChange={(e) => updateLine(i, "unitCost", e.target.value)} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <button type="button" onClick={() => removeLine(i)} className="text-xs text-red-500 hover:text-red-700" aria-label={`Remove line ${i + 1}`}>✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col gap-3">
+            {lines.map((l, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Line {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeLine(i)}
+                    className="text-xs font-medium text-red-500 hover:text-red-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                  <label className="flex flex-col gap-1 text-sm sm:col-span-4">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">SKU *</span>
+                    <input className={inputClass} value={l.sku} onChange={(e) => updateLine(i, "sku", e.target.value)} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm sm:col-span-4">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Description</span>
+                    <input className={inputClass} value={l.description} onChange={(e) => updateLine(i, "description", e.target.value)} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Qty *</span>
+                    <input type="number" min="0" step="1" onWheel={blurOnWheel} className={inputClass} value={l.qty} onChange={(e) => updateLine(i, "qty", e.target.value)} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Unit Cost</span>
+                    <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={inputClass} value={l.unitCost} onChange={(e) => updateLine(i, "unitCost", e.target.value)} />
+                  </label>
+                </div>
+              </div>
+            ))}
+            {lines.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-700">
+                No line items captured. Use “+ Add line” to enter them manually.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -791,7 +818,7 @@ function InvoicesModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <ModalShell title="Stored Invoice PDFs" onClose={onClose}>
+    <ModalShell title="Stored Invoice PDFs" onClose={onClose} wide>
       {loading ? (
         <p className="text-sm text-slate-500">Loading…</p>
       ) : err ? (
