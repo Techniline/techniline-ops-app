@@ -147,12 +147,16 @@ group by v.lp_id;
 (All lines of an LPO share the order's ageing, so `max()` returns the LPO's value. The view inherits
 the base-table RLS — managers + Maricel.)
 
-> **Upgrading an existing install** (you already ran §1–§4 earlier) — run just this, in order:
+> **Upgrading an existing install** (you already ran §1–§4 earlier) — run, in order:
 > ```sql
 > alter table public.lp_orders add column if not exists goods_received_date date;
-> -- then re-run the §2 `create or replace view public.lp_items_view ...`
-> -- then run the §2b `create or replace view public.lp_orders_overview ...`
+> -- create-or-replace cannot insert a column mid-list, so DROP then CREATE:
+> drop view if exists public.lp_orders_overview;
+> drop view if exists public.lp_items_view;
+> -- then run the §2 `create view public.lp_items_view ...`
+> -- then run the §2b `create view public.lp_orders_overview ...`
 > ```
+> (`drop view` without `cascade` is safe — nothing else references these views.)
 
 ## 3. RLS (managers + Maricel)
 
