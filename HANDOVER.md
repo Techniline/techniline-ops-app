@@ -33,7 +33,8 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Module | Route | Access | Notes |
 |---|---|---|---|
 | Dashboard | `/dashboard` | all | Module cards + **KPI strip** scoped to the user's modules (checklist/cocoblu/amazon). |
-| Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`) + **Priorities** (manager assigns to a user/both; staff self-create; progress/due/complete — `priorities` table) + **Work Log** (surfaces `submissions`). |
+| Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`) + **Work Log** (surfaces `submissions`; per-task "✓ submitted…" + a daily log). |
+| Priorities | `/priorities` | any user (RLS-scoped) | Standalone module (`priorities` table). Managers create & assign to Aaron/Maricel/Both with title/description/due/`priority_level` P1-P3/notes; staff see + update their own (progress %, in-progress, complete, notes). Status open/in_progress/overdue(derived)/completed. **Assignment email + weekly summary via Microsoft Graph** (`/api/priorities/notify`, manager-only, fail-soft). Names shown, never UUIDs. |
 | Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** + **Invoices browser** + manager **Edit**. |
 | Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. |
 | Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | Guarded but **removed from nav** — do not re-promote. |
@@ -126,6 +127,7 @@ Flow: `/cocoblu` → **Upload Invoice (PDF)** → `POST /api/cocoblu/parse` (aut
 | `SUPABASE_SERVICE_ROLE_KEY` | Prod | ✅ | Server-only DB writes (ingestion). Never expose client-side. |
 | `CRON_SECRET` | Prod | ✅ | Arms the daily Vercel cron (held securely). |
 | `ANTHROPIC_API_KEY` | Prod+Preview | ❌ optional | Enables AI invoice capture (Sonnet 4.6). Without it, Cocoblu uses the free parser. |
+| `PRIORITY_MAIL_FROM` | Prod | optional | Sender mailbox for priority/weekly emails (default `vihan@techniline.org`). Needs the Azure app to have **Mail.Send (Application)** consented. |
 | `INGEST_MAILBOXES` / `INGEST_LOOKBACK_HOURS` / `INGEST_FETCH_CAP` | Prod | optional | Defaults: `vihan@,purchasing@` / `48` / `1000`. |
 
 All secrets are marked **Sensitive** in Vercel → **write-only** (not readable via UI or `vercel env pull`). To fix one, `vercel env rm NAME production` then `echo "value" | vercel env add NAME production` (the trailing newline is trimmed; a `printf '%s'` pipe without a newline does **not** save) → then `vercel deploy --prod`.
@@ -160,7 +162,8 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Data-accuracy check on the ingestion go-live:** run the verification SQL in [GO-LIVE.md](GO-LIVE.md) — especially the **duplicate `ref_number`** query (must return zero) — to confirm the ingester didn't duplicate backend-fed rows.
 2. **Remove Aaron's duplicate checklist** definition (diagnostic + fix SQL in [GO-LIVE.md](GO-LIVE.md)).
 3. **Monitor the first daily cron runs** (`ingest_log`, `expected_actions`); optionally add a least-privilege Exchange Application Access Policy for the two mailboxes.
-4. **Run the checklist RLS SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md) — to switch on Priorities, the Work Log, and the breach KPI (they're built + deployed but show empty until the policies exist). Confirm `current_user_role()` exists / behaves as assumed.
+4. **Run the Priorities/Checklist SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md): (a) add `priority_level` + `notes` columns to `priorities`; (b) RLS for `priorities`/`submissions`/`breach_log`/`users`. Switches on the Priorities module, Work Log, and breach KPI (built + deployed, empty until applied). Confirm `current_user_role()` behaves as assumed.
+5. **Enable priority emails** — grant the Azure app **Mail.Send (Application)** + admin consent (optionally set `PRIORITY_MAIL_FROM`). Until then priorities save and just show an "email failed" warning.
 
 **Optional / when needed:**
 4. **AI invoice capture:** add `ANTHROPIC_API_KEY` in Vercel → Cocoblu upgrades from free parser to Sonnet 4.6 automatically.
