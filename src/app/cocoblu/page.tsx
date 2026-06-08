@@ -16,9 +16,12 @@ import {
   surface,
 } from "@/components/ui";
 import {
-  calculateCocobluSummary,
+  cocobluOverviewKpis,
+  cocobluReport,
   createCocobluRecord,
-  fetchCocobluAgeing,
+  fetchCocobluInvoicesOverview,
+  fetchCocobluLinesForInvoice,
+  fetchCocobluWindow,
   fetchInvoiceAudit,
   invoicePdfUrl,
   listInvoicePdfs,
@@ -30,11 +33,18 @@ import {
   type CaptureEngine,
   type CocobluAgeingRow,
   type CocobluCreateInput,
+  type CocobluInvoiceOverviewRow,
   type InvoiceAudit,
   type InvoiceDraft,
   type StoredInvoice,
   type VerifiedLine,
 } from "@/lib/cocoblu";
+import {
+  downloadCsv,
+  printReportHtml,
+  renderTableReportHtml,
+  toCsv,
+} from "@/lib/export";
 import { isManager } from "@/lib/permissions";
 
 /* ------------------------------- helpers ------------------------------- */
@@ -865,54 +875,6 @@ function InvoicesModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ------------------------------ Summary -------------------------------- */
-
-function SummaryCards({ rows }: { rows: CocobluAgeingRow[] }) {
-  const summary = useMemo(() => calculateCocobluSummary(rows), [rows]);
-
-  const cards: ReadonlyArray<{ label: string; value: number; tone?: string }> =
-    [
-      { label: "Total Open Records", value: summary.totalOpenRecords },
-      {
-        label: "90+ Day Records",
-        value: summary.over90Records,
-        tone: "text-red-600 dark:text-red-400",
-      },
-      {
-        label: "Warning Records",
-        value: summary.warningRecords,
-        tone: "text-orange-600 dark:text-orange-400",
-      },
-      { label: "Total Qty Remaining", value: summary.totalQtyRemaining },
-      {
-        label: "90+ Day Qty Remaining",
-        value: summary.qty90Plus,
-        tone: "text-red-600 dark:text-red-400",
-      },
-      { label: "76–89 Day Qty Remaining", value: summary.qty76To89 },
-      { label: "61–75 Day Qty Remaining", value: summary.qty61To75 },
-    ];
-
-  return (
-    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {cards.map((card) => (
-        <div key={card.label} className={`${surface} p-4`}>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            {card.label}
-          </p>
-          <p
-            className={`mt-1 text-2xl font-semibold ${
-              card.tone ?? "text-slate-900 dark:text-slate-100"
-            }`}
-          >
-            {card.value.toLocaleString()}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ------------------------------- Table --------------------------------- */
 
 const TH_CLASS =
@@ -1020,55 +982,291 @@ function AgeingTable({
   );
 }
 
+/* ---------------------- Overview (by invoice) -------------------------- */
+
+function OverviewKpiCards({ rows }: { rows: CocobluInvoiceOverviewRow[] }) {
+  const k = useMemo(() => cocobluOverviewKpis(rows), [rows]);
+  const cards: ReadonlyArray<{ label: string; value: string; tone?: string }> = [
+    { label: "Open Invoices", value: k.openInvoices.toLocaleString() },
+    { label: "Open Lines", value: k.openLines.toLocaleString() },
+    { label: "Qty In Hand", value: k.totalRemainingQty.toLocaleString() },
+    { label: "Value In Hand (AED)", value: formatCost(k.totalRemainingValue) },
+    { label: "90+ Days (storage risk)", value: k.storageRisk90.toLocaleString(), tone: k.storageRisk90 > 0 ? "text-red-600 dark:text-red-400" : undefined },
+  ];
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {cards.map((c) => (
+        <div key={c.label} className={`${surface} p-4`}>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
+          <p className={`mt-1 text-2xl font-semibold ${c.tone ?? "text-slate-900 dark:text-slate-100"}`}>{c.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InvoiceRow({
+  inv,
+  managerFlag,
+  onUpdate,
+  onEdit,
+}: {
+  inv: CocobluInvoiceOverviewRow;
+  managerFlag: boolean;
+  onUpdate: (row: CocobluAgeingRow) => void;
+  onEdit: (row: CocobluAgeingRow) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [lines, setLines] = useState<CocobluAgeingRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const remaining = inv.total_remaining_qty ?? 0;
+
+  async function toggle(): Promise<void> {
+    const next = !open;
+    setOpen(next);
+    if (next && lines === null && inv.invoice_number) {
+      try {
+        setLines(await fetchCocobluLinesForInvoice(inv.invoice_number));
+      } catch (e) {
+        setErr(errorMessage(e));
+      }
+    }
+  }
+
+  return (
+    <div className={`${surface} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+      >
+        <span className="font-medium text-slate-900 dark:text-slate-100">{inv.invoice_number ?? "—"}</span>
+        <span className="min-w-0 flex-1 text-xs text-slate-400">Inv {formatDate(inv.invoice_date)} · Supplied {formatDate(inv.supplied_date)}</span>
+        <AgeingBadge status={inv.ageing_status} />
+        <span className="text-xs text-slate-500">{formatNumber(inv.ageing_days)}d</span>
+        <span className="text-sm text-slate-700 dark:text-slate-300">{formatNumber(remaining)} left · AED {formatCost(inv.total_remaining_value)}</span>
+        <span className="text-slate-400">{open ? "▾" : "▸"}</span>
+      </button>
+      {open ? (
+        <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 dark:border-slate-800/60 dark:bg-slate-800/20">
+          {err ? (
+            <p className="text-xs text-red-600">{err}</p>
+          ) : lines === null ? (
+            <p className="text-xs text-slate-400">Loading lines…</p>
+          ) : (
+            <AgeingTable rows={lines} audit={new Map()} managerFlag={managerFlag} onUpdate={onUpdate} onEdit={onEdit} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CocobluOverviewSection({
+  rows,
+  managerFlag,
+  onUpdate,
+  onEdit,
+}: {
+  rows: CocobluInvoiceOverviewRow[];
+  managerFlag: boolean;
+  onUpdate: (row: CocobluAgeingRow) => void;
+  onEdit: (row: CocobluAgeingRow) => void;
+}) {
+  return (
+    <div>
+      <OverviewKpiCards rows={rows} />
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+          <p className="text-sm text-slate-500">No open Cocoblu stock. Use Upload Invoice or Add record.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((inv) => (
+            <InvoiceRow key={inv.invoice_number} inv={inv} managerFlag={managerFlag} onUpdate={onUpdate} onEdit={onEdit} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ Reports -------------------------------- */
+
+function CocobluReportsModal({
+  currentRows,
+  onClose,
+  onError,
+}: {
+  currentRows: CocobluAgeingRow[];
+  onClose: () => void;
+  onError: (message: string) => void;
+}) {
+  const now = () => new Date().toLocaleString();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function exportCurrent(format: "csv" | "pdf"): void {
+    const table = cocobluReport(currentRows, now());
+    if (format === "csv") downloadCsv("cocoblu-current", toCsv(table.headers, table.rows));
+    else printReportHtml(table.title, renderTableReportHtml(table));
+  }
+
+  async function exportRange(format: "csv" | "pdf"): Promise<void> {
+    setBusy(true);
+    onError("");
+    try {
+      const rows = await fetchCocobluWindow({ fromIso: from, toIso: to, limit: 5000 });
+      const table = cocobluReport(rows, now());
+      if (format === "csv") downloadCsv("cocoblu-by-date", toCsv(table.headers, table.rows));
+      else printReportHtml(table.title, renderTableReportHtml(table));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not build the report.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Reports & export" onClose={onClose} wide>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <p className="font-medium text-slate-900 dark:text-slate-100">Current view</p>
+          <p className="mb-3 text-xs text-slate-500">Export the {currentRows.length} line{currentRows.length === 1 ? "" : "s"} currently loaded.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => exportCurrent("csv")} className={btnSmall}>CSV</button>
+            <button type="button" onClick={() => exportCurrent("pdf")} className={btnSmall}>PDF</button>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <p className="font-medium text-slate-900 dark:text-slate-100">Invoice date range</p>
+          <p className="mb-3 text-xs text-slate-500">All ageing lines whose invoice date falls in the range.</p>
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormRow label="From"><input type="date" className={inputClass} value={from} onChange={(e) => setFrom(e.target.value)} /></FormRow>
+            <FormRow label="To"><input type="date" className={inputClass} value={to} onChange={(e) => setTo(e.target.value)} /></FormRow>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={busy} onClick={() => void exportRange("csv")} className={btnSmall}>CSV</button>
+            <button type="button" disabled={busy} onClick={() => void exportRange("pdf")} className={btnSmall}>PDF</button>
+            {busy ? <span className="text-xs text-slate-400">Building…</span> : null}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ------------------------------ Content -------------------------------- */
+
+const COCOBLU_PAGE = 100;
+
+type CocobluSection = "overview" | "browse";
 
 function CocobluContent() {
   const { profile } = useAuth();
   const managerFlag = isManager(profile);
 
-  const [rows, setRows] = useState<CocobluAgeingRow[]>([]);
-  const [audit, setAudit] = useState<Map<string, InvoiceAudit>>(new Map());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [section, setSection] = useState<CocobluSection>("overview");
   const [banner, setBanner] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+
+  // Overview (always on): per-invoice rollup.
+  const [overview, setOverview] = useState<CocobluInvoiceOverviewRow[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  // Browse lines (on-demand windowed table).
+  const [rows, setRows] = useState<CocobluAgeingRow[]>([]);
+  const [audit, setAudit] = useState<Map<string, InvoiceAudit>>(new Map());
+  const [linesLoaded, setLinesLoaded] = useState(false);
+  const [linesLoading, setLinesLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [search, setSearch] = useState("");
+
+  // Modals.
   const [showAdd, setShowAdd] = useState(false);
   const [updateRow, setUpdateRow] = useState<CocobluAgeingRow | null>(null);
   const [editRow, setEditRow] = useState<CocobluAgeingRow | null>(null);
-  const [parsing, setParsing] = useState(false);
   const [showInvoices, setShowInvoices] = useState(false);
-  const [review, setReview] = useState<{
-    file: File;
-    draft: InvoiceDraft;
-    engine: CaptureEngine;
-  } | null>(null);
+  const [showReports, setShowReports] = useState(false);
+  const [review, setReview] = useState<{ file: File; draft: InvoiceDraft; engine: CaptureEngine } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    setOverviewError(null);
     try {
-      const [data, auditMap] = await Promise.all([
-        fetchCocobluAgeing(),
-        fetchInvoiceAudit(),
-      ]);
-      setRows(data);
-      setAudit(auditMap);
+      setOverview(await fetchCocobluInvoicesOverview());
     } catch (err) {
-      setError(errorMessage(err));
+      setOverviewError(errorMessage(err));
     } finally {
-      setLoading(false);
+      setOverviewLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadOverview();
+  }, [loadOverview]);
+
+  async function loadLines(): Promise<void> {
+    setLinesLoading(true);
+    setUploadError(null);
+    try {
+      const [data, auditMap] = await Promise.all([
+        fetchCocobluWindow({ fromIso: dateFrom, toIso: dateTo, limit: COCOBLU_PAGE, offset: 0 }),
+        fetchInvoiceAudit(),
+      ]);
+      setRows(data);
+      setAudit(auditMap);
+      setHasMore(data.length === COCOBLU_PAGE);
+      setLinesLoaded(true);
+    } catch (err) {
+      setUploadError(errorMessage(err));
+    } finally {
+      setLinesLoading(false);
+    }
+  }
+
+  function clearLines(): void {
+    setRows([]);
+    setLinesLoaded(false);
+    setHasMore(false);
+    setSearch("");
+  }
+
+  async function loadMore(): Promise<void> {
+    setLoadingMore(true);
+    try {
+      const data = await fetchCocobluWindow({ fromIso: dateFrom, toIso: dateTo, limit: COCOBLU_PAGE, offset: rows.length });
+      setRows((prev) => [...prev, ...data]);
+      setHasMore(data.length === COCOBLU_PAGE);
+    } catch (err) {
+      setUploadError(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.invoice_number, r.sku, r.invoice_date].map((x) => (x ?? "").toLowerCase()).join(" ").includes(q)
+    );
+  }, [rows, search]);
 
   async function handleFileChosen(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const input = event.currentTarget;
     const file = input.files?.[0] ?? null;
-    input.value = ""; // allow re-selecting the same file
+    input.value = "";
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
       setUploadError("Please choose a PDF invoice.");
@@ -1093,149 +1291,125 @@ function CocobluContent() {
     setEditRow(null);
     setReview(null);
     setBanner(message);
-    void load();
+    void loadOverview();
+    if (linesLoaded) void loadLines();
   }
+
+  const navItem = (key: CocobluSection, label: string) => (
+    <button
+      type="button"
+      onClick={() => setSection(key)}
+      className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+        section === key
+          ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
+          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div>
-      <PageHeader
-        title="Cocoblu Ageing"
-        subtitle="Open stock records and ageing status."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,application/pdf"
-              className="hidden"
-              onChange={handleFileChosen}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setUploadError(null);
-                fileInputRef.current?.click();
-              }}
-              disabled={parsing}
-              className={btnSecondary}
-            >
-              {parsing ? "Reading invoice…" : "Upload Invoice (PDF)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowInvoices(true)}
-              className={btnSecondary}
-            >
-              Invoices
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setBanner(null);
-                setShowAdd(true);
-              }}
-              className={btnPrimary}
-            >
-              + Add Cocoblu Record
-            </button>
-          </div>
-        }
-      />
+      <PageHeader title="Cocoblu Ageing" subtitle="Open stock by invoice — clear or return before 90 days to avoid storage charges." />
 
       {banner ? (
         <div className="mb-4 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
           <span>{banner}</span>
-          <button
-            type="button"
-            onClick={() => setBanner(null)}
-            className="ml-3 text-xs underline"
-          >
-            Dismiss
-          </button>
+          <button type="button" onClick={() => setBanner(null)} className="ml-3 text-xs underline">Dismiss</button>
         </div>
       ) : null}
-
       {uploadError ? (
         <div className="mb-4 flex items-center justify-between rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
           <span>{uploadError}</span>
-          <button
-            type="button"
-            onClick={() => setUploadError(null)}
-            className="ml-3 text-xs underline"
-          >
-            Dismiss
+          <button type="button" onClick={() => setUploadError(null)} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      ) : null}
+
+      <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChosen} />
+
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <nav className={`flex shrink-0 flex-wrap gap-2 lg:w-44 lg:flex-col ${surface} p-2`}>
+          {navItem("overview", "Overview")}
+          {navItem("browse", "Browse lines")}
+          <button type="button" onClick={() => { setUploadError(null); fileInputRef.current?.click(); }} disabled={parsing} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800">
+            {parsing ? "Reading…" : "Upload Invoice"}
           </button>
+          <button type="button" onClick={() => { setBanner(null); setShowAdd(true); }} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Add record</button>
+          <button type="button" onClick={() => setShowReports(true)} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Reports</button>
+          <button type="button" onClick={() => setShowInvoices(true)} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Invoices</button>
+        </nav>
+
+        <div className="min-w-0 flex-1">
+          {section === "overview" ? (
+            overviewLoading ? (
+              <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading ageing overview…</div>
+            ) : overviewError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+                <p className="text-sm text-red-700 dark:text-red-300">{overviewError}</p>
+                <button type="button" onClick={() => void loadOverview()} className={`${btnSecondary} mt-3`}>Retry</button>
+              </div>
+            ) : (
+              <CocobluOverviewSection rows={overview} managerFlag={managerFlag} onUpdate={(row) => setUpdateRow(row)} onEdit={(row) => setEditRow(row)} />
+            )
+          ) : (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                  <span className="text-xs font-medium uppercase tracking-wide">Invoice date</span>
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                  <span>→</span>
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                </div>
+                <button type="button" onClick={() => void loadLines()} disabled={linesLoading} className={btnPrimary}>
+                  {linesLoading ? "Loading…" : linesLoaded ? "Refresh" : "Load data"}
+                </button>
+                {linesLoaded ? <button type="button" onClick={clearLines} className={btnSecondary}>Clear</button> : null}
+              </div>
+
+              {!linesLoaded ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+                  <p className="text-sm text-slate-500">Pick an invoice-date range and click <span className="font-medium">Load data</span> to view line items.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                      <input className={`${inputClass} pl-9`} placeholder="Search loaded lines by invoice, SKU, date…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Showing {filtered.length.toLocaleString()} of {rows.length.toLocaleString()} loaded{hasMore ? "+" : ""}
+                      {hasMore ? " — load more or narrow the date range" : ""}
+                    </p>
+                  </div>
+                  {filtered.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+                      <p className="text-sm text-slate-500">No loaded lines match your search.</p>
+                    </div>
+                  ) : (
+                    <AgeingTable rows={filtered} audit={audit} managerFlag={managerFlag} onUpdate={(row) => setUpdateRow(row)} onEdit={(row) => setEditRow(row)} />
+                  )}
+                  {hasMore ? (
+                    <div className="mt-4 flex justify-center">
+                      <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className={btnSecondary}>{loadingMore ? "Loading…" : `Load more (${COCOBLU_PAGE})`}</button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          )}
         </div>
-      ) : null}
+      </div>
 
-      {loading ? (
-        <div className={`${surface} p-8 text-center text-sm text-slate-500`}>
-          Loading Cocoblu ageing…
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className={`${btnSecondary} mt-3`}
-          >
-            Retry
-          </button>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500">
-            No Cocoblu ageing records found. Upload an invoice PDF or add a record to get started.
-          </p>
-        </div>
-      ) : (
-        <>
-          <SummaryCards rows={rows} />
-          <AgeingTable
-            rows={rows}
-            audit={audit}
-            managerFlag={managerFlag}
-            onUpdate={(row) => setUpdateRow(row)}
-            onEdit={(row) => setEditRow(row)}
-          />
-        </>
-      )}
-
-      {showAdd ? (
-        <AddRecordModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />
-      ) : null}
-
-      {updateRow ? (
-        <UpdateQtyModal
-          row={updateRow}
-          onClose={() => setUpdateRow(null)}
-          onSaved={handleSaved}
-        />
-      ) : null}
-
-      {editRow ? (
-        <EditRecordModal
-          row={editRow}
-          onClose={() => setEditRow(null)}
-          onSaved={handleSaved}
-        />
-      ) : null}
-
+      {showAdd ? <AddRecordModal onClose={() => setShowAdd(false)} onSaved={handleSaved} /> : null}
+      {updateRow ? <UpdateQtyModal row={updateRow} onClose={() => setUpdateRow(null)} onSaved={handleSaved} /> : null}
+      {editRow ? <EditRecordModal row={editRow} onClose={() => setEditRow(null)} onSaved={handleSaved} /> : null}
       {review && profile ? (
-        <ReviewInvoiceModal
-          file={review.file}
-          draft={review.draft}
-          engine={review.engine}
-          verifiedById={profile.id}
-          onClose={() => setReview(null)}
-          onSaved={handleSaved}
-        />
+        <ReviewInvoiceModal file={review.file} draft={review.draft} engine={review.engine} verifiedById={profile.id} onClose={() => setReview(null)} onSaved={handleSaved} />
       ) : null}
-
-      {showInvoices ? (
-        <InvoicesModal onClose={() => setShowInvoices(false)} />
-      ) : null}
+      {showInvoices ? <InvoicesModal onClose={() => setShowInvoices(false)} /> : null}
+      {showReports ? <CocobluReportsModal currentRows={linesLoaded ? filtered : rows} onClose={() => setShowReports(false)} onError={(m) => setUploadError(m)} /> : null}
     </div>
   );
 }

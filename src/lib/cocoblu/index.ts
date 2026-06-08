@@ -10,8 +10,14 @@ export type {
 
 export {
   fetchCocobluAgeing,
+  fetchAllCocobluAgeing,
+  fetchCocobluInvoicesOverview,
+  fetchCocobluLinesForInvoice,
+  fetchCocobluWindow,
   createCocobluRecord,
   updateCocobluQty,
+  type CocobluInvoiceOverviewRow,
+  type CocobluWindowOpts,
 } from "./queries";
 
 export type {
@@ -35,4 +41,9 @@ export {
   type StoredInvoice,
 } from "./invoice";
 
-export { calculateCocobluSummary } from "./summary";
+export {
+  calculateCocobluSummary,
+  cocobluOverviewKpis,
+  cocobluReport,
+  type CocobluOverviewKpis,
+} from "./summary";

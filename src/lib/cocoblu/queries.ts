@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import type { Tables } from "@/lib/types";
 
 import type {
   CocobluAgeingInsert,
@@ -18,6 +19,76 @@ export async function fetchCocobluAgeing(): Promise<CocobluAgeingRow[]> {
     .select("*")
     .order("invoice_date", { ascending: true });
 
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** All ageing rows, paged internally so the count is never capped at 1000. */
+export async function fetchAllCocobluAgeing(): Promise<CocobluAgeingRow[]> {
+  const out: CocobluAgeingRow[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; offset < 50000; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("cocoblu_ageing_view")
+      .select("*")
+      .order("invoice_date", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
+/** One row per invoice from `cocoblu_invoices_overview` (the always-on rollup). */
+export type CocobluInvoiceOverviewRow = Tables<"cocoblu_invoices_overview">;
+
+/** Per-invoice ageing overview, most-aged first, paged internally. */
+export async function fetchCocobluInvoicesOverview(): Promise<CocobluInvoiceOverviewRow[]> {
+  const out: CocobluInvoiceOverviewRow[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("cocoblu_invoices_overview")
+      .select("*")
+      .order("ageing_days", { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
+/** All ageing lines for one invoice (for expanding an overview row). */
+export async function fetchCocobluLinesForInvoice(invoiceNumber: string): Promise<CocobluAgeingRow[]> {
+  const { data, error } = await supabase
+    .from("cocoblu_ageing_view")
+    .select("*")
+    .eq("invoice_number", invoiceNumber)
+    .order("line_number", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface CocobluWindowOpts {
+  fromIso?: string;
+  toIso?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Server-side windowed fetch of ageing lines by invoice date (oldest first). */
+export async function fetchCocobluWindow(opts: CocobluWindowOpts = {}): Promise<CocobluAgeingRow[]> {
+  const { fromIso, toIso, limit = 100, offset = 0 } = opts;
+  let q = supabase.from("cocoblu_ageing_view").select("*");
+  if (fromIso) q = q.gte("invoice_date", fromIso);
+  if (toIso) q = q.lte("invoice_date", toIso);
+  const { data, error } = await q
+    .order("invoice_date", { ascending: true })
+    .range(offset, offset + limit - 1);
   if (error) throw error;
   return data ?? [];
 }

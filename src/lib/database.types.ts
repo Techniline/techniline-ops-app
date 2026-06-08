@@ -1497,6 +1497,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cocoblu_invoices_overview: {
+        Row: {
+          ageing_days: number | null
+          ageing_status: string | null
+          invoice_date: string | null
+          invoice_number: string | null
+          line_count: number | null
+          open_line_count: number | null
+          supplied_date: string | null
+          total_remaining_qty: number | null
+          total_remaining_value: number | null
+        }
+        Insert: {
+          ageing_days?: never
+          ageing_status?: never
+          invoice_date?: never
+          invoice_number?: string | null
+          line_count?: never
+          open_line_count?: never
+          supplied_date?: never
+          total_remaining_qty?: never
+          total_remaining_value?: never
+        }
+        Update: {
+          ageing_days?: never
+          ageing_status?: never
+          invoice_date?: never
+          invoice_number?: string | null
+          line_count?: never
+          open_line_count?: never
+          supplied_date?: never
+          total_remaining_qty?: never
+          total_remaining_value?: never
+        }
+        Relationships: []
+      }
       lp_items_view: {
         Row: {
           ageing_days: number | null

@@ -19,7 +19,7 @@ import {
 import { btnSecondary, surface } from "@/components/ui";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
-import { calculateCocobluSummary, fetchCocobluAgeing } from "@/lib/cocoblu";
+import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
 import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/lp";
 import {
   fetchBreachCountSince,
@@ -183,7 +183,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
         jobs.push(
           (async () => {
             try {
-              const rows = await fetchCocobluAgeing();
+              const rows = await fetchAllCocobluAgeing();
               const s = calculateCocobluSummary(rows);
               result.push({
                 key: "cocoblu",

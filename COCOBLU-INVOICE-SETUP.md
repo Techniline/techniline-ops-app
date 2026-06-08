@@ -43,6 +43,34 @@ After these two, open `/cocoblu` → **Upload Invoice (PDF)** → pick the sampl
 
 ---
 
+## ERP overview view (run once — for the by-invoice ageing overview)
+
+The Cocoblu page now opens on an **always-on ageing overview by invoice** (KPIs + per-invoice
+rollup) so storage-risk stock (90+ days) is visible without loading every line. This needs one
+**additive** view — it only *reads* the existing `cocoblu_ageing_view` (open records); nothing else
+is touched. Run in **Supabase → SQL Editor**:
+
+```sql
+create or replace view public.cocoblu_invoices_overview as
+select
+  v.invoice_number,
+  max(v.invoice_date)                               as invoice_date,
+  max(v.supplied_date)                              as supplied_date,
+  count(*)                                          as line_count,
+  count(*) filter (where v.qty_remaining > 0)       as open_line_count,
+  coalesce(sum(v.qty_remaining), 0)                 as total_remaining_qty,
+  coalesce(sum(v.qty_remaining * coalesce(v.unit_cost, 0)), 0) as total_remaining_value,
+  max(v.ageing_days)                                as ageing_days,
+  (array_agg(v.ageing_status order by v.ageing_days desc nulls last))[1] as ageing_status
+from public.cocoblu_ageing_view v
+group by v.invoice_number;
+```
+(`array_agg(... order by ageing_days desc)[1]` = the most-aged line's status, so the invoice's badge
+is the worst of its lines regardless of the band cutoffs inside `cocoblu_ageing_view`. The view
+inherits that view's RLS.)
+
+---
+
 ## Optional — upgrade to AI capture later (better accuracy)
 
 The free parser captures the invoice number, date, and (on the sample) all line items, but it's heuristic — on a different invoice layout it may misread some line items, which Aaron then fixes in the Verify step. To upgrade to **AI extraction (Claude Sonnet 4.6, ≈3¢/invoice)** with **zero code changes**, just add the key:
