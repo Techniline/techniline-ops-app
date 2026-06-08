@@ -33,6 +33,68 @@ export async function searchLp(q: string): Promise<LpItemRow[]> {
   return data ?? [];
 }
 
+/** One sale joined with its LP-line + order context (for the entity report). */
+export interface SaleReportRow {
+  saleDate: string | null;
+  entity: string | null;
+  entityOther: string | null;
+  salesmanName: string | null;
+  invoiceNumber: string | null;
+  soldQty: number;
+  modelNo: string | null;
+  sku: string | null;
+  lpNumber: string | null;
+  vendorName: string | null;
+  unitPrice: number | null;
+}
+
+/** Shape of the nested select result (lp_sales → lp_items → lp_orders). */
+interface RawSaleJoin {
+  sale_date: string | null;
+  entity: string | null;
+  entity_other: string | null;
+  salesman_name: string | null;
+  invoice_number: string | null;
+  sold_qty: number;
+  lp_items: {
+    model_no: string | null;
+    sku: string | null;
+    unit_price: number | null;
+    lp_orders: { lp_number: string | null; vendor_name: string | null } | null;
+  } | null;
+}
+
+/**
+ * Fetch sales in a sale-date range, joined to their LP line + order, for the
+ * entity-wise sold report. Newest first.
+ */
+export async function fetchSalesReport(fromIso: string, toIso: string): Promise<SaleReportRow[]> {
+  let query = supabase
+    .from("lp_sales")
+    .select(
+      "sale_date, entity, entity_other, salesman_name, invoice_number, sold_qty, lp_items(model_no, sku, unit_price, lp_orders(lp_number, vendor_name))"
+    );
+  if (fromIso) query = query.gte("sale_date", fromIso);
+  if (toIso) query = query.lte("sale_date", toIso);
+  const { data, error } = await query.order("sale_date", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as RawSaleJoin[];
+  return rows.map((r) => ({
+    saleDate: r.sale_date,
+    entity: r.entity,
+    entityOther: r.entity_other,
+    salesmanName: r.salesman_name,
+    invoiceNumber: r.invoice_number,
+    soldQty: r.sold_qty,
+    modelNo: r.lp_items?.model_no ?? null,
+    sku: r.lp_items?.sku ?? null,
+    unitPrice: r.lp_items?.unit_price ?? null,
+    lpNumber: r.lp_items?.lp_orders?.lp_number ?? null,
+    vendorName: r.lp_items?.lp_orders?.vendor_name ?? null,
+  }));
+}
+
 /** A flagged price movement for one LP line vs the same SKU's previous LP. */
 export interface PriceAlert {
   previousPrice: number;

@@ -1,3 +1,6 @@
+import type { Cell, ReportTable } from "@/lib/export";
+
+import type { SaleReportRow } from "./queries";
 import type { LpItemRow } from "./queries";
 
 export interface LpSummary {
@@ -31,94 +34,155 @@ export function computeLpSummary(rows: LpItemRow[]): LpSummary {
     }
   }
 
-  return {
-    openLines,
-    openLpCount: openLps.size,
-    totalRemainingQty,
-    totalRemainingValue,
-    aged90Lines,
-  };
-}
-
-/** One stock-in-hand row for the report (email + PDF export). */
-export interface SnapshotLine {
-  lpNumber: string | null;
-  lpDate: string | null;
-  vendorName: string | null;
-  modelNo: string | null;
-  description: string | null;
-  qtyRemaining: number;
-  unitPrice: number | null;
-  value: number;
-  ageingDays: number | null;
-  ageingStatus: string | null;
-}
-
-/** Point-in-time stock-in-hand snapshot (lines with remaining > 0), oldest first. */
-export function buildStockSnapshot(rows: LpItemRow[]): SnapshotLine[] {
-  return rows
-    .filter((r) => remaining(r) > 0)
-    .map((r) => ({
-      lpNumber: r.lp_number,
-      lpDate: r.lp_date,
-      vendorName: r.vendor_name,
-      modelNo: r.model_no ?? r.sku,
-      description: r.description,
-      qtyRemaining: remaining(r),
-      unitPrice: r.unit_price,
-      value: remaining(r) * (r.unit_price ?? 0),
-      ageingDays: r.ageing_days,
-      ageingStatus: r.ageing_status,
-    }))
-    .sort((a, b) => (b.ageingDays ?? 0) - (a.ageingDays ?? 0));
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
+  return { openLines, openLpCount: openLps.size, totalRemainingQty, totalRemainingValue, aged90Lines };
 }
 
 function fmt(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/**
- * Render the stock-in-hand snapshot as a standalone HTML report — used for both
- * the email body and the print-to-PDF export. `generatedAt` is supplied by the
- * caller (so this stays pure / testable).
- */
-export function renderStockReportHtml(lines: SnapshotLine[], generatedAt: string): string {
-  const totalQty = lines.reduce((s, l) => s + l.qtyRemaining, 0);
-  const totalValue = lines.reduce((s, l) => s + l.value, 0);
+/** Resolve the display name for a sale's entity ("Other" → typed name). */
+export function entityLabel(entity: string | null, entityOther: string | null): string {
+  if (entity === "Other") return entityOther?.trim() || "Other";
+  return entity ?? "—";
+}
 
-  const rows = lines
-    .map(
-      (l) => `<tr>
-        <td>${esc(l.lpNumber ?? "—")}</td>
-        <td>${esc(l.lpDate ?? "—")}</td>
-        <td>${esc(l.vendorName ?? "—")}</td>
-        <td>${esc(l.modelNo ?? "—")}</td>
-        <td>${esc(l.description ?? "")}</td>
-        <td style="text-align:right">${l.qtyRemaining.toLocaleString()}</td>
-        <td style="text-align:right">${l.unitPrice == null ? "—" : fmt(l.unitPrice)}</td>
-        <td style="text-align:right">${fmt(l.value)}</td>
-        <td style="text-align:right">${l.ageingDays ?? "—"}</td>
-        <td>${esc((l.ageingStatus ?? "").replace(/_/g, " "))}</td>
-      </tr>`
-    )
-    .join("");
+/* --------------------------- LP line reports ---------------------------- */
 
-  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111">
-    <h2 style="margin:0 0 4px">Local Purchase — Stock in Hand</h2>
-    <p style="margin:0 0 12px;color:#666">Generated ${esc(generatedAt)} · ${lines.length} open line${lines.length === 1 ? "" : "s"} · Qty ${totalQty.toLocaleString()} · Value AED ${fmt(totalValue)}</p>
-    <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;font-size:12px">
-      <thead>
-        <tr style="background:#f1f5f9;text-align:left">
-          <th>LP No</th><th>LP Date</th><th>Vendor</th><th>Model</th><th>Description</th>
-          <th style="text-align:right">Qty</th><th style="text-align:right">Unit</th>
-          <th style="text-align:right">Value</th><th style="text-align:right">Age (d)</th><th>Status</th>
-        </tr>
-      </thead>
-      <tbody>${rows || `<tr><td colspan="10" style="text-align:center;color:#888">No stock in hand.</td></tr>`}</tbody>
-    </table>
-  </div>`;
+const LINE_HEADERS = [
+  "LP No", "LP Date", "Vendor", "Model", "Brand", "Description",
+  "Purchased", "Sold", "Remaining", "Unit Price", "Value", "Age (d)", "Status",
+] as const;
+
+function lineRow(r: LpItemRow): Cell[] {
+  const rem = remaining(r);
+  return [
+    r.lp_number ?? "",
+    r.lp_date ?? "",
+    r.vendor_name ?? "",
+    r.model_no ?? r.sku ?? "",
+    r.brand ?? "",
+    r.description ?? "",
+    r.qty_purchased ?? 0,
+    r.qty_sold ?? 0,
+    rem,
+    r.unit_price ?? "",
+    Number((rem * (r.unit_price ?? 0)).toFixed(2)),
+    r.ageing_days ?? "",
+    (r.ageing_status ?? "").replace(/_/g, " "),
+  ];
+}
+
+function lineSubtitle(rows: LpItemRow[], generatedAt: string): string {
+  const qty = rows.reduce((s, r) => s + remaining(r), 0);
+  const value = rows.reduce((s, r) => s + remaining(r) * (r.unit_price ?? 0), 0);
+  return `Generated ${generatedAt} · ${rows.length} line${rows.length === 1 ? "" : "s"} · Remaining qty ${qty.toLocaleString()} · Value AED ${fmt(value)}`;
+}
+
+/** The lines currently shown on screen (already filtered by the page). */
+export function currentViewReport(rows: LpItemRow[], generatedAt: string): ReportTable {
+  return {
+    title: "LP Tracker — Current View",
+    subtitle: lineSubtitle(rows, generatedAt),
+    headers: [...LINE_HEADERS],
+    rows: rows.map(lineRow),
+  };
+}
+
+/** Stock-in-hand (lines with remaining > 0), oldest first — for the email + report. */
+export function stockInHandReport(rows: LpItemRow[], generatedAt: string): ReportTable {
+  const inHand = rows
+    .filter((r) => remaining(r) > 0)
+    .sort((a, b) => (b.ageing_days ?? 0) - (a.ageing_days ?? 0));
+  return {
+    title: "Local Purchase — Stock in Hand",
+    subtitle: lineSubtitle(inHand, generatedAt),
+    headers: [...LINE_HEADERS],
+    rows: inHand.map(lineRow),
+  };
+}
+
+/** Vendor (or "All") + LP-date range, full line status. */
+export function vendorReport(
+  rows: LpItemRow[],
+  vendor: string,
+  fromIso: string,
+  toIso: string,
+  generatedAt: string
+): ReportTable {
+  const sel = rows.filter((r) => {
+    if (vendor !== "All" && (r.vendor_name ?? "") !== vendor) return false;
+    const d = r.lp_date ?? "";
+    if (fromIso && d < fromIso) return false;
+    if (toIso && d > toIso) return false;
+    return true;
+  });
+  const range = `${fromIso || "…"} → ${toIso || "…"}`;
+  return {
+    title: "LP Tracker — Vendor / Date Report",
+    subtitle: `${vendor === "All" ? "All vendors" : vendor} · LP date ${range} · ${lineSubtitle(sel, generatedAt)}`,
+    headers: [...LINE_HEADERS],
+    rows: sel.map(lineRow),
+  };
+}
+
+/* -------------------------- Entity sold reports ------------------------- */
+
+const SALE_HEADERS = [
+  "Sale Date", "Entity", "Salesman", "Invoice", "LP No", "Vendor", "Model", "Sold Qty", "Unit Price", "Value",
+] as const;
+
+function saleValue(s: SaleReportRow): number {
+  return Number((s.soldQty * (s.unitPrice ?? 0)).toFixed(2));
+}
+
+/** Detail: one row per sale, filtered by entity + sale-date range. */
+export function entitySoldDetail(
+  sales: SaleReportRow[],
+  generatedAt: string,
+  entity: string,
+  fromIso: string,
+  toIso: string
+): ReportTable {
+  const range = `${fromIso || "…"} → ${toIso || "…"}`;
+  const qty = sales.reduce((s, r) => s + r.soldQty, 0);
+  const value = sales.reduce((s, r) => s + saleValue(r), 0);
+  return {
+    title: "LP Tracker — Entity Sold (detail)",
+    subtitle: `${entity === "All" ? "All entities" : entity} · sale date ${range} · ${sales.length} sale${sales.length === 1 ? "" : "s"} · Qty ${qty.toLocaleString()} · Value AED ${fmt(value)} · generated ${generatedAt}`,
+    headers: [...SALE_HEADERS],
+    rows: sales.map((s) => [
+      s.saleDate ?? "",
+      entityLabel(s.entity, s.entityOther),
+      s.salesmanName ?? "",
+      s.invoiceNumber ?? "",
+      s.lpNumber ?? "",
+      s.vendorName ?? "",
+      s.modelNo ?? s.sku ?? "",
+      s.soldQty,
+      s.unitPrice ?? "",
+      saleValue(s),
+    ]),
+  };
+}
+
+/** Totals per entity: sale count, qty, value. */
+export function entitySoldTotals(sales: SaleReportRow[]): ReportTable {
+  const map = new Map<string, { count: number; qty: number; value: number }>();
+  for (const s of sales) {
+    const key = entityLabel(s.entity, s.entityOther);
+    const agg = map.get(key) ?? { count: 0, qty: 0, value: 0 };
+    agg.count += 1;
+    agg.qty += s.soldQty;
+    agg.value += saleValue(s);
+    map.set(key, agg);
+  }
+  const rows: Cell[][] = [...map.entries()]
+    .sort((a, b) => b[1].value - a[1].value)
+    .map(([entity, a]) => [entity, a.count, a.qty, Number(a.value.toFixed(2))]);
+  return {
+    title: "Totals by Entity",
+    headers: ["Entity", "Sales", "Sold Qty", "Value"],
+    rows,
+  };
 }

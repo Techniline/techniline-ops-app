@@ -8,22 +8,34 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnPrimary, btnSecondary, btnSmall, inputClass, surface } from "@/components/ui";
+import {
+  downloadCsv,
+  printReportHtml,
+  renderTableReportHtml,
+  renderTablesHtml,
+  tablesToCsv,
+  toCsv,
+  type ReportTable,
+} from "@/lib/export";
 import { isManager } from "@/lib/permissions";
 import {
   ENTITY_OPTIONS,
-  buildStockSnapshot,
   computeLpSummary,
   computePriceAlerts,
+  currentViewReport,
+  entitySoldDetail,
+  entitySoldTotals,
   fetchLpItems,
   fetchSaleHistory,
+  fetchSalesReport,
   listLpPdfs,
   lpPdfUrl,
   parseLpViaApi,
   recordSale,
-  renderStockReportHtml,
   saveVerifiedLp,
-  searchLp,
+  stockInHandReport,
   updateLpItem,
+  vendorReport,
   type CaptureEngine,
   type EntityOption,
   type LpDraft,
@@ -733,16 +745,26 @@ function SaleHistory({ itemId }: { itemId: string }) {
   );
 }
 
+interface ColFilters {
+  vendor: string;
+  brand: string;
+  model: string;
+}
+
 function LpTable({
   rows,
   alerts,
   managerFlag,
+  filters,
+  onFilter,
   onSale,
   onEdit,
 }: {
   rows: LpItemRow[];
   alerts: Map<string, PriceAlert>;
   managerFlag: boolean;
+  filters: ColFilters;
+  onFilter: (key: keyof ColFilters, value: string) => void;
   onSale: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
 }) {
@@ -769,6 +791,35 @@ function LpTable({
             <th className={TH}>Age (d)</th>
             <th className={TH}>Status</th>
             <th className={TH}>Action</th>
+          </tr>
+          <tr className="border-b border-slate-200 dark:border-slate-800">
+            <th className="px-3 pb-2"></th>
+            <th className="px-3 pb-2"></th>
+            <th className="px-3 pb-2">
+              <input
+                value={filters.vendor}
+                onChange={(e) => onFilter("vendor", e.target.value)}
+                placeholder="Filter…"
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              />
+            </th>
+            <th className="px-3 pb-2">
+              <input
+                value={filters.model}
+                onChange={(e) => onFilter("model", e.target.value)}
+                placeholder="Filter…"
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              />
+            </th>
+            <th className="px-3 pb-2">
+              <input
+                value={filters.brand}
+                onChange={(e) => onFilter("brand", e.target.value)}
+                placeholder="Filter…"
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              />
+            </th>
+            <th className="px-3 pb-2" colSpan={8}></th>
           </tr>
         </thead>
         <tbody>
@@ -855,32 +906,207 @@ function LpTable({
   );
 }
 
+/* ------------------------------ Reports -------------------------------- */
+
+function exportReport(table: ReportTable, baseName: string, format: "csv" | "pdf"): void {
+  if (format === "csv") {
+    downloadCsv(baseName, toCsv(table.headers, table.rows));
+  } else {
+    printReportHtml(table.title, renderTableReportHtml(table));
+  }
+}
+
+function ExportButtons({ onExport }: { onExport: (format: "csv" | "pdf") => void }) {
+  return (
+    <div className="flex gap-2">
+      <button type="button" onClick={() => onExport("csv")} className={btnSmall}>CSV</button>
+      <button type="button" onClick={() => onExport("pdf")} className={btnSmall}>PDF</button>
+    </div>
+  );
+}
+
+function Section({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+      <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
+      <p className="mb-3 text-xs text-slate-500">{hint}</p>
+      {children}
+    </div>
+  );
+}
+
+function ReportsModal({
+  currentRows,
+  allRows,
+  vendors,
+  onClose,
+  onNotify,
+  onError,
+}: {
+  currentRows: LpItemRow[];
+  allRows: LpItemRow[];
+  vendors: string[];
+  onClose: () => void;
+  onNotify: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const now = () => new Date().toLocaleString();
+  const today = todayIso();
+
+  const [vendor, setVendor] = useState("All");
+  const [vFrom, setVFrom] = useState("");
+  const [vTo, setVTo] = useState("");
+
+  const [entity, setEntity] = useState("All");
+  const [eFrom, setEFrom] = useState("");
+  const [eTo, setETo] = useState("");
+  const [entityBusy, setEntityBusy] = useState(false);
+
+  const [sending, setSending] = useState(false);
+
+  function exportCurrent(format: "csv" | "pdf"): void {
+    exportReport(currentViewReport(currentRows, now()), `lp-current-${today}`, format);
+  }
+
+  function exportVendor(format: "csv" | "pdf"): void {
+    exportReport(vendorReport(allRows, vendor, vFrom, vTo, now()), `lp-vendor-${vendor === "All" ? "all" : vendor}-${today}`, format);
+  }
+
+  async function exportEntity(format: "csv" | "pdf"): Promise<void> {
+    setEntityBusy(true);
+    onError("");
+    try {
+      const all = await fetchSalesReport(eFrom, eTo);
+      const sales = entity === "All" ? all : all.filter((s) => s.entity === entity);
+      const detail = entitySoldDetail(sales, now(), entity, eFrom, eTo);
+      const totals = entitySoldTotals(sales);
+      if (format === "csv") {
+        downloadCsv(`lp-entity-sold-${entity === "All" ? "all" : entity}-${today}`, tablesToCsv([detail, totals]));
+      } else {
+        printReportHtml(detail.title, renderTablesHtml([detail, totals]));
+      }
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not build the entity report.");
+    } finally {
+      setEntityBusy(false);
+    }
+  }
+
+  async function sendStockReport(): Promise<void> {
+    setSending(true);
+    onError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not signed in.");
+      const table = stockInHandReport(allRows, now());
+      const res = await fetch("/api/lp/send-report", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: ["impex@techniline.org"],
+          subject: `LP Stock in Hand — ${new Date().toLocaleDateString()}`,
+          html: renderTableReportHtml(table),
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (res.ok && j.ok) onNotify("Stock report emailed to impex@techniline.org.");
+      else onError(`Could not send report: ${j.error ?? `HTTP ${res.status}`}`);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Email send failed.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const entityOptions = ["All", ...ENTITY_OPTIONS];
+
+  return (
+    <ModalShell title="Reports & export" onClose={onClose} wide>
+      <div className="flex flex-col gap-4">
+        <Section title="Current view" hint={`Export the ${currentRows.length} line${currentRows.length === 1 ? "" : "s"} currently shown (your search + column filters apply).`}>
+          <ExportButtons onExport={exportCurrent} />
+        </Section>
+
+        <Section title="Vendor & date range" hint="Lines filtered by vendor and LP (purchase) date — full purchased / sold / remaining / value / ageing status.">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormRow label="Vendor">
+              <select className={inputClass} value={vendor} onChange={(e) => setVendor(e.target.value)}>
+                <option value="All">All vendors</option>
+                {vendors.map((v) => (<option key={v} value={v}>{v}</option>))}
+              </select>
+            </FormRow>
+            <FormRow label="LP date from">
+              <input type="date" className={inputClass} value={vFrom} onChange={(e) => setVFrom(e.target.value)} />
+            </FormRow>
+            <FormRow label="LP date to">
+              <input type="date" className={inputClass} value={vTo} onChange={(e) => setVTo(e.target.value)} />
+            </FormRow>
+          </div>
+          <ExportButtons onExport={exportVendor} />
+        </Section>
+
+        <Section title="Entity-wise sold" hint="Sales filtered by entity and sale date — detail rows plus totals per entity.">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormRow label="Entity">
+              <select className={inputClass} value={entity} onChange={(e) => setEntity(e.target.value)}>
+                {entityOptions.map((o) => (<option key={o} value={o}>{o === "All" ? "All entities" : o}</option>))}
+              </select>
+            </FormRow>
+            <FormRow label="Sale date from">
+              <input type="date" className={inputClass} value={eFrom} onChange={(e) => setEFrom(e.target.value)} />
+            </FormRow>
+            <FormRow label="Sale date to">
+              <input type="date" className={inputClass} value={eTo} onChange={(e) => setETo(e.target.value)} />
+            </FormRow>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={entityBusy} onClick={() => void exportEntity("csv")} className={btnSmall}>CSV</button>
+            <button type="button" disabled={entityBusy} onClick={() => void exportEntity("pdf")} className={btnSmall}>PDF</button>
+            {entityBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
+          </div>
+        </Section>
+
+        <Section title="Email stock-in-hand" hint="Send the current stock-in-hand snapshot to impex@techniline.org.">
+          <button type="button" disabled={sending} onClick={() => void sendStockReport()} className={btnPrimary}>
+            {sending ? "Sending…" : "Send to impex@"}
+          </button>
+        </Section>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ------------------------------ Content -------------------------------- */
 
 function LpContent() {
   const { profile } = useAuth();
   const managerFlag = isManager(profile);
 
-  const [rows, setRows] = useState<LpItemRow[]>([]);
+  const [allRows, setAllRows] = useState<LpItemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<ColFilters>({ vendor: "", brand: "", model: "" });
   const [saleRow, setSaleRow] = useState<LpItemRow | null>(null);
   const [editRow, setEditRow] = useState<LpItemRow | null>(null);
   const [showPdfs, setShowPdfs] = useState(false);
+  const [showReports, setShowReports] = useState(false);
   const [review, setReview] = useState<{ file: File; draft: LpDraft; engine: CaptureEngine } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async (q?: string) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = q && q.trim() !== "" ? await searchLp(q) : await fetchLpItems();
-      setRows(data);
+      setAllRows(await fetchLpItems());
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -892,7 +1118,38 @@ function LpContent() {
     void load();
   }, [load]);
 
-  const alerts = useMemo(() => computePriceAlerts(rows), [rows]);
+  // Price alerts are computed over the FULL set so per-SKU deltas stay correct
+  // even when the view is filtered.
+  const alerts = useMemo(() => computePriceAlerts(allRows), [allRows]);
+
+  const vendors = useMemo(
+    () => [...new Set(allRows.map((r) => r.vendor_name).filter((v): v is string => !!v))].sort(),
+    [allRows]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fv = filters.vendor.trim().toLowerCase();
+    const fb = filters.brand.trim().toLowerCase();
+    const fm = filters.model.trim().toLowerCase();
+    const has = (hay: string | null, needle: string) => (hay ?? "").toLowerCase().includes(needle);
+    return allRows.filter((r) => {
+      if (q) {
+        const blob = [r.lp_number, r.vendor_name, r.brand, r.lp_date, r.model_no, r.sku]
+          .map((x) => (x ?? "").toLowerCase())
+          .join(" ");
+        if (!blob.includes(q)) return false;
+      }
+      if (fv && !has(r.vendor_name, fv)) return false;
+      if (fb && !has(r.brand, fb)) return false;
+      if (fm && !(has(r.model_no, fm) || has(r.sku, fm))) return false;
+      return true;
+    });
+  }, [allRows, search, filters]);
+
+  function setFilter(key: keyof ColFilters, value: string): void {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
 
   async function handleFileChosen(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const input = event.currentTarget;
@@ -921,53 +1178,10 @@ function LpContent() {
     setEditRow(null);
     setReview(null);
     setBanner(message);
-    void load(query);
+    void load();
   }
 
-  function buildReportHtml(): string {
-    const snapshot = buildStockSnapshot(rows);
-    return renderStockReportHtml(snapshot, new Date().toLocaleString());
-  }
-
-  function exportPdf(): void {
-    const html = buildReportHtml();
-    const w = window.open("", "_blank");
-    if (!w) {
-      setUploadError("Pop-up blocked — allow pop-ups to export the report.");
-      return;
-    }
-    w.document.write(`<!doctype html><html><head><title>LP Stock in Hand</title></head><body>${html}<script>window.onload=function(){window.print();}</script></body></html>`);
-    w.document.close();
-  }
-
-  async function sendReport(): Promise<void> {
-    setSending(true);
-    setUploadError(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Not signed in.");
-      const res = await fetch("/api/lp/send-report", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: ["impex@techniline.org"],
-          subject: `LP Stock in Hand — ${new Date().toLocaleDateString()}`,
-          html: buildReportHtml(),
-        }),
-      });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (res.ok && j.ok) {
-        setBanner("Stock report emailed to impex@techniline.org.");
-      } else {
-        setUploadError(`Could not send report: ${j.error ?? `HTTP ${res.status}`}`);
-      }
-    } catch (e) {
-      setUploadError(errorMessage(e));
-    } finally {
-      setSending(false);
-    }
-  }
+  const filtersActive = search.trim() !== "" || filters.vendor !== "" || filters.brand !== "" || filters.model !== "";
 
   return (
     <div>
@@ -981,10 +1195,7 @@ function LpContent() {
               {parsing ? "Reading LP…" : "Upload LP (PDF)"}
             </button>
             <button type="button" onClick={() => setShowPdfs(true)} className={btnSecondary}>LP PDFs</button>
-            <button type="button" onClick={exportPdf} className={btnSecondary}>Export PDF</button>
-            <button type="button" onClick={() => void sendReport()} disabled={sending} className={btnPrimary}>
-              {sending ? "Sending…" : "Send stock report"}
-            </button>
+            <button type="button" onClick={() => { setUploadError(null); setShowReports(true); }} className={btnPrimary}>Reports</button>
           </div>
         }
       />
@@ -1002,47 +1213,75 @@ function LpContent() {
         </div>
       ) : null}
 
-      <form
-        onSubmit={(e) => { e.preventDefault(); void load(query); }}
-        className="mb-4 flex gap-2"
-      >
-        <input
-          className={inputClass}
-          placeholder="Search by vendor, LP number, or SKU…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <button type="submit" className={btnSecondary}>Search</button>
-        {query ? (
-          <button type="button" onClick={() => { setQuery(""); void load(); }} className={btnSecondary}>Clear</button>
+      {/* Premium search bar */}
+      <div className="mb-4">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+          <input
+            className={`${inputClass} pl-9 pr-24`}
+            placeholder="Search by brand, vendor, LP number, or LP date…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {filtersActive ? (
+            <button
+              type="button"
+              onClick={() => { setSearch(""); setFilters({ vendor: "", brand: "", model: "" }); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
+        {!loading && !error && allRows.length > 0 ? (
+          <p className="mt-1.5 text-xs text-slate-400">
+            Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} lines
+          </p>
         ) : null}
-      </form>
+      </div>
 
       {loading ? (
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading LP tracker…</div>
       ) : error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
           <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-          <button type="button" onClick={() => void load(query)} className={`${btnSecondary} mt-3`}>Retry</button>
+          <button type="button" onClick={() => void load()} className={`${btnSecondary} mt-3`}>Retry</button>
         </div>
-      ) : rows.length === 0 ? (
+      ) : allRows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500">
-            {query ? "No matching LP lines." : "No local purchases yet. Upload an LP PDF to get started."}
-          </p>
+          <p className="text-sm text-slate-500">No local purchases yet. Upload an LP PDF to get started.</p>
         </div>
       ) : (
         <>
-          <SummaryCards rows={rows} alertCount={alerts.size} />
-          <LpTable
-            rows={rows}
-            alerts={alerts}
-            managerFlag={managerFlag}
-            onSale={(row) => setSaleRow(row)}
-            onEdit={(row) => setEditRow(row)}
-          />
+          <SummaryCards rows={filtered} alertCount={filtered.filter((r) => r.id && alerts.has(r.id)).length} />
+          {filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+              <p className="text-sm text-slate-500">No lines match your search / filters.</p>
+            </div>
+          ) : (
+            <LpTable
+              rows={filtered}
+              alerts={alerts}
+              managerFlag={managerFlag}
+              filters={filters}
+              onFilter={setFilter}
+              onSale={(row) => setSaleRow(row)}
+              onEdit={(row) => setEditRow(row)}
+            />
+          )}
         </>
       )}
+
+      {showReports ? (
+        <ReportsModal
+          currentRows={filtered}
+          allRows={allRows}
+          vendors={vendors}
+          onClose={() => setShowReports(false)}
+          onNotify={(m) => { setShowReports(false); setBanner(m); }}
+          onError={(m) => setUploadError(m)}
+        />
+      ) : null}
 
       {review && profile ? (
         <VerifyLpModal

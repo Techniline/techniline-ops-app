@@ -22,15 +22,20 @@ export {
 export {
   fetchLpItems,
   searchLp,
+  fetchSalesReport,
   computePriceAlerts,
   type LpItemRow,
   type PriceAlert,
+  type SaleReportRow,
 } from "./queries";
 
 export {
   computeLpSummary,
-  buildStockSnapshot,
-  renderStockReportHtml,
+  currentViewReport,
+  stockInHandReport,
+  vendorReport,
+  entitySoldDetail,
+  entitySoldTotals,
+  entityLabel,
   type LpSummary,
-  type SnapshotLine,
 } from "./summary";
