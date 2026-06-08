@@ -12,8 +12,8 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Item | State |
 |---|---|
 | Live URL | https://techniline-ops-app.vercel.app — serving |
-| Production commit | **`b585ae0`** ("Sync database.types.ts; drop local casts") — current with `origin/main`; deployed via Vercel CLI. |
-| `origin/main` | **`b585ae0`** — in sync. |
+| Production commit | **`8660267`** ("Merge LP Tracker module") — current with `origin/main`; deployed via Vercel CLI. |
+| `origin/main` | **`8660267`** — in sync. |
 | Live routes | `/login` · `/dashboard` (+ KPI strip) · `/checklist` · `/cocoblu` (+ PDF capture) · `/amazon-actions` · `/api/amazon-email-ingest` · `/api/amazon-ingest-poll` (401 w/o secret) · `/api/cocoblu/parse` (401 w/o auth) |
 | Amazon ingestion | **LIVE & writing.** Daily Vercel cron `0 9 * * *` (48h lookback). 14-day 2026 backfill complete (237 Amazon emails, 0 errors). |
 | Cocoblu PDF capture | **LIVE.** Free built-in parser by default; auto-upgrades to AI if `ANTHROPIC_API_KEY` set. |
@@ -36,6 +36,7 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`) + **Work Log** (surfaces `submissions`; per-task "✓ submitted…" + a daily log). |
 | Priorities | `/priorities` | any user (RLS-scoped) | Standalone module (`priorities` table). Managers create & assign to Aaron/Maricel/Both with title/description/due/`priority_level` P1-P3/notes; staff see + update their own (progress %, in-progress, complete, notes). Status open/in_progress/overdue(derived)/completed. **Assignment email + weekly summary via Microsoft Graph** (`/api/priorities/notify`, manager-only, fail-soft). Names shown, never UUIDs. |
 | Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** (free parser handles the Microless/Cocoblu **and** Dulam/Nevin layouts; AI for any layout when keyed) + **Invoices browser** + manager **Edit**. |
+| LP Tracker | `/lp` | `lp_tracker` cap (Maricel + managers) | Local-purchase (LPO) ageing & clearance. **PDF capture** (free LPO parser → editable Verify; qty change needs a reason) + **per-line sales draw-down** (sold qty/invoice/entity/salesman; auto-clears at 0) + **price-change alerts** (any Δ vs same SKU's prior LP) + **master search** (vendor/LP no/SKU) + manager **Edit** + **LP PDFs browser**. **Stock-in-hand report**: manual email to `impex@techniline.org` + point-in-time **PDF export**. Tables `lp_orders`/`lp_items`/`lp_sales` + view `lp_items_view`; bucket `lp-invoices`. |
 | Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. |
 | Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | Guarded but **removed from nav** — do not re-promote. |
 
@@ -55,6 +56,7 @@ Schema source of truth = generated `src/lib/database.types.ts` (hand-synced 2026
 | Storage bucket `cocoblu-invoices` (private) + authenticated insert/select policies | ✅ Created. Holds invoice PDFs; app reads via signed URLs. |
 | RLS for newly-surfaced tables: `priorities` (read/insert/update), `submissions` (read), `breach_log` (read), `users` (read) | ✅ Run 2026-06-08. |
 | `priorities` columns `priority_level`, `notes` (§0 of CHECKLIST-PRIORITIES-SETUP) | ✅ Run 2026-06-08. Priorities module fully live. |
+| LP Tracker: `lp_orders`/`lp_items`/`lp_sales` tables + `lp_items_view` + RLS (manager + Maricel uid) + `lp-invoices` bucket | ✅ Run 2026-06-08 ([LP-TRACKER-SETUP.md](LP-TRACKER-SETUP.md)). Hand-synced into `database.types.ts`. |
 
 The checklist work surfaces tables the backend team already built (`priorities`, `submissions`, `breach_log`) — **no schema changes**, only the RLS above. No pre-existing tables/enums/RPCs were modified.
 
