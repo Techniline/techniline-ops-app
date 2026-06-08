@@ -45,7 +45,7 @@ Users: **Maricel** (`227fdb27-…`, checklist+finance) · **Aaron** (`cbb81b27-�
 
 ## 3. Database Changes (all owner-run SQL; never auto-migrated)
 
-Schema source of truth = generated `src/lib/database.types.ts` (does **not** yet include the columns added this cycle — see "regenerate" in §12).
+Schema source of truth = generated `src/lib/database.types.ts` (hand-synced 2026-06-08 to include this cycle's columns — `ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`; re-run `supabase gen types` for an authoritative regen when DB access is available).
 
 | Change | Status |
 |---|---|
@@ -142,7 +142,7 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Parser is heuristic** (both Amazon ingestion and Cocoblu basic capture) — re-validate against new real samples periodically. Cocoblu's Verify step mitigates this.
 2. **Auto-deploy-on-git-push** historically flaky — the CLI/deploy-hook is the dependable path (§1). If you want push-to-deploy, redeliver the GitHub webhook / reconnect Git (owner OAuth).
 3. **Cron cadence is daily** (Hobby). Fine for steady mail; move to Pro (`*/30`) or an external scheduler for near-real-time.
-4. **`database.types.ts` is stale** for the new columns (`ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`). Code compensates with local types / casts; regenerate to clean up.
+4. ~~**`database.types.ts` is stale**~~ Resolved 2026-06-08 — hand-synced for `ingest_log`, `cocoblu_ageing` audit, and `priorities.priority_level`/`notes`; the local mini-type + `as never` casts were removed. Run `supabase gen types` for an authoritative regen when DB access is available.
 5. CRLF warnings on commit (cosmetic).
 
 ---
@@ -171,7 +171,7 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 **Optional / when needed:**
 1. **AI invoice capture** (recommended once multiple vendors are in play): add `ANTHROPIC_API_KEY` in Vercel → Cocoblu auto-upgrades from the free parser to Sonnet 4.6 (reads any layout). Mail.Send/Graph already work.
 2. **Tune the Cocoblu free parser** for a new vendor layout — `basicParse.ts` has per-layout regex branches (Microless + Dulam/Nevin so far); add a branch, or just enable AI (#1).
-3. **Regenerate `src/lib/database.types.ts`** now that the new columns exist (`ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`), then drop the local mini-types/casts.
+3. ~~**Regenerate `src/lib/database.types.ts`**~~ ✅ DONE 2026-06-08 — types hand-synced for the new columns (`ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`); local mini-type + `as never` casts removed across `ingestLog.ts`, `priorities/index.ts`, `cocoblu/invoice.ts`. Re-run `supabase gen types` for an authoritative regen when a Supabase token is available (the hand-sync matches the generator's shape).
 4. **Rotate `AZURE_CLIENT_SECRET`** before it expires.
 5. **Weekly summary scheduling** — currently manual ("Send weekly summary" on Dashboard/Priorities). Add a Vercel cron + a manager-recipient send if an automatic weekly email is wanted.
 6. Move ingestion cron to `*/30` if upgrading to Vercel Pro.
@@ -214,7 +214,7 @@ npx vercel deploy --prod --yes
 
 ## 14. Data Model (key tables)
 
-Generated types live in `src/lib/database.types.ts` (regenerate after the recent column adds — §12.6). Owner manages all schema.
+Generated types live in `src/lib/database.types.ts` (hand-synced 2026-06-08 to current schema; re-run `supabase gen types` when DB access is available). Owner manages all schema.
 
 **`expected_actions`** — inbound Amazon work feed (the Amazon Actions spine).
 `id` · `type` (vendor_po | po_cancellation | dispute_update | shortage_claim | return_processed | remittance) · `status` (open | actioned | breached | escalated…) · `ref_number` (dedup key) · `po_number` · `invoice_ref` · `aed_amount` · `email_subject` · `email_sender` · `email_received_at` · `assigned_to`(→users).

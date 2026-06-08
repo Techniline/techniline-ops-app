@@ -1,14 +1,9 @@
 import { hasCapability, isManager } from "@/lib/permissions";
 import { supabase } from "@/lib/supabaseClient";
-import type { Tables, UserProfile } from "@/lib/types";
+import type { Tables, TablesInsert, TablesUpdate, UserProfile } from "@/lib/types";
 
-/** A priority row. `priority_level` + `notes` are columns added by
- *  CHECKLIST-PRIORITIES-SETUP / PRIORITIES-SETUP and aren't in the generated
- *  types yet, so we extend the base row type. */
-export type Priority = Tables<"priorities"> & {
-  priority_level: string | null;
-  notes: string | null;
-};
+/** A priority row (includes the `priority_level` + `notes` columns). */
+export type Priority = Tables<"priorities">;
 
 export type PriorityLevel = "P1" | "P2" | "P3";
 export type PriorityStatus = "open" | "in_progress" | "completed";
@@ -65,12 +60,12 @@ export async function fetchPriorities(profile: UserProfile): Promise<Priority[]>
   }
   const { data, error } = await query.order("due_date", { ascending: true });
   if (error) return [];
-  return (data ?? []) as unknown as Priority[];
+  return data ?? [];
 }
 
 /** Create a priority; returns the created row (for the email notification). */
 export async function createPriority(input: CreatePriorityInput): Promise<Priority> {
-  const payload: Record<string, unknown> = {
+  const payload: TablesInsert<"priorities"> = {
     created_by: input.createdBy,
     title: input.title,
     description: input.description,
@@ -85,16 +80,16 @@ export async function createPriority(input: CreatePriorityInput): Promise<Priori
   };
   const { data, error } = await supabase
     .from("priorities")
-    .insert(payload as never)
+    .insert(payload)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return data as unknown as Priority;
+  return data;
 }
 
 /** Update progress / status / notes. Completing sets completed_at + 100%. */
 export async function updatePriority(id: string, patch: UpdatePriorityPatch): Promise<void> {
-  const payload: Record<string, unknown> = {};
+  const payload: TablesUpdate<"priorities"> = {};
   if (patch.progressPct !== undefined) payload.progress_pct = Math.round(patch.progressPct);
   if (patch.notes !== undefined) payload.notes = patch.notes;
   if (patch.status !== undefined) {
@@ -108,7 +103,7 @@ export async function updatePriority(id: string, patch: UpdatePriorityPatch): Pr
   }
   const { data, error } = await supabase
     .from("priorities")
-    .update(payload as never)
+    .update(payload)
     .eq("id", id)
     .select("id");
   if (error) throw new Error(error.message);

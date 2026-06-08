@@ -37,7 +37,7 @@ alter table public.cocoblu_ageing
   add column if not exists verified_by  uuid references public.users(id),
   add column if not exists verified_at  timestamptz;
 ```
-*(Optional, later: regenerate `src/lib/database.types.ts` so these columns are typed and the temporary casts in `src/lib/cocoblu/invoice.ts` can be removed.)*
+*(Done 2026-06-08: these columns are now typed in `src/lib/database.types.ts` and the temporary casts in `src/lib/cocoblu/invoice.ts` were removed.)*
 
 After these two, open `/cocoblu` → **Upload Invoice (PDF)** → pick the sample → verify → **Verify & Save**.
 

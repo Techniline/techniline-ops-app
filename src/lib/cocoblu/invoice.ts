@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import type { TablesInsert, TablesUpdate } from "@/lib/types";
 
 import type { CaptureEngine, InvoiceDraft } from "./invoiceTypes";
 
@@ -106,8 +107,7 @@ export interface SaveVerifiedInvoiceInput {
 
 /**
  * Persist a verified invoice: one `cocoblu_ageing` row per line item, tagged
- * with source/pdf/verified-by audit columns. (New columns are cast through
- * `never` until the generated DB types are regenerated post-migration.)
+ * with source/pdf/verified-by audit columns.
  */
 export async function saveVerifiedInvoice(
   input: SaveVerifiedInvoiceInput
@@ -116,7 +116,7 @@ export async function saveVerifiedInvoice(
     throw new Error("Add at least one line item before saving.");
   }
   const nowIso = new Date().toISOString();
-  const rows: Record<string, unknown>[] = input.lineItems.map((li) => ({
+  const rows: TablesInsert<"cocoblu_ageing">[] = input.lineItems.map((li) => ({
     invoice_number: input.invoiceNumber,
     invoice_date: input.invoiceDate,
     supplied_date: input.suppliedDate,
@@ -132,7 +132,7 @@ export async function saveVerifiedInvoice(
     verified_at: nowIso,
   }));
 
-  const { error } = await supabase.from("cocoblu_ageing").insert(rows as never);
+  const { error } = await supabase.from("cocoblu_ageing").insert(rows);
   if (error) throw new Error(error.message);
   return rows.length;
 }
@@ -151,7 +151,7 @@ export interface EditRecordInput {
 
 /** Manager-only full edit of a saved record. */
 export async function updateCocobluRecord(input: EditRecordInput): Promise<void> {
-  const payload: Record<string, unknown> = {
+  const payload: TablesUpdate<"cocoblu_ageing"> = {
     invoice_number: input.invoiceNumber,
     invoice_date: input.invoiceDate,
     supplied_date: input.suppliedDate,
@@ -165,7 +165,7 @@ export async function updateCocobluRecord(input: EditRecordInput): Promise<void>
   };
   const { data, error } = await supabase
     .from("cocoblu_ageing")
-    .update(payload as never)
+    .update(payload)
     .eq("id", input.id)
     .select("id");
   if (error) throw new Error(error.message);
@@ -182,20 +182,13 @@ export interface InvoiceAudit {
 /**
  * Fetch per-record audit fields from the base table (the ageing view doesn't
  * carry them). Returns a map keyed by record id. Degrades gracefully to an
- * empty map before the migration adds the columns.
+ * empty map on error.
  */
 export async function fetchInvoiceAudit(): Promise<Map<string, InvoiceAudit>> {
   const { data, error } = await supabase.from("cocoblu_ageing").select("*");
   if (error) return new Map();
-  const rows = (data ?? []) as unknown as Array<{
-    id: string;
-    source?: string | null;
-    pdf_url?: string | null;
-    verified_by?: string | null;
-    verified_at?: string | null;
-  }>;
   const map = new Map<string, InvoiceAudit>();
-  for (const r of rows) {
+  for (const r of data ?? []) {
     map.set(r.id, {
       source: r.source ?? null,
       pdfPath: r.pdf_url ?? null,

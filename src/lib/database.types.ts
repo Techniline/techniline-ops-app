@@ -170,13 +170,17 @@ export type Database = {
           invoice_number: string
           line_number: number
           notes: string | null
+          pdf_url: string | null
           qty_remaining: number
           qty_supplied: number
           sku: string
+          source: string | null
           status: string
           supplied_date: string | null
           unit_cost: number | null
           updated_at: string
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           ageing_start_date?: string
@@ -186,13 +190,17 @@ export type Database = {
           invoice_number: string
           line_number?: number
           notes?: string | null
+          pdf_url?: string | null
           qty_remaining?: number
           qty_supplied?: number
           sku: string
+          source?: string | null
           status?: string
           supplied_date?: string | null
           unit_cost?: number | null
           updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           ageing_start_date?: string
@@ -202,15 +210,27 @@ export type Database = {
           invoice_number?: string
           line_number?: number
           notes?: string | null
+          pdf_url?: string | null
           qty_remaining?: number
           qty_supplied?: number
           sku?: string
+          source?: string | null
           status?: string
           supplied_date?: string | null
           unit_cost?: number | null
           updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cocoblu_ageing_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cocoblu_supplies: {
         Row: {
@@ -559,6 +579,30 @@ export type Database = {
           },
         ]
       }
+      ingest_log: {
+        Row: {
+          email_type: string | null
+          mailbox: string | null
+          message_id: string
+          processed_at: string
+          received_at: string | null
+        }
+        Insert: {
+          email_type?: string | null
+          mailbox?: string | null
+          message_id: string
+          processed_at?: string
+          received_at?: string | null
+        }
+        Update: {
+          email_type?: string | null
+          mailbox?: string | null
+          message_id?: string
+          processed_at?: string
+          received_at?: string | null
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           amount_aed: number | null
@@ -672,6 +716,8 @@ export type Database = {
           due_date: string
           due_date_revised: string | null
           id: string
+          notes: string | null
+          priority_level: string | null
           progress_pct: number | null
           start_date: string
           status: string
@@ -688,6 +734,8 @@ export type Database = {
           due_date: string
           due_date_revised?: string | null
           id?: string
+          notes?: string | null
+          priority_level?: string | null
           progress_pct?: number | null
           start_date: string
           status?: string
@@ -704,6 +752,8 @@ export type Database = {
           due_date?: string
           due_date_revised?: string | null
           id?: string
+          notes?: string | null
+          priority_level?: string | null
           progress_pct?: number | null
           start_date?: string
           status?: string
