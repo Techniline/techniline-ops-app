@@ -125,6 +125,16 @@ export function PrioritiesIcon(props: IconProps) {
   );
 }
 
+export function LpTrackerIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M3 7l9-4 9 4-9 4-9-4Z" />
+      <path d="M3 7v10l9 4 9-4V7" />
+      <path d="M8 9.5v4M12 11v4M16 9.5v4" />
+    </svg>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>
