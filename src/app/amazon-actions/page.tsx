@@ -657,6 +657,7 @@ function AmazonActionsContent() {
   const [selected, setSelected] = useState<AmazonAction | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<UiFilter>("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -676,7 +677,16 @@ function AmazonActionsContent() {
     void load();
   }, [load]);
 
-  const queue = useMemo(() => missingDocumentationQueue(actions), [actions]);
+  /** Sort by received date — newest first by default, toggleable to oldest. */
+  const byDate = useCallback(
+    (a: AmazonAction, b: AmazonAction) => {
+      const ta = Date.parse(a.emailReceivedAt) || 0;
+      const tb = Date.parse(b.emailReceivedAt) || 0;
+      return sortOrder === "newest" ? tb - ta : ta - tb;
+    },
+    [sortOrder]
+  );
+
   const usedRefs = useMemo(() => {
     const set = new Set<string>();
     for (const a of actions) {
@@ -688,8 +698,15 @@ function AmazonActionsContent() {
   const list = useMemo(() => {
     let rows = showResolved ? actions : actions.filter((a) => !a.resolved);
     rows = rows.filter((a) => matchesFilter(a, categoryFilter));
-    return [...rows].sort((a, b) => b.ageDays - a.ageDays);
-  }, [actions, showResolved, categoryFilter]);
+    return [...rows].sort(byDate);
+  }, [actions, showResolved, categoryFilter, byDate]);
+
+  const queue = useMemo(() => {
+    const base = missingDocumentationQueue(actions).filter((a) =>
+      matchesFilter(a, categoryFilter)
+    );
+    return [...base].sort(byDate);
+  }, [actions, categoryFilter, byDate]);
 
   /** Open a linked record: select its tab if needed, expand it, scroll to it. */
   const openLinked = useCallback(
@@ -742,62 +759,41 @@ function AmazonActionsContent() {
         </div>
       ) : (
         <>
-          {/* Missing Documentation queue — the priority section */}
-          <section className="mb-8">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Missing Documentation
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
-                {queue.length}
-              </span>
-            </h2>
-            {queue.length === 0 ? (
-              <div className={`${surface} p-6 text-center text-sm text-slate-500`}>
-                Nothing outstanding — all actions are documented. 🎉
-              </div>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {queue.map((a) => (
-                  <li key={a.id} className={`${surface} flex flex-wrap items-center justify-between gap-3 p-3`}>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">{displayCategoryLabel(a)}</span>
-                        <SlaBadge sla={a.sla} ageDays={a.ageDays} />
-                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{a.missingKind}</span>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-slate-500">
-                        <span className="font-mono">{a.amazonRef ?? "—"}</span>
-                        {a.emailSubject ? ` · ${a.emailSubject}` : ""}
-                      </p>
-                    </div>
-                    <button type="button" onClick={() => setSelected(a)} className={btnPrimary}>Log action</button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Category tabs */}
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {CATEGORY_TABS.map((tab) => {
-              const active = categoryFilter === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setCategoryFilter(tab.key)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+          {/* Filters + date sort — top of the page, under the search */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORY_TABS.map((tab) => {
+                const active = categoryFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setCategoryFilter(tab.key)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      active
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Sort</span>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </div>
           </div>
 
-          {/* Full actions list */}
+          {/* Actions list */}
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               {(CATEGORY_TABS.find((t) => t.key === categoryFilter)?.label ?? "All")} ({list.length})
@@ -819,6 +815,7 @@ function AmazonActionsContent() {
                   <tr>
                     <th className={thCell}>Category</th>
                     <th className={thCell}>Amazon Ref</th>
+                    <th className={thCell}>Received</th>
                     <th className={thCell}>SLA</th>
                     <th className={thCell}>Status</th>
                     <th className={thCell}>Outcome</th>
@@ -843,6 +840,7 @@ function AmazonActionsContent() {
                             {displayCategoryLabel(a)}
                           </td>
                           <td className={`${tdCell} font-mono text-xs`}>{a.amazonRef ?? "—"}</td>
+                          <td className={`${tdCell} whitespace-nowrap text-xs text-slate-500`}>{formatDate(a.emailReceivedAt)}</td>
                           <td className={tdCell}><SlaBadge sla={a.sla} ageDays={a.ageDays} /></td>
                           <td className={tdCell}>
                             <StatusBadge
@@ -871,7 +869,7 @@ function AmazonActionsContent() {
                         </tr>
                         {open ? (
                           <tr className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-                            <td colSpan={9} className="p-0">
+                            <td colSpan={10} className="p-0">
                               <ActionDetail
                                 action={a}
                                 all={actions}
@@ -888,6 +886,42 @@ function AmazonActionsContent() {
               </table>
             </div>
           )}
+
+          {/* Missing Documentation — priority subset (matches the filter above) */}
+          <section className="mt-8">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Missing Documentation
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                {queue.length}
+              </span>
+            </h2>
+            {queue.length === 0 ? (
+              <div className={`${surface} p-6 text-center text-sm text-slate-500`}>
+                Nothing outstanding for this filter. 🎉
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {queue.map((a) => (
+                  <li key={a.id} className={`${surface} flex flex-wrap items-center justify-between gap-3 p-3`}>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-slate-900 dark:text-slate-100">{displayCategoryLabel(a)}</span>
+                        <SlaBadge sla={a.sla} ageDays={a.ageDays} />
+                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{a.missingKind}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        <span className="font-medium text-slate-600 dark:text-slate-400">{formatDate(a.emailReceivedAt)}</span>
+                        {" · "}
+                        <span className="font-mono">{a.amazonRef ?? "—"}</span>
+                        {a.emailSubject ? ` · ${a.emailSubject}` : ""}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => setSelected(a)} className={btnPrimary}>Log action</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </>
       )}
 
