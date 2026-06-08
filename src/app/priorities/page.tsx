@@ -9,6 +9,7 @@ import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnPrimary, btnSecondary, btnSmall, inputClass, surface } from "@/components/ui";
+import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { isManager } from "@/lib/permissions";
 import {
   createPriority,
@@ -23,11 +24,6 @@ import {
   type PriorityDisplayStatus,
   type PriorityLevel,
 } from "@/lib/priorities";
-import {
-  buildWeeklySummary,
-  renderWeeklySummaryHtml,
-  type WeeklySummary,
-} from "@/lib/priorities/weekly";
 import type { UserProfile } from "@/lib/types";
 
 function errorMessage(e: unknown): string {
@@ -290,98 +286,6 @@ function PriorityCard({
   );
 }
 
-/* ------------------------- weekly summary modal ------------------------ */
-
-function WeeklySummaryModal({
-  profile,
-  staff,
-  onClose,
-  onSent,
-}: {
-  profile: UserProfile;
-  staff: AssignableUser[];
-  onClose: () => void;
-  onSent: (message: string) => void;
-}) {
-  const [summary, setSummary] = useState<WeeklySummary | null>(null);
-  const [sending, setSending] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void buildWeeklySummary(profile, staff).then((s) => {
-      if (active) setSummary(s);
-    });
-    return () => {
-      active = false;
-    };
-  }, [profile, staff]);
-
-  async function send(): Promise<void> {
-    if (!summary) return;
-    const email = profile.email;
-    if (!email) return setErr("No email on your profile to send to.");
-    setSending(true);
-    setErr(null);
-    const r = await sendNotification([email], `Weekly Operations Summary — ${summary.date}`, renderWeeklySummaryHtml(summary));
-    setSending(false);
-    if (r.ok) onSent(`Weekly summary emailed to ${email}.`);
-    else setErr(`Send failed: ${r.error}`);
-  }
-
-  return (
-    <Modal title="Weekly Summary" onClose={onClose} wide>
-      {!summary ? (
-        <p className="text-sm text-slate-500">Computing…</p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/40">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">User</th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Tasks today</th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Priorities done</th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Open</th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Overdue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.users.map((u) => (
-                  <tr key={u.userId} className="border-t border-slate-100 dark:border-slate-800/60">
-                    <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">{u.name}</td>
-                    <td className="px-3 py-2">{u.tasksDone}/{u.tasksTotal}</td>
-                    <td className="px-3 py-2">{u.prioritiesCompleted}</td>
-                    <td className="px-3 py-2">{u.prioritiesOpen}</td>
-                    <td className={`px-3 py-2 ${u.prioritiesOverdue > 0 ? "text-red-600 dark:text-red-400" : ""}`}>{u.prioritiesOverdue}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {summary.cocoblu ? (
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              <span className="font-medium">Cocoblu (Aaron):</span> {summary.cocoblu.openRecords} open · {summary.cocoblu.qtyRemaining} qty · {summary.cocoblu.over90} aged 90+
-            </p>
-          ) : null}
-          {summary.amazon ? (
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              <span className="font-medium">Amazon Actions (Maricel):</span> {summary.amazon.openActions} open · {summary.amazon.missingDocs} missing docs · {summary.amazon.overdue} overdue
-            </p>
-          ) : null}
-          {err ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p> : null}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
-            <button type="button" onClick={() => void send()} disabled={sending} className={btnPrimary}>
-              {sending ? "Sending…" : "Email to me"}
-            </button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
 /* ------------------------------- content ------------------------------- */
 
 function PrioritiesContent() {
@@ -502,7 +406,6 @@ function PrioritiesContent() {
       {showWeekly ? (
         <WeeklySummaryModal
           profile={profile}
-          staff={users}
           onClose={() => setShowWeekly(false)}
           onSent={(m) => { setShowWeekly(false); setBanner(m); }}
         />
