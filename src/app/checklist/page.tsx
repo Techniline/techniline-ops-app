@@ -87,6 +87,7 @@ interface TaskCardProps {
   isManagerView: boolean;
   submitting: boolean;
   submittedLine?: string | null;
+  assignedToName?: string | null;
   onSubmit: (taskId: string, evidence: TaskEvidence) => void;
 }
 
@@ -96,6 +97,7 @@ function TaskCard({
   isManagerView,
   submitting,
   submittedLine,
+  assignedToName,
   onSubmit,
 }: TaskCardProps) {
   const definition = task.task_definitions;
@@ -250,8 +252,8 @@ function TaskCard({
                 <dt className="font-medium text-slate-600 dark:text-slate-400">
                   Assigned to:
                 </dt>
-                <dd className="truncate font-mono text-xs">
-                  {task.assigned_to ?? "unassigned"}
+                <dd className="truncate">
+                  {assignedToName ?? (task.assigned_to ? "Unknown user" : "Unassigned")}
                 </dd>
               </div>
             ) : null}
@@ -569,6 +571,9 @@ function ChecklistContent() {
                 isManagerView={managerView}
                 submitting={submittingId === task.id}
                 submittedLine={submittedLineFor(task.id)}
+                assignedToName={
+                  task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
+                }
                 onSubmit={handleSubmit}
               />
             ))}
