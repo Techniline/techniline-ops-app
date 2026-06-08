@@ -168,3 +168,110 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 8. Move ingestion cron to `*/30` if upgrading to Vercel Pro.
 
 **Deferred:** Manager Overview dashboard (recovery reporting), broader KPI history/trends.
+
+---
+
+## 13. Quick Start (new developer)
+
+```bash
+# 1. Clone + install
+git clone https://github.com/Techniline/techniline-ops-app.git
+cd techniline-ops-app
+npm install                      # also installs @anthropic-ai/sdk, unpdf
+
+# 2. Local env — create .env.local (gitignored). Minimum to run the UI:
+#    NEXT_PUBLIC_SUPABASE_URL=...        (see .env.local.example / .env.local.txt)
+#    NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+#    Add server vars only to exercise ingestion/parse locally:
+#    SUPABASE_SERVICE_ROLE_KEY, AZURE_*, AMAZON_INGEST_SECRET, ANTHROPIC_API_KEY
+
+# 3. Run
+npm run dev                      # http://localhost:3000  (login via Supabase auth)
+
+# 4. Checks before pushing
+npx tsc --noEmit                 # typecheck
+npm run build                    # full Next build (what Vercel runs)
+npm run lint                     # eslint
+
+# 5. Deploy to production (CLI is authenticated on the owner's machine)
+npx vercel deploy --prod --yes
+```
+
+- **Read `AGENTS.md`** — this Next.js (16.2.7) has breaking changes vs training data; consult `node_modules/next/dist/docs/` before writing Next-specific code.
+- API routes follow the existing pattern (`export const runtime = "nodejs"`, `export async function POST(request: Request)`) — mirror `src/app/api/amazon-ingest-poll/route.ts`.
+- Don't commit `.env.local` (gitignored). `.claude/` is also ignored.
+
+---
+
+## 14. Data Model (key tables)
+
+Generated types live in `src/lib/database.types.ts` (regenerate after the recent column adds — §12.6). Owner manages all schema.
+
+**`expected_actions`** — inbound Amazon work feed (the Amazon Actions spine).
+`id` · `type` (vendor_po | po_cancellation | dispute_update | shortage_claim | return_processed | remittance) · `status` (open | actioned | breached | escalated…) · `ref_number` (dedup key) · `po_number` · `invoice_ref` · `aed_amount` · `email_subject` · `email_sender` · `email_received_at` · `assigned_to`(→users).
+
+**`amazon_action_log`** — append-only audit of operational actions (one row per logged action).
+`id` · `expected_action_id`(→expected_actions) · `action_type` (category) · `outcome` · `reference_type`/`reference_value` · `reason_note` · `workflow_status` (action_required | waiting_amazon | resolved | closed) · `amount_aed` · `recovered_aed` · `follow_up_date` · `duplicate_warning` · `confidence` · `created_by` · `created_at` · enrichment: `tle_invoice_number`, `payment_number`, `return_id`, `srt_number`, `prt_number`, `invoice_date`, `invoice_value_aed`, `sku`, `approved_amount_aed`, `notes`. RLS: own-or-manager read, own insert.
+
+**`ingest_log`** — poller dedup. `message_id`(PK) · `mailbox` · `received_at` · `email_type` · `processed_at`.
+
+**`cocoblu_ageing`** — Cocoblu stock lines (one row per SKU per invoice).
+`id` · `invoice_number` · `invoice_date` · `supplied_date` · `sku` · `qty_supplied` · `qty_remaining` · `unit_cost` · `notes` · `status` (open | closed) · `line_number` · `ageing_start_date` · `created_at` · `updated_at` · **audit:** `source` (manual | pdf_upload), `pdf_url`, `verified_by`(→users), `verified_at`.
+**View `cocoblu_ageing_view`** adds computed `ageing_days` + `ageing_status` (safe | monitor | warning | action_required); the page reads the view, audit columns are read from the base table.
+
+**`daily_tasks`** — generated checklist items. `id` · `task_def_id`(→task_definitions) · `assigned_to`(→users) · `task_date` · `status` (open | submitted | verified | breached) · `source` (standing | email_triggered) · `source_ref_id`.
+**`task_definitions`** — `id` · `title` · `assigned_to` · `is_active` · `evidence_type` (text | count | id_list | one_tap) · `evidence_hint` · `eod_time` · `is_email_triggered`.
+
+**`users`** — `id` (= Supabase auth uid) · `email` · `full_name` · `role` (manager | …) · `avatar_initials`.
+
+**Storage:** bucket `cocoblu-invoices` (private) — invoice PDFs, path stored in `cocoblu_ageing.pdf_url`.
+**RPCs:** `generate_daily_tasks()` (idempotent daily generation) · `search_all(q)` (read-only cross-reference search).
+
+---
+
+## 15. Runbooks
+
+**Re-set a Sensitive env var** (they're write-only — can't be read back):
+```bash
+npx vercel env rm   NAME production --yes
+echo "the-value" | npx vercel env add NAME production   # newline auto-trimmed
+npx vercel deploy --prod --yes                           # env changes need a NEW build
+```
+(`printf '%s'` without a trailing newline does **not** save — use `echo`.)
+
+**Rotate `AZURE_CLIENT_SECRET`** (do before it expires, or Graph fetch silently fails):
+1. Azure Portal → App registrations → "Techniline Ops Amazon Ingest" (`6dc96d87-…`) → Certificates & secrets → **New client secret** → copy the **Value** (not the Secret ID).
+2. Re-set it via the env pattern above; `vercel deploy --prod`.
+3. Verify: a manual dry-run (below) returns `fetched > 0` instead of `AADSTS7000215`.
+
+**Enable AI invoice capture (Cocoblu):**
+1. Get a key at console.anthropic.com.
+2. `echo "sk-ant-…" | npx vercel env add ANTHROPIC_API_KEY production` (repeat for `preview`); `vercel deploy --prod`.
+3. Upload an invoice on `/cocoblu` — the Verify modal should now say "✨ AI-captured". Remove the key to revert to the free parser.
+
+**Trigger a manual Amazon ingest** (`<SECRET>` = `AMAZON_INGEST_SECRET`):
+```bash
+# Dry-run (no writes) — inspect classification on a wide window
+curl -s -X POST "https://techniline-ops-app.vercel.app/api/amazon-ingest-poll?lookbackHours=336" \
+  -H "x-ingest-secret: <SECRET>"
+# Live write (manual) — add mode=live
+curl -s -X POST "https://techniline-ops-app.vercel.app/api/amazon-ingest-poll?mode=live&lookbackHours=72" \
+  -H "x-ingest-secret: <SECRET>"
+```
+The daily cron does the live run automatically via `Authorization: Bearer <CRON_SECRET>`. Idempotent (message-id dedup) — safe to re-run; wide windows complete in ~12s.
+
+**Run owner SQL** — Supabase Dashboard → SQL Editor. Copy-ready blocks live in [GO-LIVE.md](GO-LIVE.md) (ingest_log, verification, Aaron-duplicate) and [COCOBLU-INVOICE-SETUP.md](COCOBLU-INVOICE-SETUP.md) (bucket, audit columns). Storage **files** can't be deleted via SQL — use Dashboard → Storage.
+
+**Clear test Cocoblu data:** `delete from public.cocoblu_ageing where source='pdf_upload';` (or no filter for all). Remove PDFs via Dashboard → Storage → `cocoblu-invoices`.
+
+---
+
+## 16. Glossary
+
+- **Capability** — feature-module grant (`checklist`, `finance`, `cocoblu`) keyed by user id in `src/lib/permissions/`. **Manager** — `users.role==='manager'`; grants cross-user/override access (not a capability).
+- **SLA tiers** (Amazon action age): green 0–3d · amber 4–7d · red 8–14d · **escalated** 15d+.
+- **DSPT** — Amazon dispute id (e.g. `DSPT20065219423`). **SRT / PRT** — Supplier/Partner Return reference numbers raised to Amazon. **PO** — purchase order (Amazon.ae PO ids are 8-char alphanumeric, e.g. `6SETIFRF`). **Remittance** — Amazon payment advice. **Shortage** — invoice short-paid/short-received claim. **Vendor return** — goods returned to the vendor.
+- **expected_actions** — the inbound feed of things to action; **amazon_action_log** — the append-only record of what was done.
+- **Dry-run** — parse/plan with **zero DB writes** (the default on ingest endpoints). **Fail-closed** — missing config/secret → do nothing rather than partial writes. **Idempotent** — re-running produces no duplicates (message-id / ref_number dedup). **Self-healing** — overlapping lookback + dedup means a missed run catches up next time.
+- **Capture engine (Cocoblu)** — "basic" (free regex parser) or "AI" (Claude Sonnet 4.6); chosen automatically by whether `ANTHROPIC_API_KEY` is set.
+- **Verify step** — human review/edit of auto-captured data before it's saved (the accuracy safety net).
