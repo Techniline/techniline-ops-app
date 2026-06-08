@@ -20,11 +20,13 @@ export {
 } from "./order";
 
 export {
-  fetchLpItems,
-  searchLp,
+  fetchLpItemsWindow,
+  fetchVendors,
   fetchSalesReport,
   computePriceAlerts,
   type LpItemRow,
+  type LpStatusFilter,
+  type LpWindowOpts,
   type PriceAlert,
   type SaleReportRow,
 } from "./queries";

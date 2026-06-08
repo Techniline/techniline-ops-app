@@ -25,9 +25,10 @@ import {
   currentViewReport,
   entitySoldDetail,
   entitySoldTotals,
-  fetchLpItems,
+  fetchLpItemsWindow,
   fetchSaleHistory,
   fetchSalesReport,
+  fetchVendors,
   listLpPdfs,
   lpPdfUrl,
   parseLpViaApi,
@@ -41,6 +42,7 @@ import {
   type LpDraft,
   type LpItemRow,
   type LpSaleRow,
+  type LpStatusFilter,
   type PriceAlert,
   type StoredLpPdf,
   type VerifiedLpLine,
@@ -937,15 +939,11 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 
 function ReportsModal({
   currentRows,
-  allRows,
-  vendors,
   onClose,
   onNotify,
   onError,
 }: {
   currentRows: LpItemRow[];
-  allRows: LpItemRow[];
-  vendors: string[];
   onClose: () => void;
   onNotify: (message: string) => void;
   onError: (message: string) => void;
@@ -953,9 +951,11 @@ function ReportsModal({
   const now = () => new Date().toLocaleString();
   const today = todayIso();
 
+  const [vendors, setVendors] = useState<string[]>([]);
   const [vendor, setVendor] = useState("All");
   const [vFrom, setVFrom] = useState("");
   const [vTo, setVTo] = useState("");
+  const [vendorBusy, setVendorBusy] = useState(false);
 
   const [entity, setEntity] = useState("All");
   const [eFrom, setEFrom] = useState("");
@@ -964,12 +964,37 @@ function ReportsModal({
 
   const [sending, setSending] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const list = await fetchVendors();
+        if (active) setVendors(list);
+      } catch {
+        /* vendor dropdown is best-effort */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function exportCurrent(format: "csv" | "pdf"): void {
     exportReport(currentViewReport(currentRows, now()), `lp-current-${today}`, format);
   }
 
-  function exportVendor(format: "csv" | "pdf"): void {
-    exportReport(vendorReport(allRows, vendor, vFrom, vTo, now()), `lp-vendor-${vendor === "All" ? "all" : vendor}-${today}`, format);
+  async function exportVendor(format: "csv" | "pdf"): Promise<void> {
+    setVendorBusy(true);
+    onError("");
+    try {
+      // Fetch the full matching slice server-side (not just the loaded page).
+      const rows = await fetchLpItemsWindow({ status: "all", vendor, fromIso: vFrom, toIso: vTo, limit: 5000 });
+      exportReport(vendorReport(rows, vendor, vFrom, vTo, now()), `lp-vendor-${vendor === "All" ? "all" : vendor}-${today}`, format);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not build the vendor report.");
+    } finally {
+      setVendorBusy(false);
+    }
   }
 
   async function exportEntity(format: "csv" | "pdf"): Promise<void> {
@@ -999,7 +1024,8 @@ function ReportsModal({
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error("Not signed in.");
-      const table = stockInHandReport(allRows, now());
+      const openStock = await fetchLpItemsWindow({ status: "open", limit: 5000 });
+      const table = stockInHandReport(openStock, now());
       const res = await fetch("/api/lp/send-report", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -1043,7 +1069,11 @@ function ReportsModal({
               <input type="date" className={inputClass} value={vTo} onChange={(e) => setVTo(e.target.value)} />
             </FormRow>
           </div>
-          <ExportButtons onExport={exportVendor} />
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("csv")} className={btnSmall}>CSV</button>
+            <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("pdf")} className={btnSmall}>PDF</button>
+            {vendorBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
+          </div>
         </Section>
 
         <Section title="Entity-wise sold" hint="Sales filtered by entity and sale date — detail rows plus totals per entity.">
@@ -1083,16 +1113,23 @@ function ReportsModal({
 
 /* ------------------------------ Content -------------------------------- */
 
+const PAGE = 100;
+
 function LpContent() {
   const { profile } = useAuth();
   const managerFlag = isManager(profile);
 
   const [allRows, setAllRows] = useState<LpItemRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [statusTab, setStatusTab] = useState<LpStatusFilter>("open");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ColFilters>({ vendor: "", brand: "", model: "" });
   const [saleRow, setSaleRow] = useState<LpItemRow | null>(null);
@@ -1102,30 +1139,54 @@ function LpContent() {
   const [review, setReview] = useState<{ file: File; draft: LpDraft; engine: CaptureEngine } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Bounded, server-side window: only the chosen status + LP-date slice loads,
+  // paged. History (cleared / older LPs) loads on demand via the date range.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setAllRows(await fetchLpItems());
+      const data = await fetchLpItemsWindow({
+        status: statusTab,
+        fromIso: dateFrom,
+        toIso: dateTo,
+        limit: PAGE,
+        offset: 0,
+      });
+      setAllRows(data);
+      setHasMore(data.length === PAGE);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusTab, dateFrom, dateTo]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Price alerts are computed over the FULL set so per-SKU deltas stay correct
-  // even when the view is filtered.
-  const alerts = useMemo(() => computePriceAlerts(allRows), [allRows]);
+  async function loadMore(): Promise<void> {
+    setLoadingMore(true);
+    try {
+      const data = await fetchLpItemsWindow({
+        status: statusTab,
+        fromIso: dateFrom,
+        toIso: dateTo,
+        limit: PAGE,
+        offset: allRows.length,
+      });
+      setAllRows((prev) => [...prev, ...data]);
+      setHasMore(data.length === PAGE);
+    } catch (err) {
+      setUploadError(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
-  const vendors = useMemo(
-    () => [...new Set(allRows.map((r) => r.vendor_name).filter((v): v is string => !!v))].sort(),
-    [allRows]
-  );
+  // Price alerts compute over the loaded window (advisory; a prior LP outside
+  // the window won't be compared).
+  const alerts = useMemo(() => computePriceAlerts(allRows), [allRows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1213,6 +1274,45 @@ function LpContent() {
         </div>
       ) : null}
 
+      {/* Status tabs + LP-date window */}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+          {(["open", "cleared", "all"] as LpStatusFilter[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusTab(s)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                statusTab === s
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {s === "open" ? "In stock" : s === "cleared" ? "Cleared" : "All"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 text-sm text-slate-500">
+          <span className="text-xs font-medium uppercase tracking-wide">LP date</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
+          <span>→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          />
+          {dateFrom || dateTo ? (
+            <button type="button" onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs underline">clear</button>
+          ) : null}
+        </div>
+      </div>
+
       {/* Premium search bar */}
       <div className="mb-4">
         <div className="relative">
@@ -1235,7 +1335,8 @@ function LpContent() {
         </div>
         {!loading && !error && allRows.length > 0 ? (
           <p className="mt-1.5 text-xs text-slate-400">
-            Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} lines
+            Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} loaded{hasMore ? "+" : ""}
+            {hasMore ? " — load more or narrow the date range" : ""}
           </p>
         ) : null}
       </div>
@@ -1249,14 +1350,18 @@ function LpContent() {
         </div>
       ) : allRows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500">No local purchases yet. Upload an LP PDF to get started.</p>
+          <p className="text-sm text-slate-500">
+            {statusTab === "open" && !dateFrom && !dateTo
+              ? "No stock in hand. Upload an LP PDF, or check the Cleared / All tabs."
+              : "No LP lines for this status / date range."}
+          </p>
         </div>
       ) : (
         <>
           <SummaryCards rows={filtered} alertCount={filtered.filter((r) => r.id && alerts.has(r.id)).length} />
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-              <p className="text-sm text-slate-500">No lines match your search / filters.</p>
+              <p className="text-sm text-slate-500">No loaded lines match your search / filters.</p>
             </div>
           ) : (
             <LpTable
@@ -1269,14 +1374,19 @@ function LpContent() {
               onEdit={(row) => setEditRow(row)}
             />
           )}
+          {hasMore ? (
+            <div className="mt-4 flex justify-center">
+              <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className={btnSecondary}>
+                {loadingMore ? "Loading…" : `Load more (${PAGE})`}
+              </button>
+            </div>
+          ) : null}
         </>
       )}
 
       {showReports ? (
         <ReportsModal
           currentRows={filtered}
-          allRows={allRows}
-          vendors={vendors}
           onClose={() => setShowReports(false)}
           onNotify={(m) => { setShowReports(false); setBanner(m); }}
           onError={(m) => setUploadError(m)}

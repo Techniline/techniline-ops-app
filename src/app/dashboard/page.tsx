@@ -20,7 +20,7 @@ import { btnSecondary, surface } from "@/components/ui";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchCocobluAgeing } from "@/lib/cocoblu";
-import { computeLpSummary, computePriceAlerts, fetchLpItems } from "@/lib/lp";
+import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/lp";
 import {
   fetchBreachCountSince,
   fetchChecklistForDate,
@@ -216,7 +216,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
         jobs.push(
           (async () => {
             try {
-              const items = await fetchLpItems();
+              const items = await fetchLpItemsWindow({ status: "open", limit: 5000 });
               const s = computeLpSummary(items);
               const alertCount = computePriceAlerts(items).size;
               result.push({

@@ -4,33 +4,49 @@ import type { Tables } from "@/lib/types";
 /** A computed row from `lp_items_view` (line + order + ageing + draw-down). */
 export type LpItemRow = Tables<"lp_items_view">;
 
-/** Fetch all LP line items from the ageing view, oldest LP first. */
-export async function fetchLpItems(): Promise<LpItemRow[]> {
-  const { data, error } = await supabase
-    .from("lp_items_view")
-    .select("*")
-    .order("lp_date", { ascending: true });
+/** Which lifecycle slice to load. */
+export type LpStatusFilter = "open" | "cleared" | "all";
+
+export interface LpWindowOpts {
+  status?: LpStatusFilter; // default 'open' (stock still in hand)
+  vendor?: string; // exact vendor_name; "All"/undefined = no filter
+  fromIso?: string; // lp_date >=
+  toIso?: string; // lp_date <=
+  limit?: number; // page size (default 100)
+  offset?: number; // page offset (default 0)
+}
+
+/**
+ * Server-side windowed fetch from `lp_items_view`. Instead of loading the whole
+ * table, callers bound it by lifecycle (`open` = remaining > 0), vendor, and an
+ * LP-date range, with `limit`/`offset` paging. Oldest LP first so the most-aged
+ * stock surfaces at the top of the working list.
+ */
+export async function fetchLpItemsWindow(opts: LpWindowOpts = {}): Promise<LpItemRow[]> {
+  const { status = "open", vendor, fromIso, toIso, limit = 100, offset = 0 } = opts;
+  let q = supabase.from("lp_items_view").select("*");
+  if (status === "open") q = q.gt("qty_remaining", 0);
+  else if (status === "cleared") q = q.lte("qty_remaining", 0);
+  if (vendor && vendor !== "All") q = q.eq("vendor_name", vendor);
+  if (fromIso) q = q.gte("lp_date", fromIso);
+  if (toIso) q = q.lte("lp_date", toIso);
+  const { data, error } = await q
+    .order("lp_date", { ascending: true })
+    .range(offset, offset + limit - 1);
   if (error) throw error;
   return data ?? [];
 }
 
-/**
- * Master search across LP number, vendor, SKU and model. Empty query returns
- * everything (same as {@link fetchLpItems}).
- */
-export async function searchLp(q: string): Promise<LpItemRow[]> {
-  const term = q.trim();
-  if (term === "") return fetchLpItems();
-  const safe = term.replace(/[%,]/g, " ");
+/** Distinct vendor names (for the report vendor dropdown), alphabetical. */
+export async function fetchVendors(): Promise<string[]> {
   const { data, error } = await supabase
-    .from("lp_items_view")
-    .select("*")
-    .or(
-      `lp_number.ilike.%${safe}%,vendor_name.ilike.%${safe}%,sku.ilike.%${safe}%,model_no.ilike.%${safe}%`
-    )
-    .order("lp_date", { ascending: true });
+    .from("lp_orders")
+    .select("vendor_name")
+    .order("vendor_name", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  const set = new Set<string>();
+  for (const r of data ?? []) if (r.vendor_name) set.add(r.vendor_name);
+  return [...set];
 }
 
 /** One sale joined with its LP-line + order context (for the entity report). */
