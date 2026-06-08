@@ -84,6 +84,15 @@ export async function fetchChecklistForDate(args: {
   return data ?? [];
 }
 
+/** id → display name for users (for the work log). Fail-soft: empty on error. */
+export async function fetchUserNames(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data, error } = await supabase.from("users").select("id, full_name, email");
+  if (error) return map;
+  for (const u of data ?? []) map.set(u.id, u.full_name ?? u.email ?? u.id);
+  return map;
+}
+
 /**
  * Count breach_log rows on/after `sinceDate` (YYYY-MM-DD), scoped by RLS
  * (own for staff, all for managers). Fail-soft: returns 0 on error.

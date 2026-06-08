@@ -4,6 +4,14 @@ _The checklist improvements (Work Log, Priorities, breach KPI) read/write tables
 
 > Policies use `auth.uid()` (the signed-in user) and `public.current_user_role()` (the existing helper that returns the user's role) for the manager override — matching the app's "own-or-manager" model. They're idempotent (drop-then-create).
 
+## 0. Add the two missing priority columns (run first)
+```sql
+alter table public.priorities
+  add column if not exists priority_level text,   -- 'P1' | 'P2' | 'P3'
+  add column if not exists notes          text;   -- general progress notes
+```
+The app writes `status` ∈ `{open, in_progress, completed}` (overdue is derived). If `priorities.status` has a CHECK constraint that excludes these, relax it or send me the allowed values.
+
 ```sql
 -- ============ priorities ============
 alter table public.priorities enable row level security;
@@ -73,4 +81,12 @@ using (true);
 
 **Heads-up — `priorities.status`:** the app does **not** write the `status` column (it leaves the DB default and tracks completion via `completed_at`/`progress_pct`) to avoid clashing with any CHECK constraint you've defined. If you'd like the app to set `status` too, send me the allowed values.
 
-After running this, reload `/checklist` — Priorities, the Work Log, and the breach KPI will populate.
+After running this, reload `/checklist` (Work Log + breach KPI) and `/priorities` (the module).
+
+## Email notifications (Microsoft Graph)
+Assignment emails + the weekly summary send via the existing Azure app (`/api/priorities/notify`, manager-only). To enable:
+1. **Azure Portal → App registrations → "Techniline Ops Amazon Ingest"** → API permissions → add **Microsoft Graph → Application → `Mail.Send`** → **Grant admin consent**.
+2. The sender mailbox defaults to `vihan@techniline.org`. To use another (e.g. a no-reply), set **`PRIORITY_MAIL_FROM`** in Vercel (Production) → redeploy.
+
+Until `Mail.Send` is consented, **priorities still save** and a warning ("email notification failed") is shown — the data is never lost (fail-soft, as specified).
+

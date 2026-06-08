@@ -13,6 +13,7 @@ import {
   ActionsIcon,
   ChecklistIcon,
   CocobluIcon,
+  PrioritiesIcon,
 } from "@/components/icons";
 import { surface } from "@/components/ui";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
@@ -22,7 +23,7 @@ import {
   fetchChecklistForDate,
   generateDailyTasks,
 } from "@/lib/checklist";
-import { fetchPriorities, priorityState } from "@/lib/priorities";
+import { fetchPriorities, priorityDisplayStatus } from "@/lib/priorities";
 import { formatAED } from "@/lib/format";
 import {
   canViewChecklist,
@@ -134,7 +135,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
           (async () => {
             try {
               const prios = await fetchPriorities(profile);
-              const openP = prios.filter((p) => priorityState(p) !== "completed");
+              const openP = prios.filter((p) => priorityDisplayStatus(p) !== "completed");
               const avg =
                 openP.length === 0
                   ? 0
@@ -316,6 +317,17 @@ function DashboardContent() {
       accent:
         "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300",
       show: canViewChecklist(profile),
+      comingSoon: false,
+    },
+    {
+      key: "priorities",
+      title: "Priorities",
+      description: "Assigned objectives — progress, due dates, and completion.",
+      href: "/priorities",
+      icon: PrioritiesIcon,
+      accent:
+        "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+      show: true,
       comingSoon: false,
     },
     {

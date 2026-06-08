@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
-import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
-import { btnPrimary, btnSecondary, btnSmall, inputClass, surface } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import {
   fetchChecklistForDate,
   fetchSubmissionsForTasks,
+  fetchUserNames,
   generateDailyTasks,
   submitTaskWithEvidence,
   type DailyTaskWithDefinition,
@@ -20,16 +20,6 @@ import {
   type TaskStatus,
 } from "@/lib/checklist";
 import { canViewUser, isManager } from "@/lib/permissions";
-import {
-  completePriority,
-  createPriority,
-  fetchAssignableUsers,
-  fetchPriorities,
-  priorityState,
-  updatePriorityProgress,
-  type AssignableUser,
-  type Priority,
-} from "@/lib/priorities";
 import type { UserProfile } from "@/lib/types";
 
 /** Local-time today as YYYY-MM-DD (matches `daily_tasks.task_date`). */
@@ -399,272 +389,6 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
-/* ------------------------------ Priorities ----------------------------- */
-
-const PRIORITY_STATE_STYLES: Record<string, string> = {
-  completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  open: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-};
-
-function PriorityStateBadge({ p }: { p: Priority }) {
-  const s = priorityState(p);
-  const label = s === "in_progress" ? "In progress" : s === "completed" ? "Completed" : "Open";
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STATE_STYLES[s]}`}>
-      {label}
-    </span>
-  );
-}
-
-function CreatePriorityModal({
-  profile,
-  managerView,
-  users,
-  onClose,
-  onSaved,
-}: {
-  profile: UserProfile;
-  managerView: boolean;
-  users: AssignableUser[];
-  onClose: () => void;
-  onSaved: (message: string) => void;
-}) {
-  const today = todayISODate();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [assignee, setAssignee] = useState<string>(managerView ? "both" : profile.id);
-  const [startDate, setStartDate] = useState(today);
-  const [dueDate, setDueDate] = useState(today);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setErr(null);
-    if (title.trim() === "") return setErr("Title is required.");
-    if (dueDate < startDate) return setErr("Due date can't be before the start date.");
-    setSaving(true);
-    try {
-      await createPriority({
-        createdBy: profile.id,
-        title: title.trim(),
-        description: description.trim() || null,
-        assignedTo: assignee === "both" ? null : assignee,
-        assignedToBoth: assignee === "both",
-        startDate,
-        dueDate,
-      });
-      onSaved("Priority created.");
-    } catch (e) {
-      setErr(errorMessage(e));
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title="Add Priority" onClose={onClose}>
-      <form onSubmit={submit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-300">Title *</span>
-          <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} required />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-300">Description</span>
-          <textarea className={inputClass} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        {managerView ? (
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-300">Assign to</span>
-            <select className={inputClass} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              <option value="both">Both users</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60">
-            This priority will be assigned to you.
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-300">Start date</span>
-            <input type="date" className={inputClass} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-300">Due date</span>
-            <input type="date" className={inputClass} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </label>
-        </div>
-        {err ? (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p>
-        ) : null}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
-          <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Saving…" : "Create"}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function PriorityCard({
-  p,
-  users,
-  canEdit,
-  onChanged,
-  onError,
-}: {
-  p: Priority;
-  users: AssignableUser[];
-  canEdit: boolean;
-  onChanged: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const completed = priorityState(p) === "completed";
-  const [pct, setPct] = useState(String(p.progress_pct ?? 0));
-  const [busy, setBusy] = useState(false);
-  const assignee = p.assigned_to_both
-    ? "Both users"
-    : users.find((u) => u.id === p.assigned_to)?.name ?? "—";
-  const due = p.due_date_revised ?? p.due_date;
-  const overdue = !completed && due ? due < todayISODate() : false;
-
-  async function saveProgress(): Promise<void> {
-    const n = Number(pct);
-    if (!Number.isFinite(n) || n < 0 || n > 100) return onError("Progress must be 0–100.");
-    setBusy(true);
-    try {
-      await updatePriorityProgress(p.id, Math.round(n));
-      onChanged("Progress updated.");
-    } catch (e) {
-      onError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function complete(): Promise<void> {
-    const note = window.prompt("Completion note (optional):", "") ?? null;
-    setBusy(true);
-    try {
-      await completePriority(p.id, note && note.trim() !== "" ? note.trim() : null);
-      onChanged("Priority completed.");
-    } catch (e) {
-      onError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const progress = p.progress_pct ?? 0;
-  return (
-    <li className={`${surface} p-4 ${completed ? "opacity-70" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-medium text-slate-900 dark:text-slate-100">{p.title}</h3>
-            <PriorityStateBadge p={p} />
-            {overdue ? (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">Overdue</span>
-            ) : null}
-          </div>
-          {p.description ? <p className="mt-1 text-sm text-slate-500">{p.description}</p> : null}
-          <p className="mt-1 text-xs text-slate-400">
-            {assignee} · due {due ?? "—"}
-            {p.due_date_revised ? " (revised)" : ""}
-            {completed && p.completion_note ? ` · ${p.completion_note}` : ""}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} />
-        </div>
-        <span className="w-10 text-right text-xs font-medium text-slate-500">{progress}%</span>
-      </div>
-
-      {canEdit && !completed ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="5"
-            className={`${inputClass} w-24`}
-            value={pct}
-            onChange={(e) => setPct(e.target.value)}
-            onWheel={(e) => e.currentTarget.blur()}
-          />
-          <button type="button" onClick={() => void saveProgress()} disabled={busy} className={btnSmall}>
-            Save progress
-          </button>
-          <button type="button" onClick={() => void complete()} disabled={busy} className={btnSecondary}>
-            Mark complete
-          </button>
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-function PrioritiesPanel({
-  priorities,
-  users,
-  profile,
-  managerView,
-  onAdd,
-  onChanged,
-  onError,
-}: {
-  priorities: Priority[];
-  users: AssignableUser[];
-  profile: UserProfile;
-  managerView: boolean;
-  onAdd: () => void;
-  onChanged: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const sorted = useMemo(() => {
-    const rank = (p: Priority) => (priorityState(p) === "completed" ? 1 : 0);
-    return [...priorities].sort(
-      (a, b) => rank(a) - rank(b) || (a.due_date_revised ?? a.due_date).localeCompare(b.due_date_revised ?? b.due_date)
-    );
-  }, [priorities]);
-
-  function canEdit(p: Priority): boolean {
-    return managerView || p.created_by === profile.id || p.assigned_to === profile.id || p.assigned_to_both === true;
-  }
-
-  return (
-    <section className="mb-8">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Priorities
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-            {priorities.filter((p) => priorityState(p) !== "completed").length}
-          </span>
-        </h2>
-        <button type="button" onClick={onAdd} className={btnSmall}>+ Add priority</button>
-      </div>
-      {sorted.length === 0 ? (
-        <div className={`${surface} p-6 text-center text-sm text-slate-500`}>
-          No priorities yet. {managerView ? "Add one and assign it to a user (or both)." : "Add a priority for yourself, or your manager can assign one."}
-        </div>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {sorted.map((p) => (
-            <PriorityCard key={p.id} p={p} users={users} canEdit={canEdit(p)} onChanged={onChanged} onError={onError} />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 /* ------------------------------ Work Log ------------------------------- */
 
 function WorkLogPanel({
@@ -712,22 +436,14 @@ function ChecklistContent() {
   const { profile } = useAuth();
 
   const [tasks, setTasks] = useState<DailyTaskWithDefinition[]>([]);
-  const [priorities, setPriorities] = useState<Priority[]>([]);
-  const [users, setUsers] = useState<AssignableUser[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [userNames, setUserNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [showAddPriority, setShowAddPriority] = useState(false);
 
   const profileId = profile?.id ?? null;
-
-  const reloadPriorities = useCallback(async () => {
-    if (!profile) return;
-    setPriorities(await fetchPriorities(profile));
-  }, [profileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -750,17 +466,14 @@ function ChecklistContent() {
       setError(errorMessage(fetchError));
     }
 
-    // Priorities, assignable users, and the work-log submissions are all
-    // fail-soft (empty until the RLS policies in CHECKLIST-PRIORITIES-SETUP.md
-    // are applied) — they never block the checklist itself.
-    const [prio, userList, subs] = await Promise.all([
-      fetchPriorities(profile),
-      fetchAssignableUsers(),
+    // Work-log submissions + names are fail-soft (empty until the submissions
+    // read policy is applied) — they never block the checklist itself.
+    const [subs, names] = await Promise.all([
       fetchSubmissionsForTasks(taskRows.map((t) => t.id)),
+      fetchUserNames(),
     ]);
-    setPriorities(prio);
-    setUsers(userList);
     setSubmissions(subs);
+    setUserNames(names);
 
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -785,11 +498,10 @@ function ChecklistContent() {
   }
 
   const userNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const u of users) m.set(u.id, u.name);
+    const m = new Map<string, string>(userNames);
     if (profile) m.set(profile.id, profile.full_name ?? profile.email ?? "You");
     return m;
-  }, [users, profile]);
+  }, [userNames, profile]);
 
   const taskTitleById = useMemo(() => {
     const m = new Map<string, string>();
@@ -822,22 +534,9 @@ function ChecklistContent() {
     return `submitted ${time}${who ? ` by ${who}` : ""} — ${what}`;
   }
 
-  function handlePriorityChanged(message: string) {
-    setActionError(null);
-    setBanner(message);
-    void reloadPriorities();
-  }
-
   return (
     <div>
       <PageHeader title="Today's Checklist" subtitle={todayLabel()} />
-
-      {banner ? (
-        <div className="mb-4 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-          <span>{banner}</span>
-          <button type="button" onClick={() => setBanner(null)} className="ml-3 text-xs underline">Dismiss</button>
-        </div>
-      ) : null}
 
       {actionError ? (
         <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
@@ -849,51 +548,31 @@ function ChecklistContent() {
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>
           Loading checklist…
         </div>
+      ) : error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          <button type="button" onClick={() => void load()} className={`${btnSecondary} mt-3`}>Retry</button>
+        </div>
+      ) : total === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+          <p className="text-sm text-slate-500">No tasks found for today.</p>
+        </div>
       ) : (
         <>
-          <PrioritiesPanel
-            priorities={priorities}
-            users={users}
-            profile={profile}
-            managerView={managerView}
-            onAdd={() => { setBanner(null); setShowAddPriority(true); }}
-            onChanged={handlePriorityChanged}
-            onError={(m) => setActionError(m)}
-          />
-
-          <section className="mb-2">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Today&apos;s Tasks
-            </h2>
-            {error ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
-                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-                <button type="button" onClick={() => void load()} className={`${btnSecondary} mt-3`}>Retry</button>
-              </div>
-            ) : total === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-                <p className="text-sm text-slate-500">No tasks found for today.</p>
-              </div>
-            ) : (
-              <>
-                <ProgressBar done={done} total={total} />
-                <ul className="flex flex-col gap-3">
-                  {tasks.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      profile={profile}
-                      isManagerView={managerView}
-                      submitting={submittingId === task.id}
-                      submittedLine={submittedLineFor(task.id)}
-                      onSubmit={handleSubmit}
-                    />
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
-
+          <ProgressBar done={done} total={total} />
+          <ul className="flex flex-col gap-3">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                profile={profile}
+                isManagerView={managerView}
+                submitting={submittingId === task.id}
+                submittedLine={submittedLineFor(task.id)}
+                onSubmit={handleSubmit}
+              />
+            ))}
+          </ul>
           <WorkLogPanel
             submissions={submissions}
             taskTitleById={taskTitleById}
@@ -901,16 +580,6 @@ function ChecklistContent() {
           />
         </>
       )}
-
-      {showAddPriority ? (
-        <CreatePriorityModal
-          profile={profile}
-          managerView={managerView}
-          users={users}
-          onClose={() => setShowAddPriority(false)}
-          onSaved={(m) => { setShowAddPriority(false); handlePriorityChanged(m); }}
-        />
-      ) : null}
     </div>
   );
 }

@@ -117,6 +117,14 @@ export function ActionsIcon(props: IconProps) {
   );
 }
 
+export function PrioritiesIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M12 3l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.2L6.6 19l1.3-6L3.4 9.2l6-.6L12 3Z" />
+    </svg>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>

@@ -1,40 +1,60 @@
 import { hasCapability, isManager } from "@/lib/permissions";
 import { supabase } from "@/lib/supabaseClient";
-import type { Tables, TablesInsert, TablesUpdate, UserProfile } from "@/lib/types";
+import type { Tables, UserProfile } from "@/lib/types";
+
+/** A priority row. `priority_level` + `notes` are columns added by
+ *  CHECKLIST-PRIORITIES-SETUP / PRIORITIES-SETUP and aren't in the generated
+ *  types yet, so we extend the base row type. */
+export type Priority = Tables<"priorities"> & {
+  priority_level: string | null;
+  notes: string | null;
+};
+
+export type PriorityLevel = "P1" | "P2" | "P3";
+export type PriorityStatus = "open" | "in_progress" | "completed";
+/** What the UI shows (overdue is derived, never stored). */
+export type PriorityDisplayStatus = PriorityStatus | "overdue";
 
 export interface AssignableUser {
   id: string;
   name: string;
+  email: string;
 }
-
-/** Users who hold the `checklist` capability — the valid assignees for a
- *  priority. Fail-soft: returns [] on error (e.g. before a users read policy). */
-export async function fetchAssignableUsers(): Promise<AssignableUser[]> {
-  const { data, error } = await supabase.from("users").select("id, full_name, email");
-  if (error) return [];
-  return (data ?? [])
-    .filter((u) => hasCapability({ id: u.id } as unknown as UserProfile, "checklist"))
-    .map((u) => ({ id: u.id, name: u.full_name ?? u.email ?? u.id }));
-}
-
-/** A row in the `priorities` table (manager/user-assigned objectives). */
-export type Priority = Tables<"priorities">;
 
 export interface CreatePriorityInput {
   createdBy: string;
   title: string;
   description: string | null;
-  /** A specific user id, or null when `assignedToBoth` is true. */
-  assignedTo: string | null;
+  assignedTo: string | null; // a user id, or null when assignedToBoth
   assignedToBoth: boolean;
-  startDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
+  priorityLevel: PriorityLevel;
+  notes: string | null;
+}
+
+export interface UpdatePriorityPatch {
+  progressPct?: number;
+  status?: PriorityStatus;
+  notes?: string | null;
+}
+
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Derived display status: completed → overdue (past due, not done) → stored. */
+export function priorityDisplayStatus(p: Priority): PriorityDisplayStatus {
+  if (p.completed_at || p.status === "completed") return "completed";
+  const due = p.due_date_revised ?? p.due_date;
+  if (due && due < todayIso()) return "overdue";
+  if (p.status === "in_progress" || (p.progress_pct ?? 0) > 0) return "in_progress";
+  return "open";
 }
 
 /**
- * Fetch priorities the profile may see. RLS is the real gate; we also scope the
- * query for non-managers (own / assigned / assigned-to-both). Fail-soft: returns
- * [] on error (e.g. before RLS policies are applied) so the page never breaks.
+ * Fetch priorities the profile may see. RLS is the gate; we also scope the
+ * query for non-managers. Fail-soft: [] on error.
  */
 export async function fetchPriorities(profile: UserProfile): Promise<Priority[]> {
   let query = supabase.from("priorities").select("*");
@@ -45,64 +65,101 @@ export async function fetchPriorities(profile: UserProfile): Promise<Priority[]>
   }
   const { data, error } = await query.order("due_date", { ascending: true });
   if (error) return [];
-  return data ?? [];
+  return (data ?? []) as unknown as Priority[];
 }
 
-/** Create a priority. `status` is left to the DB default; completion is tracked
- *  via `completed_at`/`progress_pct` (avoids assuming the status CHECK values). */
-export async function createPriority(input: CreatePriorityInput): Promise<void> {
-  const payload: TablesInsert<"priorities"> = {
+/** Create a priority; returns the created row (for the email notification). */
+export async function createPriority(input: CreatePriorityInput): Promise<Priority> {
+  const payload: Record<string, unknown> = {
     created_by: input.createdBy,
     title: input.title,
     description: input.description,
     assigned_to: input.assignedToBoth ? null : input.assignedTo,
     assigned_to_both: input.assignedToBoth,
-    start_date: input.startDate,
+    start_date: todayIso(),
     due_date: input.dueDate,
+    priority_level: input.priorityLevel,
+    notes: input.notes,
+    status: "open",
+    progress_pct: 0,
   };
-  const { error } = await supabase.from("priorities").insert(payload);
-  if (error) throw new Error(error.message);
-}
-
-/** Update progress (0–100) and optionally a revised due date. */
-export async function updatePriorityProgress(
-  id: string,
-  progressPct: number,
-  dueDateRevised?: string | null
-): Promise<void> {
-  const payload: TablesUpdate<"priorities"> = { progress_pct: progressPct };
-  if (dueDateRevised !== undefined) payload.due_date_revised = dueDateRevised;
   const { data, error } = await supabase
     .from("priorities")
-    .update(payload)
+    .insert(payload as never)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as unknown as Priority;
+}
+
+/** Update progress / status / notes. Completing sets completed_at + 100%. */
+export async function updatePriority(id: string, patch: UpdatePriorityPatch): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (patch.progressPct !== undefined) payload.progress_pct = Math.round(patch.progressPct);
+  if (patch.notes !== undefined) payload.notes = patch.notes;
+  if (patch.status !== undefined) {
+    payload.status = patch.status;
+    if (patch.status === "completed") {
+      payload.completed_at = new Date().toISOString();
+      payload.progress_pct = 100;
+    } else if (patch.status === "in_progress" && (patch.progressPct ?? 0) === 0) {
+      // leave progress as-is
+    }
+  }
+  const { data, error } = await supabase
+    .from("priorities")
+    .update(payload as never)
     .eq("id", id)
     .select("id");
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Update affected no rows.");
 }
 
-/** Mark a priority complete (sets completed_at, progress 100, optional note). */
-export async function completePriority(
-  id: string,
-  completionNote: string | null
-): Promise<void> {
-  const payload: TablesUpdate<"priorities"> = {
-    completed_at: new Date().toISOString(),
-    progress_pct: 100,
-    completion_note: completionNote,
-  };
-  const { data, error } = await supabase
-    .from("priorities")
-    .update(payload)
-    .eq("id", id)
-    .select("id");
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("Update affected no rows.");
+/** Checklist-capable, non-manager users — the valid assignees (Aaron, Maricel).
+ *  Fail-soft: [] on error. */
+export async function fetchAssignableUsers(): Promise<AssignableUser[]> {
+  const { data, error } = await supabase.from("users").select("id, full_name, email, role");
+  if (error) return [];
+  return (data ?? [])
+    .filter((u) => {
+      const p = { id: u.id, role: u.role } as unknown as UserProfile;
+      return hasCapability(p, "checklist") && !isManager(p);
+    })
+    .map((u) => ({ id: u.id, name: u.full_name ?? u.email ?? u.id, email: u.email ?? "" }));
 }
 
-/** Derived display status (the stored `status` enum is backend-owned). */
-export function priorityState(p: Priority): "completed" | "in_progress" | "open" {
-  if (p.completed_at) return "completed";
-  if ((p.progress_pct ?? 0) > 0) return "in_progress";
-  return "open";
+/** Send a notification email via the manager-gated Graph route. Fail-soft:
+ *  returns {ok:false,error} instead of throwing, so the priority stays saved. */
+export async function sendNotification(
+  to: string[],
+  subject: string,
+  html: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { ok: false, error: "Not signed in." };
+    const res = await fetch("/api/priorities/notify", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ to, subject, html }),
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    return res.ok && j.ok ? { ok: true } : { ok: false, error: j.error ?? `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Email request failed." };
+  }
+}
+
+/** id → {name,email} for every user (display names; fail-soft). */
+export async function fetchUserDirectory(): Promise<Map<string, AssignableUser>> {
+  const map = new Map<string, AssignableUser>();
+  const { data, error } = await supabase.from("users").select("id, full_name, email");
+  if (error) return map;
+  for (const u of data ?? []) {
+    map.set(u.id, { id: u.id, name: u.full_name ?? u.email ?? u.id, email: u.email ?? "" });
+  }
+  return map;
 }
