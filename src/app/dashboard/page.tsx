@@ -13,12 +13,14 @@ import {
   ActionsIcon,
   ChecklistIcon,
   CocobluIcon,
+  LpTrackerIcon,
   PrioritiesIcon,
 } from "@/components/icons";
 import { btnSecondary, surface } from "@/components/ui";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchCocobluAgeing } from "@/lib/cocoblu";
+import { computeLpSummary, computePriceAlerts, fetchLpItems } from "@/lib/lp";
 import {
   fetchBreachCountSince,
   fetchChecklistForDate,
@@ -30,6 +32,7 @@ import {
   canViewChecklist,
   canViewCocoblu,
   canViewFinance,
+  canViewLpTracker,
   isManager,
 } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
@@ -82,7 +85,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 
   useEffect(() => {
     let active = true;
-    const order = ["checklist", "priorities", "cocoblu", "amazon"];
+    const order = ["checklist", "priorities", "cocoblu", "lp", "amazon"];
 
     (async () => {
       const result: KpiGroup[] = [];
@@ -199,6 +202,35 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
                     value: s.warningRecords.toLocaleString(),
                     tone:
                       s.warningRecords > 0 ? "text-orange-600 dark:text-orange-400" : undefined,
+                  },
+                ],
+              });
+            } catch {
+              /* skip module on error */
+            }
+          })()
+        );
+      }
+
+      if (canViewLpTracker(profile)) {
+        jobs.push(
+          (async () => {
+            try {
+              const items = await fetchLpItems();
+              const s = computeLpSummary(items);
+              const alertCount = computePriceAlerts(items).size;
+              result.push({
+                key: "lp",
+                title: "LP Tracker",
+                href: "/lp",
+                kpis: [
+                  { label: "Open LPs", value: s.openLpCount.toLocaleString() },
+                  { label: "Qty In Hand", value: s.totalRemainingQty.toLocaleString() },
+                  { label: "Value In Hand", value: formatAED(s.totalRemainingValue) },
+                  {
+                    label: "Aged 90+ / Alerts",
+                    value: `${s.aged90Lines.toLocaleString()} / ${alertCount.toLocaleString()}`,
+                    tone: s.aged90Lines > 0 ? "text-red-600 dark:text-red-400" : undefined,
                   },
                 ],
               });
@@ -342,6 +374,17 @@ function DashboardContent() {
       accent:
         "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",
       show: canViewCocoblu(profile),
+      comingSoon: false,
+    },
+    {
+      key: "lp",
+      title: "LP Tracker",
+      description: "Local purchase stock — ageing, draw-down, and price alerts.",
+      href: "/lp",
+      icon: LpTrackerIcon,
+      accent:
+        "bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-300",
+      show: canViewLpTracker(profile),
       comingSoon: false,
     },
     {
