@@ -12,8 +12,8 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Item | State |
 |---|---|
 | Live URL | https://techniline-ops-app.vercel.app — serving |
-| Production commit | **`a2f3cc2`** ("Add KPI dashboard") — current with `origin/main`; deployed via Vercel CLI. |
-| `origin/main` | **`a2f3cc2`** — in sync. |
+| Production commit | **`5d130e9`** ("Priorities module + handover") — current with `origin/main`; deployed via Vercel CLI. |
+| `origin/main` | **`5d130e9`** — in sync. |
 | Live routes | `/login` · `/dashboard` (+ KPI strip) · `/checklist` · `/cocoblu` (+ PDF capture) · `/amazon-actions` · `/api/amazon-email-ingest` · `/api/amazon-ingest-poll` (401 w/o secret) · `/api/cocoblu/parse` (401 w/o auth) |
 | Amazon ingestion | **LIVE & writing.** Daily Vercel cron `0 9 * * *` (48h lookback). 14-day 2026 backfill complete (237 Amazon emails, 0 errors). |
 | Cocoblu PDF capture | **LIVE.** Free built-in parser by default; auto-upgrades to AI if `ANTHROPIC_API_KEY` set. |
@@ -162,8 +162,8 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Data-accuracy check on the ingestion go-live:** run the verification SQL in [GO-LIVE.md](GO-LIVE.md) — especially the **duplicate `ref_number`** query (must return zero) — to confirm the ingester didn't duplicate backend-fed rows.
 2. **Remove Aaron's duplicate checklist** definition (diagnostic + fix SQL in [GO-LIVE.md](GO-LIVE.md)).
 3. **Monitor the first daily cron runs** (`ingest_log`, `expected_actions`); optionally add a least-privilege Exchange Application Access Policy for the two mailboxes.
-4. **Run the Priorities/Checklist SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md): (a) add `priority_level` + `notes` columns to `priorities`; (b) RLS for `priorities`/`submissions`/`breach_log`/`users`. Switches on the Priorities module, Work Log, and breach KPI (built + deployed, empty until applied). Confirm `current_user_role()` behaves as assumed.
-5. **Enable priority emails** — grant the Azure app **Mail.Send (Application)** + admin consent (optionally set `PRIORITY_MAIL_FROM`). Until then priorities save and just show an "email failed" warning.
+4. **Run the Priorities/Checklist SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md). **RLS for `priorities`/`submissions`/`breach_log`/`users` = ✅ run** (2026-06-08). **Still owed: §0 `ALTER TABLE priorities ADD priority_level, notes`** (added to the doc after the RLS was run — the Priorities module needs these columns). Confirm `current_user_role()` behaves as assumed.
+5. ~~**Enable priority emails**~~ ✅ DONE 2026-06-08 — Azure app granted **Mail.Send (Application)** + admin consent (sender defaults to `vihan@techniline.org`; set `PRIORITY_MAIL_FROM` to change). Pending a live send test. If a send 403s, check for an Exchange Application Access Policy restricting the sender mailbox.
 
 **Optional / when needed:**
 4. **AI invoice capture:** add `ANTHROPIC_API_KEY` in Vercel → Cocoblu upgrades from free parser to Sonnet 4.6 automatically.
