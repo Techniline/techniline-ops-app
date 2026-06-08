@@ -46,13 +46,45 @@ export async function uploadInvoicePdf(file: File): Promise<string> {
   return path;
 }
 
-/** A short-lived signed URL for viewing a stored invoice PDF. */
-export async function invoicePdfUrl(path: string): Promise<string | null> {
+/**
+ * A short-lived signed URL for a stored invoice PDF. Pass `downloadName` to
+ * force a download (Content-Disposition: attachment) instead of inline view.
+ */
+export async function invoicePdfUrl(
+  path: string,
+  downloadName?: string
+): Promise<string | null> {
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(path, 3600);
+    .createSignedUrl(path, 3600, downloadName ? { download: downloadName } : undefined);
   if (error) return null;
   return data?.signedUrl ?? null;
+}
+
+export interface StoredInvoice {
+  name: string;
+  path: string;
+  createdAt: string | null;
+  sizeBytes: number | null;
+}
+
+/** List all stored invoice PDFs (newest first) for the browse/download UI. */
+export async function listInvoicePdfs(): Promise<StoredInvoice[]> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .list("invoices", {
+      limit: 1000,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .filter((f) => !!f.name && !f.name.endsWith("/"))
+    .map((f) => ({
+      name: f.name,
+      path: `invoices/${f.name}`,
+      createdAt: f.created_at ?? null,
+      sizeBytes: (f.metadata as { size?: number } | null)?.size ?? null,
+    }));
 }
 
 export interface VerifiedLine {
