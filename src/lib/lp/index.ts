@@ -10,6 +10,7 @@ export {
   recordSale,
   fetchSaleHistory,
   updateLpItem,
+  setGoodsReceivedDate,
   type EntityOption,
   type LpSaleRow,
   type StoredLpPdf,
@@ -21,10 +22,14 @@ export {
 
 export {
   fetchLpItemsWindow,
+  fetchLpOverview,
+  fetchLpLinesForOrder,
+  fetchAllOpenLpItems,
   fetchVendors,
   fetchSalesReport,
   computePriceAlerts,
   type LpItemRow,
+  type LpOverviewRow,
   type LpStatusFilter,
   type LpWindowOpts,
   type PriceAlert,
@@ -33,6 +38,8 @@ export {
 
 export {
   computeLpSummary,
+  overviewKpis,
+  vendorRollup,
   currentViewReport,
   stockInHandReport,
   vendorReport,
@@ -40,4 +47,6 @@ export {
   entitySoldTotals,
   entityLabel,
   type LpSummary,
+  type OverviewKpis,
+  type VendorRollupRow,
 } from "./summary";

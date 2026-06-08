@@ -775,6 +775,7 @@ export type Database = {
           consignee_trn: string | null
           created_at: string
           created_by: string | null
+          goods_received_date: string | null
           id: string
           lp_date: string
           lp_number: string
@@ -794,6 +795,7 @@ export type Database = {
           consignee_trn?: string | null
           created_at?: string
           created_by?: string | null
+          goods_received_date?: string | null
           id?: string
           lp_date: string
           lp_number: string
@@ -813,6 +815,7 @@ export type Database = {
           consignee_trn?: string | null
           created_at?: string
           created_by?: string | null
+          goods_received_date?: string | null
           id?: string
           lp_date?: string
           lp_number?: string
@@ -1503,6 +1506,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           disc_amount: number | null
+          goods_received_date: string | null
           id: string | null
           line_number: number | null
           lp_date: string | null
@@ -1528,6 +1532,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           disc_amount?: number | null
+          goods_received_date?: never
           id?: string | null
           line_number?: number | null
           lp_date?: never
@@ -1553,6 +1558,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           disc_amount?: number | null
+          goods_received_date?: never
           id?: string | null
           line_number?: number | null
           lp_date?: never
@@ -1569,6 +1575,56 @@ export type Database = {
           unit_price?: number | null
           vendor_name?: never
           vendor_trn?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_items_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "lp_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_orders_overview: {
+        Row: {
+          ageing_days: number | null
+          ageing_status: string | null
+          goods_received_date: string | null
+          line_count: number | null
+          lp_date: string | null
+          lp_id: string | null
+          lp_number: string | null
+          open_line_count: number | null
+          total_remaining_qty: number | null
+          total_remaining_value: number | null
+          vendor_name: string | null
+        }
+        Insert: {
+          ageing_days?: never
+          ageing_status?: never
+          goods_received_date?: never
+          line_count?: never
+          lp_date?: never
+          lp_id?: string | null
+          lp_number?: never
+          open_line_count?: never
+          total_remaining_qty?: never
+          total_remaining_value?: never
+          vendor_name?: never
+        }
+        Update: {
+          ageing_days?: never
+          ageing_status?: never
+          goods_received_date?: never
+          line_count?: never
+          lp_date?: never
+          lp_id?: string | null
+          lp_number?: never
+          open_line_count?: never
+          total_remaining_qty?: never
+          total_remaining_value?: never
+          vendor_name?: never
         }
         Relationships: [
           {

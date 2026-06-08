@@ -37,6 +37,53 @@ export async function fetchLpItemsWindow(opts: LpWindowOpts = {}): Promise<LpIte
   return data ?? [];
 }
 
+/** One row per LPO from `lp_orders_overview` (the always-on ageing rollup). */
+export type LpOverviewRow = Tables<"lp_orders_overview">;
+
+/**
+ * Fetch the per-LPO ageing overview (cheap — one row per LPO, no line scan),
+ * most-aged first. Pages internally so the count is never capped at 1000.
+ */
+export async function fetchLpOverview(): Promise<LpOverviewRow[]> {
+  const out: LpOverviewRow[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("lp_orders_overview")
+      .select("*")
+      .order("ageing_days", { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
+/** All line items for one LPO (for expanding an overview row). */
+export async function fetchLpLinesForOrder(lpId: string): Promise<LpItemRow[]> {
+  const { data, error } = await supabase
+    .from("lp_items_view")
+    .select("*")
+    .eq("lp_id", lpId)
+    .order("line_number", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** All open line items, paged internally (for accurate dashboard aggregation). */
+export async function fetchAllOpenLpItems(): Promise<LpItemRow[]> {
+  const out: LpItemRow[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; offset < 20000; offset += PAGE) {
+    const batch = await fetchLpItemsWindow({ status: "open", limit: PAGE, offset });
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
 /** Distinct vendor names (for the report vendor dropdown), alphabetical. */
 export async function fetchVendors(): Promise<string[]> {
   const { data, error } = await supabase

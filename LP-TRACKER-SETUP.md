@@ -20,6 +20,7 @@ create table if not exists public.lp_orders (
   id                uuid primary key default gen_random_uuid(),
   lp_number         text not null unique,
   lp_date           date not null,
+  goods_received_date date,                -- when stock physically arrived; ageing counts from here (falls back to lp_date)
   vendor_name       text not null,
   vendor_trn        text,
   consignee_trn     text,
@@ -77,6 +78,9 @@ create index if not exists lp_sales_item_idx on public.lp_sales(lp_item_id);
 
 ## 2. View — `lp_items_view` (computed remaining + ageing)
 
+Ageing counts from **Goods Received Date** when set, else the LP date. Safe to re-run as an upgrade
+(it `create or replace`s the view; the `goods_received_date` column above must exist first).
+
 ```sql
 create or replace view public.lp_items_view as
 select
@@ -84,6 +88,7 @@ select
   i.lp_id,
   o.lp_number,
   o.lp_date,
+  o.goods_received_date,
   o.vendor_name,
   o.vendor_trn,
   o.pdf_url,
@@ -100,11 +105,11 @@ select
   i.disc_amount,
   i.qty_adjust_comment,
   i.status,
-  (current_date - o.lp_date)                       as ageing_days,
+  (current_date - coalesce(o.goods_received_date, o.lp_date)) as ageing_days,
   case
-    when (current_date - o.lp_date) <= 30 then 'safe'
-    when (current_date - o.lp_date) <= 60 then 'monitor'
-    when (current_date - o.lp_date) <= 90 then 'warning'
+    when (current_date - coalesce(o.goods_received_date, o.lp_date)) <= 30 then 'safe'
+    when (current_date - coalesce(o.goods_received_date, o.lp_date)) <= 60 then 'monitor'
+    when (current_date - coalesce(o.goods_received_date, o.lp_date)) <= 90 then 'warning'
     else 'action_required'
   end                                              as ageing_status,
   i.created_at
@@ -116,6 +121,38 @@ left join (
   group by lp_item_id
 ) s on s.lp_item_id = i.id;
 ```
+
+## 2b. View — `lp_orders_overview` (one row per LPO; the always-on ageing feed)
+
+A lightweight per-LPO rollup so the LP Tracker overview shows ageing at the LPO + vendor level
+**without loading any line data**.
+
+```sql
+create or replace view public.lp_orders_overview as
+select
+  v.lp_id,
+  max(v.lp_number)                                  as lp_number,
+  max(v.vendor_name)                                as vendor_name,
+  max(v.lp_date)                                    as lp_date,
+  max(v.goods_received_date)                        as goods_received_date,
+  max(v.ageing_days)                                as ageing_days,
+  max(v.ageing_status)                              as ageing_status,
+  count(*)                                          as line_count,
+  count(*) filter (where v.qty_remaining > 0)       as open_line_count,
+  coalesce(sum(v.qty_remaining), 0)                 as total_remaining_qty,
+  coalesce(sum(v.qty_remaining * coalesce(v.unit_price, 0)), 0) as total_remaining_value
+from public.lp_items_view v
+group by v.lp_id;
+```
+(All lines of an LPO share the order's ageing, so `max()` returns the LPO's value. The view inherits
+the base-table RLS — managers + Maricel.)
+
+> **Upgrading an existing install** (you already ran §1–§4 earlier) — run just this, in order:
+> ```sql
+> alter table public.lp_orders add column if not exists goods_received_date date;
+> -- then re-run the §2 `create or replace view public.lp_items_view ...`
+> -- then run the §2b `create or replace view public.lp_orders_overview ...`
+> ```
 
 ## 3. RLS (managers + Maricel)
 

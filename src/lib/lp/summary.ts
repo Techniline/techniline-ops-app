@@ -1,7 +1,6 @@
 import type { Cell, ReportTable } from "@/lib/export";
 
-import type { SaleReportRow } from "./queries";
-import type { LpItemRow } from "./queries";
+import type { LpItemRow, LpOverviewRow, SaleReportRow } from "./queries";
 
 export interface LpSummary {
   openLines: number; // lines with stock remaining
@@ -39,6 +38,66 @@ export function computeLpSummary(rows: LpItemRow[]): LpSummary {
 
 function fmt(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* --------------------- Overview (per-LPO rollup) KPIs ------------------- */
+
+export interface OverviewKpis {
+  openLps: number;
+  openLines: number;
+  totalRemainingQty: number;
+  totalRemainingValue: number;
+  aged90Lps: number;
+}
+
+/** KPI tiles computed from the per-LPO overview feed (covers all stock). */
+export function overviewKpis(rows: LpOverviewRow[]): OverviewKpis {
+  let openLps = 0;
+  let openLines = 0;
+  let totalRemainingQty = 0;
+  let totalRemainingValue = 0;
+  let aged90Lps = 0;
+  for (const r of rows) {
+    const rem = r.total_remaining_qty ?? 0;
+    if (rem > 0) {
+      openLps += 1;
+      openLines += r.open_line_count ?? 0;
+      totalRemainingQty += rem;
+      totalRemainingValue += r.total_remaining_value ?? 0;
+      if ((r.ageing_days ?? 0) >= 90) aged90Lps += 1;
+    }
+  }
+  return { openLps, openLines, totalRemainingQty, totalRemainingValue, aged90Lps };
+}
+
+export interface VendorRollupRow {
+  vendor: string;
+  lpCount: number;
+  openLpCount: number;
+  totalRemainingQty: number;
+  totalRemainingValue: number;
+  oldestAgeingDays: number;
+}
+
+/** Group the per-LPO overview by vendor → totals + oldest open ageing. */
+export function vendorRollup(rows: LpOverviewRow[]): VendorRollupRow[] {
+  const map = new Map<string, VendorRollupRow>();
+  for (const r of rows) {
+    const vendor = r.vendor_name ?? "—";
+    const agg =
+      map.get(vendor) ??
+      { vendor, lpCount: 0, openLpCount: 0, totalRemainingQty: 0, totalRemainingValue: 0, oldestAgeingDays: 0 };
+    agg.lpCount += 1;
+    const rem = r.total_remaining_qty ?? 0;
+    if (rem > 0) {
+      agg.openLpCount += 1;
+      agg.totalRemainingQty += rem;
+      agg.totalRemainingValue += r.total_remaining_value ?? 0;
+      agg.oldestAgeingDays = Math.max(agg.oldestAgeingDays, r.ageing_days ?? 0);
+    }
+    map.set(vendor, agg);
+  }
+  return [...map.values()].sort((a, b) => b.totalRemainingValue - a.totalRemainingValue);
 }
 
 /** Resolve the display name for a sale's entity ("Other" → typed name). */

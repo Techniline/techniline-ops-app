@@ -20,29 +20,34 @@ import {
 import { isManager } from "@/lib/permissions";
 import {
   ENTITY_OPTIONS,
-  computeLpSummary,
   computePriceAlerts,
   currentViewReport,
   entitySoldDetail,
   entitySoldTotals,
   fetchLpItemsWindow,
+  fetchLpLinesForOrder,
+  fetchLpOverview,
   fetchSaleHistory,
   fetchSalesReport,
   fetchVendors,
   listLpPdfs,
   lpPdfUrl,
+  overviewKpis,
   parseLpViaApi,
   recordSale,
   saveVerifiedLp,
+  setGoodsReceivedDate,
   stockInHandReport,
   updateLpItem,
   vendorReport,
+  vendorRollup,
   type CaptureEngine,
   type EntityOption,
   type LpDraft,
   type LpItemRow,
-  type LpSaleRow,
+  type LpOverviewRow,
   type LpStatusFilter,
+  type LpSaleRow,
   type PriceAlert,
   type StoredLpPdf,
   type VerifiedLpLine,
@@ -196,6 +201,7 @@ function VerifyLpModal({
 }) {
   const [lpNumber, setLpNumber] = useState(draft.lpNumber ?? "");
   const [lpDate, setLpDate] = useState(draft.lpDate ?? "");
+  const [goodsReceived, setGoodsReceived] = useState(draft.lpDate ?? "");
   const [vendorName, setVendorName] = useState(draft.vendorName ?? "");
   const [vendorTrn, setVendorTrn] = useState(draft.vendorTrn ?? "");
   const [terms, setTerms] = useState(draft.terms ?? "");
@@ -258,6 +264,7 @@ function VerifyLpModal({
       const count = await saveVerifiedLp({
         lpNumber: lpNumber.trim(),
         lpDate,
+        goodsReceivedDate: goodsReceived || lpDate,
         vendorName: vendorName.trim(),
         vendorTrn: vendorTrn.trim() || null,
         consigneeTrn: draft.consigneeTrn,
@@ -294,6 +301,9 @@ function VerifyLpModal({
             </FormRow>
             <FormRow label="LP Date *">
               <input type="date" className={inputClass} value={lpDate} onChange={(e) => setLpDate(e.target.value)} required />
+            </FormRow>
+            <FormRow label="Goods Received Date">
+              <input type="date" className={inputClass} value={goodsReceived} onChange={(e) => setGoodsReceived(e.target.value)} />
             </FormRow>
             <FormRow label="Terms">
               <input className={inputClass} value={terms} onChange={(e) => setTerms(e.target.value)} />
@@ -675,30 +685,6 @@ function LpPdfsModal({ onClose }: { onClose: () => void }) {
         <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
       </div>
     </ModalShell>
-  );
-}
-
-/* ------------------------------ Summary -------------------------------- */
-
-function SummaryCards({ rows, alertCount }: { rows: LpItemRow[]; alertCount: number }) {
-  const s = useMemo(() => computeLpSummary(rows), [rows]);
-  const cards: ReadonlyArray<{ label: string; value: string; tone?: string }> = [
-    { label: "Open LPs", value: s.openLpCount.toLocaleString() },
-    { label: "Open Lines", value: s.openLines.toLocaleString() },
-    { label: "Qty In Hand", value: s.totalRemainingQty.toLocaleString() },
-    { label: "Value In Hand (AED)", value: fmtCost(s.totalRemainingValue) },
-    { label: "Aged 90+ Lines", value: s.aged90Lines.toLocaleString(), tone: s.aged90Lines > 0 ? "text-red-600 dark:text-red-400" : undefined },
-    { label: "Price Alerts", value: alertCount.toLocaleString(), tone: alertCount > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
-  ];
-  return (
-    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {cards.map((card) => (
-        <div key={card.label} className={`${surface} p-4`}>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
-          <p className={`mt-1 text-2xl font-semibold ${card.tone ?? "text-slate-900 dark:text-slate-100"}`}>{card.value}</p>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1111,70 +1097,330 @@ function ReportsModal({
   );
 }
 
+/* --------------------- Goods Received Date modal ----------------------- */
+
+function SetGrnModal({
+  lp,
+  onClose,
+  onSaved,
+}: {
+  lp: LpOverviewRow;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [date, setDate] = useState(lp.goods_received_date ?? lp.lp_date ?? "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setErr(null);
+    if (!lp.lp_id) return setErr("Missing LPO id.");
+    setSaving(true);
+    try {
+      await setGoodsReceivedDate(lp.lp_id, date || null);
+      onSaved("Goods Received Date updated.");
+    } catch (e) {
+      setErr(errorMessage(e));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Goods Received Date" onClose={onClose}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <p className="text-sm text-slate-500">
+          {lp.lp_number} · {lp.vendor_name ?? "—"}. Ageing counts from this date (falls back to the LP date if cleared).
+        </p>
+        <FormRow label="Goods Received Date">
+          <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+        </FormRow>
+        {err ? <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p> : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
+          <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+/* ---------------------- Overview (always-on rollup) -------------------- */
+
+function OverviewKpiCards({ rows }: { rows: LpOverviewRow[] }) {
+  const k = useMemo(() => overviewKpis(rows), [rows]);
+  const cards: ReadonlyArray<{ label: string; value: string; tone?: string }> = [
+    { label: "Open LPs", value: k.openLps.toLocaleString() },
+    { label: "Open Lines", value: k.openLines.toLocaleString() },
+    { label: "Qty In Hand", value: k.totalRemainingQty.toLocaleString() },
+    { label: "Value In Hand (AED)", value: fmtCost(k.totalRemainingValue) },
+    { label: "Aged 90+ LPs", value: k.aged90Lps.toLocaleString(), tone: k.aged90Lps > 0 ? "text-red-600 dark:text-red-400" : undefined },
+  ];
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {cards.map((c) => (
+        <div key={c.label} className={`${surface} p-4`}>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
+          <p className={`mt-1 text-2xl font-semibold ${c.tone ?? "text-slate-900 dark:text-slate-100"}`}>{c.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LpoRow({
+  lp,
+  managerFlag,
+  onSetGrn,
+  onSale,
+  onEdit,
+}: {
+  lp: LpOverviewRow;
+  managerFlag: boolean;
+  onSetGrn: (lp: LpOverviewRow) => void;
+  onSale: (row: LpItemRow) => void;
+  onEdit: (row: LpItemRow) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [lines, setLines] = useState<LpItemRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const remaining = lp.total_remaining_qty ?? 0;
+
+  async function toggle(): Promise<void> {
+    const next = !open;
+    setOpen(next);
+    if (next && lines === null && lp.lp_id) {
+      try {
+        setLines(await fetchLpLinesForOrder(lp.lp_id));
+      } catch (e) {
+        setErr(errorMessage(e));
+      }
+    }
+  }
+
+  return (
+    <div className={`${surface} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+      >
+        <span className="font-medium text-slate-900 dark:text-slate-100">{dash(lp.lp_number)}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-600 dark:text-slate-300" title={lp.vendor_name ?? ""}>{dash(lp.vendor_name)}</span>
+        <span className="text-xs text-slate-400">LP {dash(lp.lp_date)} · GR {dash(lp.goods_received_date)}</span>
+        <AgeingBadge status={lp.ageing_status} />
+        <span className="text-xs text-slate-500">{fmtNum(lp.ageing_days)}d</span>
+        <span className="text-sm text-slate-700 dark:text-slate-300">{fmtNum(remaining)} left · AED {fmtCost(lp.total_remaining_value)}</span>
+        <span className="text-slate-400">{open ? "▾" : "▸"}</span>
+      </button>
+      {open ? (
+        <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 dark:border-slate-800/60 dark:bg-slate-800/20">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Lines ({lp.line_count ?? 0})</span>
+            <button type="button" onClick={() => onSetGrn(lp)} className={btnSmall}>Set Goods Received Date</button>
+          </div>
+          {err ? (
+            <p className="text-xs text-red-600">{err}</p>
+          ) : lines === null ? (
+            <p className="text-xs text-slate-400">Loading lines…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-400">
+                    <th className="py-1 pr-3">Model / SKU</th>
+                    <th className="py-1 pr-3">Brand</th>
+                    <th className="py-1 pr-3">Purch.</th>
+                    <th className="py-1 pr-3">Sold</th>
+                    <th className="py-1 pr-3">Remaining</th>
+                    <th className="py-1 pr-3">Unit Price</th>
+                    <th className="py-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => {
+                    const rem = l.qty_remaining ?? 0;
+                    return (
+                      <tr key={l.id ?? i} className="border-t border-slate-100 dark:border-slate-800/60">
+                        <td className="py-1.5 pr-3 text-slate-700 dark:text-slate-300">{dash(l.model_no ?? l.sku)}</td>
+                        <td className="py-1.5 pr-3 text-slate-500">{dash(l.brand)}</td>
+                        <td className="py-1.5 pr-3">{fmtNum(l.qty_purchased)}</td>
+                        <td className="py-1.5 pr-3">{fmtNum(l.qty_sold)}</td>
+                        <td className="py-1.5 pr-3 font-medium">{fmtNum(l.qty_remaining)}</td>
+                        <td className="py-1.5 pr-3">{fmtCost(l.unit_price)}</td>
+                        <td className="py-1.5">
+                          <div className="flex gap-2">
+                            <button type="button" disabled={!l.id || rem <= 0} onClick={() => onSale(l)} className={btnSmall}>Record sale</button>
+                            {managerFlag ? (
+                              <button type="button" disabled={!l.id} onClick={() => onEdit(l)} className={btnSmall}>Edit</button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OverviewSection({
+  rows,
+  managerFlag,
+  onSetGrn,
+  onSale,
+  onEdit,
+}: {
+  rows: LpOverviewRow[];
+  managerFlag: boolean;
+  onSetGrn: (lp: LpOverviewRow) => void;
+  onSale: (row: LpItemRow) => void;
+  onEdit: (row: LpItemRow) => void;
+}) {
+  const [byVendor, setByVendor] = useState(false);
+  const [openVendor, setOpenVendor] = useState<string | null>(null);
+  const vendors = useMemo(() => vendorRollup(rows), [rows]);
+
+  return (
+    <div>
+      <OverviewKpiCards rows={rows} />
+      <div className="mb-3 inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+        <button type="button" onClick={() => setByVendor(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By LPO</button>
+        <button type="button" onClick={() => setByVendor(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By Vendor</button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+          <p className="text-sm text-slate-500">No local purchases yet. Use Upload LP to add one.</p>
+        </div>
+      ) : byVendor ? (
+        <div className="flex flex-col gap-2">
+          {vendors.map((v) => (
+            <div key={v.vendor} className={`${surface} overflow-hidden`}>
+              <button
+                type="button"
+                onClick={() => setOpenVendor(openVendor === v.vendor ? null : v.vendor)}
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium text-slate-900 dark:text-slate-100">{v.vendor}</span>
+                <span className="text-xs text-slate-500">{v.openLpCount}/{v.lpCount} open LPs</span>
+                <span className="text-xs text-slate-500">oldest {v.oldestAgeingDays}d</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300">{v.totalRemainingQty.toLocaleString()} left · AED {fmtCost(v.totalRemainingValue)}</span>
+                <span className="text-slate-400">{openVendor === v.vendor ? "▾" : "▸"}</span>
+              </button>
+              {openVendor === v.vendor ? (
+                <div className="border-t border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800/60 dark:bg-slate-800/20">
+                  <div className="flex flex-col gap-2">
+                    {rows.filter((r) => (r.vendor_name ?? "—") === v.vendor).map((lp) => (
+                      <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onEdit={onEdit} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((lp) => (
+            <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onEdit={onEdit} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------ Content -------------------------------- */
 
 const PAGE = 100;
+
+type LpSection = "overview" | "browse";
 
 function LpContent() {
   const { profile } = useAuth();
   const managerFlag = isManager(profile);
 
-  const [allRows, setAllRows] = useState<LpItemRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [section, setSection] = useState<LpSection>("overview");
   const [banner, setBanner] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+
+  // Overview (always on): the cheap per-LPO rollup.
+  const [overview, setOverview] = useState<LpOverviewRow[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  // Browse lines (on-demand windowed table).
+  const [allRows, setAllRows] = useState<LpItemRow[]>([]);
+  const [linesLoaded, setLinesLoaded] = useState(false);
+  const [linesLoading, setLinesLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [statusTab, setStatusTab] = useState<LpStatusFilter>("open");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ColFilters>({ vendor: "", brand: "", model: "" });
+
+  // Modals.
   const [saleRow, setSaleRow] = useState<LpItemRow | null>(null);
   const [editRow, setEditRow] = useState<LpItemRow | null>(null);
+  const [grnLp, setGrnLp] = useState<LpOverviewRow | null>(null);
   const [showPdfs, setShowPdfs] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [review, setReview] = useState<{ file: File; draft: LpDraft; engine: CaptureEngine } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Bounded, server-side window: only the chosen status + LP-date slice loads,
-  // paged. History (cleared / older LPs) loads on demand via the date range.
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    setOverviewError(null);
     try {
-      const data = await fetchLpItemsWindow({
-        status: statusTab,
-        fromIso: dateFrom,
-        toIso: dateTo,
-        limit: PAGE,
-        offset: 0,
-      });
-      setAllRows(data);
-      setHasMore(data.length === PAGE);
+      setOverview(await fetchLpOverview());
     } catch (err) {
-      setError(errorMessage(err));
+      setOverviewError(errorMessage(err));
     } finally {
-      setLoading(false);
+      setOverviewLoading(false);
     }
-  }, [statusTab, dateFrom, dateTo]);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadOverview();
+  }, [loadOverview]);
+
+  // Browse lines load only when the user asks (Load data).
+  async function loadLines(): Promise<void> {
+    setLinesLoading(true);
+    setUploadError(null);
+    try {
+      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, limit: PAGE, offset: 0 });
+      setAllRows(data);
+      setHasMore(data.length === PAGE);
+      setLinesLoaded(true);
+    } catch (err) {
+      setUploadError(errorMessage(err));
+    } finally {
+      setLinesLoading(false);
+    }
+  }
+
+  function clearLines(): void {
+    setAllRows([]);
+    setLinesLoaded(false);
+    setHasMore(false);
+    setSearch("");
+    setFilters({ vendor: "", brand: "", model: "" });
+  }
 
   async function loadMore(): Promise<void> {
     setLoadingMore(true);
     try {
-      const data = await fetchLpItemsWindow({
-        status: statusTab,
-        fromIso: dateFrom,
-        toIso: dateTo,
-        limit: PAGE,
-        offset: allRows.length,
-      });
+      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, limit: PAGE, offset: allRows.length });
       setAllRows((prev) => [...prev, ...data]);
       setHasMore(data.length === PAGE);
     } catch (err) {
@@ -1184,8 +1430,6 @@ function LpContent() {
     }
   }
 
-  // Price alerts compute over the loaded window (advisory; a prior LP outside
-  // the window won't be compared).
   const alerts = useMemo(() => computePriceAlerts(allRows), [allRows]);
 
   const filtered = useMemo(() => {
@@ -1196,9 +1440,7 @@ function LpContent() {
     const has = (hay: string | null, needle: string) => (hay ?? "").toLowerCase().includes(needle);
     return allRows.filter((r) => {
       if (q) {
-        const blob = [r.lp_number, r.vendor_name, r.brand, r.lp_date, r.model_no, r.sku]
-          .map((x) => (x ?? "").toLowerCase())
-          .join(" ");
+        const blob = [r.lp_number, r.vendor_name, r.brand, r.lp_date, r.model_no, r.sku].map((x) => (x ?? "").toLowerCase()).join(" ");
         if (!blob.includes(q)) return false;
       }
       if (fv && !has(r.vendor_name, fv)) return false;
@@ -1237,29 +1479,32 @@ function LpContent() {
   function handleSaved(message: string) {
     setSaleRow(null);
     setEditRow(null);
+    setGrnLp(null);
     setReview(null);
     setBanner(message);
-    void load();
+    void loadOverview();
+    if (linesLoaded) void loadLines();
   }
 
   const filtersActive = search.trim() !== "" || filters.vendor !== "" || filters.brand !== "" || filters.model !== "";
 
+  const navItem = (key: LpSection, label: string) => (
+    <button
+      type="button"
+      onClick={() => setSection(key)}
+      className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+        section === key
+          ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
+          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div>
-      <PageHeader
-        title="LP Tracker"
-        subtitle="Local purchase stock — ageing, draw-down, and price alerts."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChosen} />
-            <button type="button" onClick={() => { setUploadError(null); fileInputRef.current?.click(); }} disabled={parsing} className={btnSecondary}>
-              {parsing ? "Reading LP…" : "Upload LP (PDF)"}
-            </button>
-            <button type="button" onClick={() => setShowPdfs(true)} className={btnSecondary}>LP PDFs</button>
-            <button type="button" onClick={() => { setUploadError(null); setShowReports(true); }} className={btnPrimary}>Reports</button>
-          </div>
-        }
-      />
+      <PageHeader title="LP Tracker" subtitle="Local purchase stock — ageing, draw-down, and price alerts." />
 
       {banner ? (
         <div className="mb-4 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -1274,115 +1519,102 @@ function LpContent() {
         </div>
       ) : null}
 
-      {/* Status tabs + LP-date window */}
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
-          {(["open", "cleared", "all"] as LpStatusFilter[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusTab(s)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                statusTab === s
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-              }`}
-            >
-              {s === "open" ? "In stock" : s === "cleared" ? "Cleared" : "All"}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-slate-500">
-          <span className="text-xs font-medium uppercase tracking-wide">LP date</span>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-          />
-          <span>→</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-          />
-          {dateFrom || dateTo ? (
-            <button type="button" onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs underline">clear</button>
-          ) : null}
-        </div>
-      </div>
+      <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChosen} />
 
-      {/* Premium search bar */}
-      <div className="mb-4">
-        <div className="relative">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-          <input
-            className={`${inputClass} pl-9 pr-24`}
-            placeholder="Search by brand, vendor, LP number, or LP date…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {filtersActive ? (
-            <button
-              type="button"
-              onClick={() => { setSearch(""); setFilters({ vendor: "", brand: "", model: "" }); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Clear all
-            </button>
-          ) : null}
-        </div>
-        {!loading && !error && allRows.length > 0 ? (
-          <p className="mt-1.5 text-xs text-slate-400">
-            Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} loaded{hasMore ? "+" : ""}
-            {hasMore ? " — load more or narrow the date range" : ""}
-          </p>
-        ) : null}
-      </div>
+      <div className="flex flex-col gap-4 lg:flex-row">
+        {/* Left in-module nav */}
+        <nav className={`flex shrink-0 flex-wrap gap-2 lg:w-44 lg:flex-col ${surface} p-2`}>
+          {navItem("overview", "Overview")}
+          {navItem("browse", "Browse lines")}
+          <button type="button" onClick={() => { setUploadError(null); fileInputRef.current?.click(); }} disabled={parsing} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800">
+            {parsing ? "Reading LP…" : "Upload LP"}
+          </button>
+          <button type="button" onClick={() => { setUploadError(null); setShowReports(true); }} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Reports</button>
+          <button type="button" onClick={() => setShowPdfs(true)} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">LP PDFs</button>
+        </nav>
 
-      {loading ? (
-        <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading LP tracker…</div>
-      ) : error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-          <button type="button" onClick={() => void load()} className={`${btnSecondary} mt-3`}>Retry</button>
-        </div>
-      ) : allRows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500">
-            {statusTab === "open" && !dateFrom && !dateTo
-              ? "No stock in hand. Upload an LP PDF, or check the Cleared / All tabs."
-              : "No LP lines for this status / date range."}
-          </p>
-        </div>
-      ) : (
-        <>
-          <SummaryCards rows={filtered} alertCount={filtered.filter((r) => r.id && alerts.has(r.id)).length} />
-          {filtered.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-              <p className="text-sm text-slate-500">No loaded lines match your search / filters.</p>
-            </div>
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          {section === "overview" ? (
+            overviewLoading ? (
+              <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading ageing overview…</div>
+            ) : overviewError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+                <p className="text-sm text-red-700 dark:text-red-300">{overviewError}</p>
+                <button type="button" onClick={() => void loadOverview()} className={`${btnSecondary} mt-3`}>Retry</button>
+              </div>
+            ) : (
+              <OverviewSection
+                rows={overview}
+                managerFlag={managerFlag}
+                onSetGrn={(lp) => setGrnLp(lp)}
+                onSale={(row) => setSaleRow(row)}
+                onEdit={(row) => setEditRow(row)}
+              />
+            )
           ) : (
-            <LpTable
-              rows={filtered}
-              alerts={alerts}
-              managerFlag={managerFlag}
-              filters={filters}
-              onFilter={setFilter}
-              onSale={(row) => setSaleRow(row)}
-              onEdit={(row) => setEditRow(row)}
-            />
-          )}
-          {hasMore ? (
-            <div className="mt-4 flex justify-center">
-              <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className={btnSecondary}>
-                {loadingMore ? "Loading…" : `Load more (${PAGE})`}
-              </button>
+            <div>
+              {/* Browse controls */}
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+                  {(["open", "cleared", "all"] as LpStatusFilter[]).map((s) => (
+                    <button key={s} type="button" onClick={() => setStatusTab(s)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${statusTab === s ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}>
+                      {s === "open" ? "In stock" : s === "cleared" ? "Cleared" : "All"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                  <span className="text-xs font-medium uppercase tracking-wide">LP date</span>
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                  <span>→</span>
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                </div>
+                <button type="button" onClick={() => void loadLines()} disabled={linesLoading} className={btnPrimary}>
+                  {linesLoading ? "Loading…" : linesLoaded ? "Refresh" : "Load data"}
+                </button>
+                {linesLoaded ? (
+                  <button type="button" onClick={clearLines} className={btnSecondary}>Clear</button>
+                ) : null}
+              </div>
+
+              {!linesLoaded ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+                  <p className="text-sm text-slate-500">Pick a status / date range and click <span className="font-medium">Load data</span> to view line items.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                      <input className={`${inputClass} pl-9 pr-24`} placeholder="Search loaded lines by brand, vendor, LP number, date…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                      {filtersActive ? (
+                        <button type="button" onClick={() => { setSearch(""); setFilters({ vendor: "", brand: "", model: "" }); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Clear all</button>
+                      ) : null}
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Showing {filtered.length.toLocaleString()} of {allRows.length.toLocaleString()} loaded{hasMore ? "+" : ""}
+                      {hasMore ? " — load more or narrow the date range" : ""}
+                    </p>
+                  </div>
+
+                  {filtered.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+                      <p className="text-sm text-slate-500">No loaded lines match your search / filters.</p>
+                    </div>
+                  ) : (
+                    <LpTable rows={filtered} alerts={alerts} managerFlag={managerFlag} filters={filters} onFilter={setFilter} onSale={(row) => setSaleRow(row)} onEdit={(row) => setEditRow(row)} />
+                  )}
+                  {hasMore ? (
+                    <div className="mt-4 flex justify-center">
+                      <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className={btnSecondary}>{loadingMore ? "Loading…" : `Load more (${PAGE})`}</button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
-          ) : null}
-        </>
-      )}
+          )}
+        </div>
+      </div>
 
       {showReports ? (
         <ReportsModal
@@ -1392,22 +1624,17 @@ function LpContent() {
           onError={(m) => setUploadError(m)}
         />
       ) : null}
-
       {review && profile ? (
-        <VerifyLpModal
-          file={review.file}
-          draft={review.draft}
-          engine={review.engine}
-          createdBy={profile.id}
-          onClose={() => setReview(null)}
-          onSaved={handleSaved}
-        />
+        <VerifyLpModal file={review.file} draft={review.draft} engine={review.engine} createdBy={profile.id} onClose={() => setReview(null)} onSaved={handleSaved} />
       ) : null}
       {saleRow && profile ? (
         <RecordSaleModal row={saleRow} recordedBy={profile.id} onClose={() => setSaleRow(null)} onSaved={handleSaved} />
       ) : null}
       {editRow ? (
         <EditLpItemModal row={editRow} onClose={() => setEditRow(null)} onSaved={handleSaved} />
+      ) : null}
+      {grnLp ? (
+        <SetGrnModal lp={grnLp} onClose={() => setGrnLp(null)} onSaved={handleSaved} />
       ) : null}
       {showPdfs ? <LpPdfsModal onClose={() => setShowPdfs(false)} /> : null}
     </div>

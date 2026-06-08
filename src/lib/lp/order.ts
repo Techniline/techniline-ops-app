@@ -105,6 +105,7 @@ export interface VerifiedLpLine {
 export interface SaveLpInput {
   lpNumber: string;
   lpDate: string;
+  goodsReceivedDate: string | null; // when stock arrived; defaults to lpDate if blank
   vendorName: string;
   vendorTrn: string | null;
   consigneeTrn: string | null;
@@ -131,6 +132,7 @@ export async function saveVerifiedLp(input: SaveLpInput): Promise<number> {
   const orderPayload: TablesInsert<"lp_orders"> = {
     lp_number: input.lpNumber,
     lp_date: input.lpDate,
+    goods_received_date: input.goodsReceivedDate || input.lpDate,
     vendor_name: input.vendorName,
     vendor_trn: input.vendorTrn,
     consignee_trn: input.consigneeTrn,
@@ -290,6 +292,24 @@ export async function updateLpItem(input: EditLpItemInput): Promise<void> {
     .from("lp_items")
     .update(patch)
     .eq("id", input.id)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("Update affected no rows.");
+}
+
+/**
+ * Set/clear an LPO's Goods Received Date — ageing counts from this (falling back
+ * to the LP date when null). Any LP-Tracker user may set it.
+ */
+export async function setGoodsReceivedDate(lpId: string, dateIso: string | null): Promise<void> {
+  const patch: TablesUpdate<"lp_orders"> = {
+    goods_received_date: dateIso || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("lp_orders")
+    .update(patch)
+    .eq("id", lpId)
     .select("id");
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Update affected no rows.");
