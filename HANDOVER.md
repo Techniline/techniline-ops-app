@@ -33,7 +33,7 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Module | Route | Access | Notes |
 |---|---|---|---|
 | Dashboard | `/dashboard` | all | Module cards + **KPI strip** scoped to the user's modules (checklist/cocoblu/amazon). |
-| Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`). |
+| Checklist | `/checklist` | `checklist` cap | Daily tasks from `daily_tasks`/`task_definitions` (RPC `generate_daily_tasks`) + **Priorities** (manager assigns to a user/both; staff self-create; progress/due/complete — `priorities` table) + **Work Log** (surfaces `submissions`). |
 | Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** + **Invoices browser** + manager **Edit**. |
 | Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. |
 | Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | Guarded but **removed from nav** — do not re-promote. |
@@ -52,8 +52,9 @@ Schema source of truth = generated `src/lib/database.types.ts` (does **not** yet
 | `ingest_log` table (email dedup for poller) | ✅ Created (message_id PK, mailbox, received_at, email_type, processed_at). RLS on; service-role writes. |
 | `cocoblu_ageing` audit columns: `source`, `pdf_url`, `verified_by`(→users), `verified_at` | ✅ Created. Read from the base table (the ageing view doesn't carry them). |
 | Storage bucket `cocoblu-invoices` (private) + authenticated insert/select policies | ✅ Created. Holds invoice PDFs; app reads via signed URLs. |
+| RLS for newly-surfaced tables: `priorities` (read/insert/update), `submissions` (read), `breach_log` (read), `users` (read) | ⏳ **Owner to run** — SQL in [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md). These tables existed already; the app now reads/writes them. Fail-soft until applied. |
 
-No pre-existing tables/enums/RPCs/RLS were modified.
+The checklist work surfaces tables the backend team already built (`priorities`, `submissions`, `breach_log`) — **no schema changes**, only the RLS above. No pre-existing tables/enums/RPCs were modified.
 
 ---
 
@@ -159,6 +160,7 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Data-accuracy check on the ingestion go-live:** run the verification SQL in [GO-LIVE.md](GO-LIVE.md) — especially the **duplicate `ref_number`** query (must return zero) — to confirm the ingester didn't duplicate backend-fed rows.
 2. **Remove Aaron's duplicate checklist** definition (diagnostic + fix SQL in [GO-LIVE.md](GO-LIVE.md)).
 3. **Monitor the first daily cron runs** (`ingest_log`, `expected_actions`); optionally add a least-privilege Exchange Application Access Policy for the two mailboxes.
+4. **Run the checklist RLS SQL** — [CHECKLIST-PRIORITIES-SETUP.md](CHECKLIST-PRIORITIES-SETUP.md) — to switch on Priorities, the Work Log, and the breach KPI (they're built + deployed but show empty until the policies exist). Confirm `current_user_role()` exists / behaves as assumed.
 
 **Optional / when needed:**
 4. **AI invoice capture:** add `ANTHROPIC_API_KEY` in Vercel → Cocoblu upgrades from free parser to Sonnet 4.6 automatically.
