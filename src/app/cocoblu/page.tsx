@@ -21,6 +21,7 @@ import {
   fetchCocobluAgeing,
   fetchInvoiceAudit,
   invoicePdfUrl,
+  listInvoicePdfs,
   parseInvoiceViaApi,
   saveVerifiedInvoice,
   updateCocobluQty,
@@ -31,6 +32,7 @@ import {
   type CocobluCreateInput,
   type InvoiceAudit,
   type InvoiceDraft,
+  type StoredInvoice,
   type VerifiedLine,
 } from "@/lib/cocoblu";
 import { isManager } from "@/lib/permissions";
@@ -752,6 +754,90 @@ function EditRecordModal({
   );
 }
 
+/* --------------------- Stored invoice PDFs browser --------------------- */
+
+function formatBytes(n: number | null): string {
+  if (n == null) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function InvoicesModal({ onClose }: { onClose: () => void }) {
+  const [files, setFiles] = useState<StoredInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const list = await listInvoicePdfs();
+        if (active) setFiles(list);
+      } catch (e) {
+        if (active) setErr(errorMessage(e));
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function openFile(path: string, download?: string): Promise<void> {
+    const url = await invoicePdfUrl(path, download);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <ModalShell title="Stored Invoice PDFs" onClose={onClose}>
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : err ? (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p>
+      ) : files.length === 0 ? (
+        <p className="text-sm text-slate-500">No invoice PDFs stored yet.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/40">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">File</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Uploaded</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Size</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((f) => (
+                <tr key={f.path} className="border-t border-slate-100 dark:border-slate-800/60">
+                  <td className="max-w-[220px] truncate px-3 py-2 font-mono text-xs text-slate-700 dark:text-slate-300" title={f.name}>
+                    {f.name}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {f.createdAt ? new Date(f.createdAt).toLocaleString() : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{formatBytes(f.sizeBytes)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => void openFile(f.path)} className={btnSmall}>View</button>
+                      <button type="button" onClick={() => void openFile(f.path, f.name)} className={btnSmall}>Download</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="mt-4 flex justify-end">
+        <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ------------------------------ Summary -------------------------------- */
 
 function SummaryCards({ rows }: { rows: CocobluAgeingRow[] }) {
@@ -923,6 +1009,7 @@ function CocobluContent() {
   const [updateRow, setUpdateRow] = useState<CocobluAgeingRow | null>(null);
   const [editRow, setEditRow] = useState<CocobluAgeingRow | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [showInvoices, setShowInvoices] = useState(false);
   const [review, setReview] = useState<{
     file: File;
     draft: InvoiceDraft;
@@ -1006,6 +1093,13 @@ function CocobluContent() {
               className={btnSecondary}
             >
               {parsing ? "Reading invoice…" : "Upload Invoice (PDF)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInvoices(true)}
+              className={btnSecondary}
+            >
+              Invoices
             </button>
             <button
               type="button"
@@ -1110,6 +1204,10 @@ function CocobluContent() {
           onClose={() => setReview(null)}
           onSaved={handleSaved}
         />
+      ) : null}
+
+      {showInvoices ? (
+        <InvoicesModal onClose={() => setShowInvoices(false)} />
       ) : null}
     </div>
   );

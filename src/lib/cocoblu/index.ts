@@ -24,6 +24,7 @@ export {
   parseInvoiceViaApi,
   uploadInvoicePdf,
   invoicePdfUrl,
+  listInvoicePdfs,
   saveVerifiedInvoice,
   updateCocobluRecord,
   fetchInvoiceAudit,
@@ -31,6 +32,7 @@ export {
   type SaveVerifiedInvoiceInput,
   type EditRecordInput,
   type InvoiceAudit,
+  type StoredInvoice,
 } from "./invoice";
 
 export { calculateCocobluSummary } from "./summary";
