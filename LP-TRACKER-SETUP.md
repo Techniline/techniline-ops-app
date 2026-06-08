@@ -186,6 +186,59 @@ using (bucket_id = 'lp-invoices');
 
 (The app reads PDFs via short-lived signed URLs; objects are never public.)
 
+## 4b. (Optional, recommended) DB-level over-sell guard
+
+The app already blocks selling more than remaining — both in the form and at save
+time (`recordSale` re-checks current remaining). This trigger is the belt-and-suspenders
+backstop: it makes "sold can never exceed purchased" a hard database invariant, immune to
+race conditions or any direct DB write.
+
+```sql
+create or replace function public.lp_sales_no_oversell()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_purchased  numeric;
+  v_other_sold numeric;
+begin
+  select qty_purchased into v_purchased
+  from public.lp_items where id = NEW.lp_item_id;
+  if v_purchased is null then
+    raise exception 'LP item % not found', NEW.lp_item_id;
+  end if;
+
+  select coalesce(sum(sold_qty), 0) into v_other_sold
+  from public.lp_sales
+  where lp_item_id = NEW.lp_item_id
+    and id <> NEW.id;            -- exclude this row on UPDATE
+
+  if (v_other_sold + NEW.sold_qty) > v_purchased then
+    raise exception
+      'Over-sell blocked: % would exceed % purchased for this LP line (already sold: %).',
+      (v_other_sold + NEW.sold_qty), v_purchased, v_other_sold
+      using errcode = 'check_violation';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+drop trigger if exists lp_sales_no_oversell_trg on public.lp_sales;
+create trigger lp_sales_no_oversell_trg
+before insert or update on public.lp_sales
+for each row execute function public.lp_sales_no_oversell();
+
+-- (optional) also forbid zero/negative sale quantities at the DB level:
+alter table public.lp_sales
+  drop constraint if exists lp_sales_sold_qty_positive;
+alter table public.lp_sales
+  add constraint lp_sales_sold_qty_positive check (sold_qty > 0);
+```
+
+No app change is needed — if the trigger ever fires, its message surfaces in the app's
+existing error banner.
+
 ## 5. After running
 
 - Reload `/lp` (and the Dashboard) — the module, KPI tiles and card go live.
