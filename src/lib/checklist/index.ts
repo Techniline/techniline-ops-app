@@ -16,12 +16,14 @@ export {
   fetchTaskDefinitions,
   fetchDailyTasks,
   fetchChecklistForDate,
+  fetchBreachCountSince,
   setDailyTaskStatus,
 } from "./queries";
 
-export { submitTaskWithEvidence } from "./submissions";
+export { submitTaskWithEvidence, fetchSubmissionsForTasks } from "./submissions";
 export type {
   TaskEvidence,
   SubmitTaskArgs,
   SubmissionInsert,
+  Submission,
 } from "./submissions";

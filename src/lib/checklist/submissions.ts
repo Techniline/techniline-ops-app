@@ -1,9 +1,28 @@
 import { supabase } from "@/lib/supabaseClient";
-import type { TablesInsert } from "@/lib/types";
+import type { Tables, TablesInsert } from "@/lib/types";
 
 import { setDailyTaskStatus } from "./queries";
 
 export type SubmissionInsert = TablesInsert<"submissions">;
+export type Submission = Tables<"submissions">;
+
+/**
+ * Fetch submissions (the work log) for the given daily-task ids, newest first.
+ * Fail-soft: returns [] on error (e.g. before a `submissions` read policy
+ * exists) so the checklist page never breaks.
+ */
+export async function fetchSubmissionsForTasks(
+  taskIds: string[]
+): Promise<Submission[]> {
+  if (taskIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("submissions")
+    .select("*")
+    .in("daily_task_id", taskIds)
+    .order("submitted_at", { ascending: false });
+  if (error) return [];
+  return data ?? [];
+}
 
 /** The evidence portion of a submission, built by the UI per evidence_type. */
 export interface TaskEvidence {
