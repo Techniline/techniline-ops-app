@@ -1,43 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-/**
- * Minimal typed schema for the `ingest_log` dedup table. Declared locally so the
- * poller compiles before the table is added to the generated Database types.
- * (Regenerate types after creating the table to fold it into the main schema.)
- */
-interface IngestLogRow {
-  message_id: string;
-  mailbox: string | null;
-  received_at: string | null;
-  email_type: string | null;
-  processed_at: string | null;
-}
-interface IngestLogSchema {
-  public: {
-    Tables: {
-      ingest_log: {
-        Row: IngestLogRow;
-        Insert: {
-          message_id: string;
-          mailbox?: string | null;
-          received_at?: string | null;
-          email_type?: string | null;
-          processed_at?: string | null;
-        };
-        Update: Partial<IngestLogRow>;
-        Relationships: [];
-      };
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-}
+import type { Database } from "@/lib/database.types";
 
-let cached: SupabaseClient<IngestLogSchema> | null = null;
+let cached: SupabaseClient<Database> | null = null;
 
-function client(): SupabaseClient<IngestLogSchema> {
+function client(): SupabaseClient<Database> {
   if (cached) return cached;
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -46,7 +13,7 @@ function client(): SupabaseClient<IngestLogSchema> {
       "Server Supabase env not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)."
     );
   }
-  cached = createClient<IngestLogSchema>(url, key, {
+  cached = createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return cached;
@@ -78,7 +45,7 @@ export async function recordProcessedMessage(args: {
       mailbox: args.mailbox,
       received_at: args.receivedAt,
       email_type: args.emailType,
-    } as never);
+    });
   if (error) throw new Error(error.message);
 }
 
@@ -101,7 +68,7 @@ export async function alreadyProcessed(
       .select("message_id")
       .in("message_id", batch);
     if (error) throw new Error(error.message);
-    for (const row of data ?? []) seen.add((row as { message_id: string }).message_id);
+    for (const row of data ?? []) seen.add(row.message_id);
   }
   return seen;
 }
@@ -124,7 +91,7 @@ export async function recordProcessedMessages(
         mailbox: r.mailbox,
         received_at: r.receivedAt,
         email_type: r.emailType,
-      })) as never
+      }))
     );
   if (error) throw new Error(error.message);
 }
