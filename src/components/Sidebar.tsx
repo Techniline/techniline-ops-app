@@ -101,25 +101,43 @@ export function Sidebar({
       } ${collapsed ? "lg:w-[4.75rem]" : "lg:w-64"}`}
     >
       {/* Brand + collapse toggle */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Logo className="shrink-0" />
-          <div className={`min-w-0 leading-tight ${labelHidden}`}>
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Techniline
-            </p>
-            <p className="truncate text-xs text-slate-500">Operations</p>
+      <div className="flex flex-col gap-2 border-b border-slate-200 px-3 py-4 dark:border-slate-800">
+        <div
+          className={`flex items-center gap-2.5 ${
+            collapsed ? "lg:justify-center" : "justify-between"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Logo className="shrink-0" />
+            <div className={`min-w-0 leading-tight ${labelHidden}`}>
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Techniline
+              </p>
+              <p className="truncate text-xs text-slate-500">Operations</p>
+            </div>
           </div>
+          {/* Inline collapse toggle — desktop, expanded state only */}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="Collapse menu"
+            className={`h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
+              collapsed ? "hidden" : "hidden lg:flex"
+            }`}
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
         </div>
+        {/* Expand toggle — desktop, collapsed state only (own row, no overlap) */}
         <button
           type="button"
           onClick={onToggleCollapse}
-          aria-label={collapsed ? "Expand menu" : "Collapse menu"}
-          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 lg:flex dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          aria-label="Expand menu"
+          className={`h-7 w-full items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
+            collapsed ? "hidden lg:flex" : "hidden"
+          }`}
         >
-          <ChevronLeftIcon
-            className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : ""}`}
-          />
+          <ChevronLeftIcon className="h-4 w-4 rotate-180" />
         </button>
       </div>
 
