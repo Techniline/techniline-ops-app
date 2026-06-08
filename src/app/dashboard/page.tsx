@@ -15,7 +15,8 @@ import {
   CocobluIcon,
   PrioritiesIcon,
 } from "@/components/icons";
-import { surface } from "@/components/ui";
+import { btnSecondary, surface } from "@/components/ui";
+import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchCocobluAgeing } from "@/lib/cocoblu";
 import {
@@ -301,10 +302,12 @@ interface ModuleCard {
 
 function DashboardContent() {
   const { profile } = useAuth();
+  const [showWeekly, setShowWeekly] = useState(false);
 
   if (!profile) return null;
 
-  const role = isManager(profile) ? "Manager" : "Staff";
+  const managerView = isManager(profile);
+  const role = managerView ? "Manager" : "Staff";
   const displayName = profile.full_name ?? profile.email ?? "there";
 
   const cards: ModuleCard[] = [
@@ -362,9 +365,16 @@ function DashboardContent() {
         title={`Welcome, ${displayName}`}
         subtitle="Here are the modules available to you."
         actions={
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            {role}
-          </span>
+          <div className="flex items-center gap-2">
+            {managerView ? (
+              <button type="button" onClick={() => setShowWeekly(true)} className={btnSecondary}>
+                Send weekly summary
+              </button>
+            ) : null}
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {role}
+            </span>
+          </div>
         }
       />
 
@@ -423,6 +433,10 @@ function DashboardContent() {
       </div>
 
       <KpiDashboard profile={profile} />
+
+      {showWeekly ? (
+        <WeeklySummaryModal profile={profile} onClose={() => setShowWeekly(false)} />
+      ) : null}
     </div>
   );
 }
