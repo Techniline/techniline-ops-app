@@ -704,6 +704,196 @@ export type Database = {
           },
         ]
       }
+      lp_items: {
+        Row: {
+          amount: number | null
+          brand: string | null
+          created_at: string
+          description: string | null
+          disc_amount: number | null
+          id: string
+          line_number: number | null
+          lp_id: string
+          model_no: string | null
+          qty_adjust_comment: string | null
+          qty_original: number | null
+          qty_purchased: number
+          sku: string | null
+          status: string
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          brand?: string | null
+          created_at?: string
+          description?: string | null
+          disc_amount?: number | null
+          id?: string
+          line_number?: number | null
+          lp_id: string
+          model_no?: string | null
+          qty_adjust_comment?: string | null
+          qty_original?: number | null
+          qty_purchased?: number
+          sku?: string | null
+          status?: string
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          brand?: string | null
+          created_at?: string
+          description?: string | null
+          disc_amount?: number | null
+          id?: string
+          line_number?: number | null
+          lp_id?: string
+          model_no?: string | null
+          qty_adjust_comment?: string | null
+          qty_original?: number | null
+          qty_purchased?: number
+          sku?: string | null
+          status?: string
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_items_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "lp_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_orders: {
+        Row: {
+          amount_before_vat: number | null
+          consignee_trn: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          lp_date: string
+          lp_number: string
+          net_amount: number | null
+          notes: string | null
+          pdf_url: string | null
+          qtn_ref: string | null
+          source: string
+          terms: string | null
+          updated_at: string
+          vat_amount: number | null
+          vendor_name: string
+          vendor_trn: string | null
+        }
+        Insert: {
+          amount_before_vat?: number | null
+          consignee_trn?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lp_date: string
+          lp_number: string
+          net_amount?: number | null
+          notes?: string | null
+          pdf_url?: string | null
+          qtn_ref?: string | null
+          source?: string
+          terms?: string | null
+          updated_at?: string
+          vat_amount?: number | null
+          vendor_name: string
+          vendor_trn?: string | null
+        }
+        Update: {
+          amount_before_vat?: number | null
+          consignee_trn?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lp_date?: string
+          lp_number?: string
+          net_amount?: number | null
+          notes?: string | null
+          pdf_url?: string | null
+          qtn_ref?: string | null
+          source?: string
+          terms?: string | null
+          updated_at?: string
+          vat_amount?: number | null
+          vendor_name?: string
+          vendor_trn?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lp_sales: {
+        Row: {
+          created_at: string
+          entity: string | null
+          entity_other: string | null
+          id: string
+          invoice_number: string | null
+          lp_item_id: string
+          notes: string | null
+          recorded_by: string | null
+          sale_date: string | null
+          salesman_name: string | null
+          sold_qty: number
+        }
+        Insert: {
+          created_at?: string
+          entity?: string | null
+          entity_other?: string | null
+          id?: string
+          invoice_number?: string | null
+          lp_item_id: string
+          notes?: string | null
+          recorded_by?: string | null
+          sale_date?: string | null
+          salesman_name?: string | null
+          sold_qty: number
+        }
+        Update: {
+          created_at?: string
+          entity?: string | null
+          entity_other?: string | null
+          id?: string
+          invoice_number?: string | null
+          lp_item_id?: string
+          notes?: string | null
+          recorded_by?: string | null
+          sale_date?: string | null
+          salesman_name?: string | null
+          sold_qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_sales_lp_item_id_fkey"
+            columns: ["lp_item_id"]
+            isOneToOne: false
+            referencedRelation: "lp_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lp_sales_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       priorities: {
         Row: {
           assigned_to: string | null
@@ -1303,6 +1493,92 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      lp_items_view: {
+        Row: {
+          ageing_days: number | null
+          ageing_status: string | null
+          amount: number | null
+          brand: string | null
+          created_at: string | null
+          description: string | null
+          disc_amount: number | null
+          id: string | null
+          line_number: number | null
+          lp_date: string | null
+          lp_id: string | null
+          lp_number: string | null
+          model_no: string | null
+          pdf_url: string | null
+          qty_adjust_comment: string | null
+          qty_purchased: number | null
+          qty_remaining: number | null
+          qty_sold: number | null
+          sku: string | null
+          status: string | null
+          unit_price: number | null
+          vendor_name: string | null
+          vendor_trn: string | null
+        }
+        Insert: {
+          ageing_days?: never
+          ageing_status?: never
+          amount?: number | null
+          brand?: string | null
+          created_at?: string | null
+          description?: string | null
+          disc_amount?: number | null
+          id?: string | null
+          line_number?: number | null
+          lp_date?: never
+          lp_id?: string | null
+          lp_number?: never
+          model_no?: string | null
+          pdf_url?: never
+          qty_adjust_comment?: string | null
+          qty_purchased?: number | null
+          qty_remaining?: never
+          qty_sold?: never
+          sku?: string | null
+          status?: string | null
+          unit_price?: number | null
+          vendor_name?: never
+          vendor_trn?: never
+        }
+        Update: {
+          ageing_days?: never
+          ageing_status?: never
+          amount?: number | null
+          brand?: string | null
+          created_at?: string | null
+          description?: string | null
+          disc_amount?: number | null
+          id?: string | null
+          line_number?: number | null
+          lp_date?: never
+          lp_id?: string | null
+          lp_number?: never
+          model_no?: string | null
+          pdf_url?: never
+          qty_adjust_comment?: string | null
+          qty_purchased?: number | null
+          qty_remaining?: never
+          qty_sold?: never
+          sku?: string | null
+          status?: string | null
+          unit_price?: number | null
+          vendor_name?: never
+          vendor_trn?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_items_lp_id_fkey"
+            columns: ["lp_id"]
+            isOneToOne: false
+            referencedRelation: "lp_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {

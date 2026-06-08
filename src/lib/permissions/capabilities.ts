@@ -5,6 +5,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   "checklist",
   "finance",
   "cocoblu",
+  "lp_tracker",
 ] as const;
 
 /**
@@ -21,7 +22,7 @@ export type CapabilityGrant = readonly Capability[] | "all";
  */
 export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
   // Maricel
-  "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance"],
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance", "lp_tracker"],
   // Aaron
   "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu"],
   // Vihan

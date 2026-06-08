@@ -11,6 +11,7 @@ import {
   canViewChecklist,
   canViewCocoblu,
   canViewFinance,
+  canViewLpTracker,
   isManager,
 } from "@/lib/permissions";
 
@@ -22,6 +23,7 @@ import {
   DashboardIcon,
   Logo,
   LogoutIcon,
+  LpTrackerIcon,
   PrioritiesIcon,
 } from "./icons";
 
@@ -86,6 +88,12 @@ export function Sidebar({
       label: "Cocoblu",
       icon: CocobluIcon,
       show: canViewCocoblu(profile),
+    },
+    {
+      href: "/lp",
+      label: "LP Tracker",
+      icon: LpTrackerIcon,
+      show: canViewLpTracker(profile),
     },
     {
       href: "/amazon-actions",

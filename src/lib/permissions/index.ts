@@ -51,6 +51,10 @@ export function canViewCocoblu(profile: ProfileArg): boolean {
   return hasCapability(profile, "cocoblu");
 }
 
+export function canViewLpTracker(profile: ProfileArg): boolean {
+  return hasCapability(profile, "lp_tracker");
+}
+
 /**
  * Whether `profile` is allowed to see data belonging to `targetUserId`.
  * Users may always view their own data; managers (role === "manager") may view
