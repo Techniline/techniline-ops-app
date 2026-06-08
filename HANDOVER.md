@@ -12,8 +12,8 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Item | State |
 |---|---|
 | Live URL | https://techniline-ops-app.vercel.app — serving |
-| Production commit | **`52475b5`** ("Cocoblu free parser: 2nd invoice layout") — current with `origin/main`; deployed via Vercel CLI. |
-| `origin/main` | **`52475b5`** — in sync. |
+| Production commit | **`b585ae0`** ("Sync database.types.ts; drop local casts") — current with `origin/main`; deployed via Vercel CLI. |
+| `origin/main` | **`b585ae0`** — in sync. |
 | Live routes | `/login` · `/dashboard` (+ KPI strip) · `/checklist` · `/cocoblu` (+ PDF capture) · `/amazon-actions` · `/api/amazon-email-ingest` · `/api/amazon-ingest-poll` (401 w/o secret) · `/api/cocoblu/parse` (401 w/o auth) |
 | Amazon ingestion | **LIVE & writing.** Daily Vercel cron `0 9 * * *` (48h lookback). 14-day 2026 backfill complete (237 Amazon emails, 0 errors). |
 | Cocoblu PDF capture | **LIVE.** Free built-in parser by default; auto-upgrades to AI if `ANTHROPIC_API_KEY` set. |
