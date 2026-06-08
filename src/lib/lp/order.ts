@@ -198,6 +198,25 @@ export async function recordSale(input: RecordSaleInput): Promise<void> {
     throw new Error("Sold quantity must be a positive number.");
   }
 
+  // Re-read the CURRENT remaining at save time (the form's number may be stale
+  // if another sale landed first) and reject an over-sale. Fail closed: if the
+  // line can't be read, do not insert.
+  const { data: current, error: readErr } = await supabase
+    .from("lp_items_view")
+    .select("qty_remaining")
+    .eq("id", input.lpItemId)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  const available = current?.qty_remaining ?? null;
+  if (available === null) {
+    throw new Error("Could not verify the remaining quantity for this line.");
+  }
+  if (input.soldQty > available) {
+    throw new Error(
+      `Only ${available} remaining — you can record at most ${available}.`
+    );
+  }
+
   const salePayload: TablesInsert<"lp_sales"> = {
     lp_item_id: input.lpItemId,
     sold_qty: input.soldQty,
