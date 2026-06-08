@@ -17,7 +17,12 @@ import {
 import { surface } from "@/components/ui";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchCocobluAgeing } from "@/lib/cocoblu";
-import { fetchChecklistForDate, generateDailyTasks } from "@/lib/checklist";
+import {
+  fetchBreachCountSince,
+  fetchChecklistForDate,
+  generateDailyTasks,
+} from "@/lib/checklist";
+import { fetchPriorities, priorityState } from "@/lib/priorities";
 import { formatAED } from "@/lib/format";
 import {
   canViewChecklist,
@@ -75,7 +80,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 
   useEffect(() => {
     let active = true;
-    const order = ["checklist", "cocoblu", "amazon"];
+    const order = ["checklist", "priorities", "cocoblu", "amazon"];
 
     (async () => {
       const result: KpiGroup[] = [];
@@ -114,6 +119,51 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
                     label: "Open",
                     value: String(open),
                     tone: open > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
+                  },
+                ],
+              });
+            } catch {
+              /* skip module on error */
+            }
+          })()
+        );
+      }
+
+      if (canViewChecklist(profile)) {
+        jobs.push(
+          (async () => {
+            try {
+              const prios = await fetchPriorities(profile);
+              const openP = prios.filter((p) => priorityState(p) !== "completed");
+              const avg =
+                openP.length === 0
+                  ? 0
+                  : Math.round(
+                      openP.reduce((s, p) => s + (p.progress_pct ?? 0), 0) / openP.length
+                    );
+              const today = todayISODate();
+              const overdue = openP.filter(
+                (p) => (p.due_date_revised ?? p.due_date) < today
+              ).length;
+              const since = new Date(Date.now() - 7 * 86_400_000);
+              const sinceIso = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
+              const breaches = await fetchBreachCountSince(sinceIso);
+              result.push({
+                key: "priorities",
+                title: "Priorities & Breaches",
+                href: "/checklist",
+                kpis: [
+                  { label: "Open Priorities", value: String(openP.length) },
+                  { label: "Avg Progress", value: `${avg}%` },
+                  {
+                    label: "Overdue",
+                    value: String(overdue),
+                    tone: overdue > 0 ? "text-red-600 dark:text-red-400" : undefined,
+                  },
+                  {
+                    label: "Breaches (7d)",
+                    value: String(breaches),
+                    tone: breaches > 0 ? "text-red-600 dark:text-red-400" : undefined,
                   },
                 ],
               });

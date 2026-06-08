@@ -85,6 +85,19 @@ export async function fetchChecklistForDate(args: {
 }
 
 /**
+ * Count breach_log rows on/after `sinceDate` (YYYY-MM-DD), scoped by RLS
+ * (own for staff, all for managers). Fail-soft: returns 0 on error.
+ */
+export async function fetchBreachCountSince(sinceDate: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("breach_log")
+    .select("id", { count: "exact", head: true })
+    .gte("breach_date", sinceDate);
+  if (error) return 0;
+  return count ?? 0;
+}
+
+/**
  * Update a single daily task's status. Returns the updated row.
  */
 export async function setDailyTaskStatus(args: {
