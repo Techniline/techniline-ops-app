@@ -22,6 +22,7 @@ import {
   DashboardIcon,
   Logo,
   LogoutIcon,
+  PrioritiesIcon,
 } from "./icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -73,6 +74,12 @@ export function Sidebar({
       label: "Checklist",
       icon: ChecklistIcon,
       show: canViewChecklist(profile),
+    },
+    {
+      href: "/priorities",
+      label: "Priorities",
+      icon: PrioritiesIcon,
+      show: true,
     },
     {
       href: "/cocoblu",

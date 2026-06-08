@@ -17,6 +17,7 @@ export {
   fetchDailyTasks,
   fetchChecklistForDate,
   fetchBreachCountSince,
+  fetchUserNames,
   setDailyTaskStatus,
 } from "./queries";
 
