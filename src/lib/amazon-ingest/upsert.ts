@@ -32,11 +32,15 @@ type UpsertResult = {
   error?: string;
 };
 
-/** Manual upsert: look up by natural key, then update or insert. */
+/** Manual upsert: look up by natural key, then update or insert.
+ *  `preserveOnUpdate` columns are NOT overwritten when a row already exists —
+ *  used to protect human/workflow-owned fields (e.g. expected_actions.status)
+ *  from being reset by routine re-ingestion of the same email. */
 async function upsertRow<K extends keyof Database["public"]["Tables"]>(
   table: K,
   keyColumn: string | null,
-  values: Database["public"]["Tables"][K]["Insert"]
+  values: Database["public"]["Tables"][K]["Insert"],
+  preserveOnUpdate: string[] = []
 ): Promise<UpsertResult> {
   const sb = getServiceClient();
   const keyVal = keyColumn ? (values as Record<string, unknown>)[keyColumn] : null;
@@ -52,11 +56,14 @@ async function upsertRow<K extends keyof Database["public"]["Tables"]>(
 
     if (existing) {
       const id = (existing as unknown as { id: string }).id;
+      // Don't clobber human/workflow-owned columns on re-ingest.
+      const updateValues: Record<string, unknown> = { ...(values as Record<string, unknown>) };
+      for (const col of preserveOnUpdate) delete updateValues[col];
       // `as never` bypasses broken param inference on the generic from(table);
       // `values` is already validated to the table's Insert type by the caller.
       const { error: updErr } = await sb
         .from(table)
-        .update(values as never)
+        .update(updateValues as never)
         .filter("id", "eq", id);
       if (updErr) return { result: "error", id: null, error: updErr.message };
       return { result: "updated", id };
@@ -97,7 +104,14 @@ export async function executePlan(
     let r: UpsertResult;
     switch (op.table) {
       case "expected_actions":
-        r = await upsertRow("expected_actions", keyColumn, op.values as TablesInsert<"expected_actions">);
+        // Preserve workflow/assignment state across re-ingestion — only refresh
+        // the email-derived fields, never reset status/assignee.
+        r = await upsertRow(
+          "expected_actions",
+          keyColumn,
+          op.values as TablesInsert<"expected_actions">,
+          ["status", "assigned_to"]
+        );
         break;
       case "disputes":
         r = await upsertRow("disputes", keyColumn, op.values as TablesInsert<"disputes">);
