@@ -13,6 +13,7 @@ import {
   fetchSubmissionsForTasks,
   fetchUserNames,
   generateDailyTasks,
+  setDailyTaskStatus,
   submitTaskWithEvidence,
   type DailyTaskWithDefinition,
   type Submission,
@@ -27,8 +28,6 @@ import {
   type ResellerDealLog,
 } from "@/lib/reseller";
 import type { UserProfile } from "@/lib/types";
-
-const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
 /** Local-time today as YYYY-MM-DD (matches `daily_tasks.task_date`). */
 function todayISODate(): string {
@@ -615,7 +614,19 @@ function DealStatusBadge({ status }: { status: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s}`}>{status.replace(/_/g, " ")}</span>;
 }
 
-function ResellerDealsCard() {
+const RESELLER_TASK_TITLE = "Reseller inquiries + CRM deals";
+
+/** The "Reseller inquiries + CRM deals" task rendered as the minimal Zoho logger. */
+function ResellerTaskCard({
+  task,
+  profile,
+  onChanged,
+}: {
+  task: DailyTaskWithDefinition;
+  profile: UserProfile;
+  onChanged: () => void;
+}) {
+  const def = task.task_definitions;
   const [dealInput, setDealInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -640,6 +651,30 @@ function ResellerDealsCard() {
       setLast(log);
       setDealInput("");
       await reload();
+      if (task.status === "open") {
+        await setDailyTaskStatus({ id: task.id, status: "submitted" });
+        onChanged();
+      }
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function nothingToday(): Promise<void> {
+    setBusy(true);
+    setErr(null);
+    try {
+      await submitTaskWithEvidence({
+        taskId: task.id,
+        submittedBy: profile.id,
+        evidenceText: null,
+        evidenceCount: null,
+        isNothingToAction: true,
+        nothingToActionNote: "No reseller inquiries today",
+      });
+      onChanged();
     } catch (e) {
       setErr(errorMessage(e));
     } finally {
@@ -648,12 +683,15 @@ function ResellerDealsCard() {
   }
 
   return (
-    <div className={`${surface} mb-6 p-4`}>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reseller Inquiries + CRM Deals</h2>
-        <span className="text-xs font-medium text-slate-500">Today: {todayCount} logged</span>
+    <li className={`${surface} p-4`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-medium text-slate-900 dark:text-slate-100">{def?.title ?? RESELLER_TASK_TITLE}</h3>
+        <StatusBadge status={task.status} />
+        <CadenceBadge cadence={def?.cadence ?? "daily"} weekday={def?.weekday ?? null} />
+        <span className="ml-auto text-xs font-medium text-slate-500">Today: {todayCount} logged</span>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
         <input
           className={inputClass}
           placeholder="Zoho deal ID or URL"
@@ -665,10 +703,11 @@ function ResellerDealsCard() {
           {busy ? "Validating…" : "Validate & Log"}
         </button>
       </div>
+
       {err ? (
         <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p>
       ) : last ? (
-        <p className="mt-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <span className="font-medium">{last.deal_name ?? last.deal_id}</span>
           <DealStatusBadge status={last.validation_status} />
           {last.deal_url ? (
@@ -676,7 +715,13 @@ function ResellerDealsCard() {
           ) : null}
         </p>
       ) : null}
-    </div>
+
+      {task.status === "open" ? (
+        <button type="button" onClick={() => void nothingToday()} disabled={busy} className="mt-3 text-xs font-medium text-slate-500 underline hover:text-slate-700 dark:hover:text-slate-300">
+          Nothing to action today
+        </button>
+      ) : null}
+    </li>
   );
 }
 
@@ -837,7 +882,6 @@ function ChecklistContent() {
         </p>
       ) : null}
 
-      {managerView || profile.id === MARICEL_ID ? <ResellerDealsCard /> : null}
 
       {loading ? (
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>
@@ -879,20 +923,24 @@ function ChecklistContent() {
                   </button>
                   {!isCollapsed ? (
                     <ul className="mt-2 flex flex-col gap-3">
-                      {group.items.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          profile={profile}
-                          isManagerView={managerView}
-                          submitting={submittingId === task.id}
-                          submittedLine={submittedLineFor(task.id)}
-                          assignedToName={
-                            task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
-                          }
-                          onSubmit={handleSubmit}
-                        />
-                      ))}
+                      {group.items.map((task) =>
+                        task.task_definitions?.title === RESELLER_TASK_TITLE ? (
+                          <ResellerTaskCard key={task.id} task={task} profile={profile} onChanged={() => void load()} />
+                        ) : (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            profile={profile}
+                            isManagerView={managerView}
+                            submitting={submittingId === task.id}
+                            submittedLine={submittedLineFor(task.id)}
+                            assignedToName={
+                              task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
+                            }
+                            onSubmit={handleSubmit}
+                          />
+                        )
+                      )}
                     </ul>
                   ) : null}
                 </section>
