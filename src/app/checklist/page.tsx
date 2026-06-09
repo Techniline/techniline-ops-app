@@ -831,8 +831,10 @@ function ChecklistContent() {
         category,
         items: [...items].sort((a, b) => order(a) - order(b)),
         min: Math.min(...items.map(order)),
+        isReseller: items.some((t) => t.task_definitions?.title === RESELLER_TASK_TITLE),
       }))
-      .sort((a, b) => a.min - b.min);
+      // Priority Reseller section first, then the rest by sort_order.
+      .sort((a, b) => (b.isReseller ? 1 : 0) - (a.isReseller ? 1 : 0) || a.min - b.min);
   }, [tasks]);
 
   if (!profile) return null;
@@ -904,18 +906,24 @@ function ChecklistContent() {
               const gTotal = group.items.length;
               const gDone = group.items.filter((t) => DONE_STATUSES.has(t.status)).length;
               const fullyDone = gTotal > 0 && gDone === gTotal;
+              const isReseller = group.isReseller;
               const override = sectionOverride.get(group.category);
-              const isCollapsed = override ?? fullyDone; // default: collapse completed sections
+              // Collapse completed sections by default — except the priority reseller section.
+              const isCollapsed = override ?? (fullyDone && !isReseller);
               return (
-                <section key={group.category}>
+                <section
+                  key={group.category}
+                  className={isReseller ? "rounded-xl border-2 border-indigo-300 bg-indigo-50/50 p-2 dark:border-indigo-800 dark:bg-indigo-950/20" : ""}
+                >
                   <button
                     type="button"
                     onClick={() => toggleSection(group.category, isCollapsed)}
-                    className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    className={`flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left ${isReseller ? "hover:bg-indigo-100/60 dark:hover:bg-indigo-900/30" : "hover:bg-slate-50 dark:hover:bg-slate-800/40"}`}
                   >
-                    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <span className="text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
+                    <span className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${isReseller ? "text-indigo-700 dark:text-indigo-300" : "text-slate-500"}`}>
+                      <span className={isReseller ? "text-indigo-400" : "text-slate-400"}>{isCollapsed ? "▸" : "▾"}</span>
                       {group.category}
+                      {isReseller ? <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-semibold text-white">Priority</span> : null}
                     </span>
                     <span className={`text-xs font-medium ${gDone === gTotal ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
                       {gDone}/{gTotal} done
