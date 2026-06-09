@@ -21,7 +21,12 @@ export {
   setDailyTaskStatus,
 } from "./queries";
 
-export { submitTaskWithEvidence, fetchSubmissionsForTasks } from "./submissions";
+export {
+  submitTaskWithEvidence,
+  fetchSubmissionsForTasks,
+  uploadEvidenceFile,
+  evidenceFileUrl,
+} from "./submissions";
 export type {
   TaskEvidence,
   SubmitTaskArgs,

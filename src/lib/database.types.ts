@@ -897,6 +897,82 @@ export type Database = {
           },
         ]
       }
+      mm_recovered_carts: {
+        Row: {
+          amount: number | null
+          created_at: string
+          id: string
+          note: string | null
+          order_ref: string
+          recovered_by: string | null
+          recovered_date: string
+          validation_message: string | null
+          validation_status: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_ref: string
+          recovered_by?: string | null
+          recovered_date?: string
+          validation_message?: string | null
+          validation_status?: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_ref?: string
+          recovered_by?: string | null
+          recovered_date?: string
+          validation_message?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mm_recovered_carts_recovered_by_fkey"
+            columns: ["recovered_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mm_targets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          month: string
+          target_amount: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month: string
+          target_amount: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: string
+          target_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mm_targets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       priorities: {
         Row: {
           assigned_to: string | null
@@ -1423,6 +1499,7 @@ export type Database = {
         Row: {
           daily_task_id: string
           evidence_count: number | null
+          evidence_file_path: string | null
           evidence_text: string | null
           id: string
           is_nothing_to_action: boolean | null
@@ -1433,6 +1510,7 @@ export type Database = {
         Insert: {
           daily_task_id: string
           evidence_count?: number | null
+          evidence_file_path?: string | null
           evidence_text?: string | null
           id?: string
           is_nothing_to_action?: boolean | null
@@ -1443,6 +1521,7 @@ export type Database = {
         Update: {
           daily_task_id?: string
           evidence_count?: number | null
+          evidence_file_path?: string | null
           evidence_text?: string | null
           id?: string
           is_nothing_to_action?: boolean | null

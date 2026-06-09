@@ -24,10 +24,34 @@ export async function fetchSubmissionsForTasks(
   return data ?? [];
 }
 
+/** Private bucket holding checklist proof files (screenshots / PDFs). */
+const EVIDENCE_BUCKET = "checklist-evidence";
+
+/** Upload a proof file; returns the stored object path (or throws). */
+export async function uploadEvidenceFile(file: File): Promise<string> {
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `evidence/${Date.now()}-${safe}`;
+  const { error } = await supabase.storage
+    .from(EVIDENCE_BUCKET)
+    .upload(path, file, { upsert: false });
+  if (error) throw new Error(`Proof upload failed: ${error.message}`);
+  return path;
+}
+
+/** Short-lived signed URL to view a stored proof file (null on failure). */
+export async function evidenceFileUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(EVIDENCE_BUCKET)
+    .createSignedUrl(path, 3600);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
 /** The evidence portion of a submission, built by the UI per evidence_type. */
 export interface TaskEvidence {
   evidenceText?: string | null;
   evidenceCount?: number | null;
+  evidenceFilePath?: string | null;
   isNothingToAction?: boolean;
   nothingToActionNote?: string | null;
 }
@@ -56,6 +80,7 @@ export async function submitTaskWithEvidence(args: SubmitTaskArgs): Promise<void
     submittedBy,
     evidenceText = null,
     evidenceCount = null,
+    evidenceFilePath = null,
     isNothingToAction = false,
     nothingToActionNote = null,
   } = args;
@@ -66,6 +91,7 @@ export async function submitTaskWithEvidence(args: SubmitTaskArgs): Promise<void
     submitted_at: new Date().toISOString(),
     evidence_text: evidenceText,
     evidence_count: evidenceCount,
+    evidence_file_path: evidenceFilePath,
     is_nothing_to_action: isNothingToAction,
     nothing_to_action_note: nothingToActionNote,
   };

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ComponentType, SVGProps } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { ComponentType, FormEvent, SVGProps } from "react";
 
 import Link from "next/link";
 
@@ -22,6 +22,18 @@ import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
 import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/lp";
 import { computeResellerKpis, fetchDealLogs } from "@/lib/reseller";
+import {
+  computeMmKpis,
+  fetchMmMetrics,
+  fetchMmTarget,
+  fetchRecoveredThisMonth,
+  logRecoveredCart,
+  remainingWorkingDays,
+  setMmTarget,
+  type MmMetrics,
+  type MmRecoveredCart,
+} from "@/lib/musicmajlis";
+import { btnPrimary, inputClass } from "@/components/ui";
 import {
   fetchBreachCountSince,
   fetchChecklistForDate,
@@ -357,6 +369,155 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
   );
 }
 
+/* ----------------------- Music Majlis sales band ---------------------- */
+
+const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
+
+function MmTile({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900 dark:bg-slate-900">
+      <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${tone ?? "text-slate-900 dark:text-slate-100"}`}>{value}</p>
+    </div>
+  );
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Something went wrong.";
+}
+
+function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
+  const manager = isManager(profile);
+  const [target, setTarget] = useState(0);
+  const [metrics, setMetrics] = useState<MmMetrics | null>(null);
+  const [recovered, setRecovered] = useState<MmRecoveredCart[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showTarget, setShowTarget] = useState(false);
+  const [targetInput, setTargetInput] = useState("");
+  const [showRecover, setShowRecover] = useState(false);
+  const [orderRef, setOrderRef] = useState("");
+  const [recAmount, setRecAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [t, m, r] = await Promise.all([fetchMmTarget(), fetchMmMetrics(), fetchRecoveredThisMonth()]);
+    setTarget(t?.target_amount ?? 0);
+    setMetrics(m);
+    setRecovered(r);
+    setLoading(false);
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const achieved = metrics?.netSales ?? 0;
+  const k = computeMmKpis(target, achieved, recovered);
+  const connected = metrics?.configured === true;
+
+  async function saveTarget(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    setError(null);
+    const amt = Number(targetInput);
+    if (!Number.isFinite(amt) || amt < 0) return setError("Enter a valid target amount.");
+    setBusy(true);
+    try {
+      await setMmTarget(amt, profile.id);
+      setShowTarget(false);
+      setTargetInput("");
+      setBanner("Target updated.");
+      await load();
+    } catch (e2) {
+      setError(errMsg(e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRecover(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    setError(null);
+    if (orderRef.trim() === "") return setError("Enter the recovered order number.");
+    setBusy(true);
+    try {
+      const amt = recAmount.trim() === "" ? null : Number(recAmount);
+      await logRecoveredCart(orderRef.trim(), amt != null && Number.isFinite(amt) ? amt : null, null);
+      setShowRecover(false);
+      setOrderRef("");
+      setRecAmount("");
+      setBanner("Recovered cart logged.");
+      await load();
+    } catch (e2) {
+      setError(errMsg(e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-8 rounded-2xl border-2 border-emerald-300 bg-emerald-50/60 p-4 dark:border-emerald-800 dark:bg-emerald-950/20">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-emerald-800 dark:text-emerald-300">
+          MUSICMAJLIS
+          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Sales focus</span>
+        </h2>
+        <div className="flex gap-2">
+          {manager ? (
+            <button type="button" onClick={() => { setTargetInput(target ? String(target) : ""); setShowTarget(true); }} className={btnSecondary}>Set MM target</button>
+          ) : null}
+          <button type="button" onClick={() => setShowRecover(true)} className={btnPrimary}>Log recovered cart</button>
+        </div>
+      </div>
+
+      {banner ? <p className="mb-2 text-xs text-emerald-700 dark:text-emerald-400">{banner}</p> : null}
+      {error ? <p className="mb-2 text-xs text-red-600">{error}</p> : null}
+      {!connected && !loading ? (
+        <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">Shopify not connected yet — net sales &amp; abandoned carts show “—”. Set the env vars to light them up.</p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <MmTile label="Monthly Target" value={formatAED(k.target)} />
+        <MmTile label="Achieved (net sales)" value={connected ? formatAED(k.achieved) : "—"} tone="text-emerald-700 dark:text-emerald-400" />
+        <MmTile label="% Achieved" value={target > 0 && connected ? `${Math.round(k.pct)}%` : "—"} tone={k.pct >= 100 ? "text-emerald-700 dark:text-emerald-400" : undefined} />
+        <MmTile label={`Today's Target (${remainingWorkingDays()}d left)`} value={target > 0 ? formatAED(k.todayTarget) : "—"} />
+        <MmTile label="Abandoned Carts" value={connected && metrics?.abandonedCarts != null ? String(metrics.abandonedCarts) : "—"} tone="text-amber-700 dark:text-amber-400" />
+        <MmTile label="Recovered (this mo)" value={`${k.recoveredCount} · ${formatAED(k.recoveredValue)}`} />
+      </div>
+
+      {showTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setShowTarget(false)}>
+          <form onSubmit={saveTarget} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Set this month’s MM target</h3>
+            <input type="number" min="0" step="100" className={inputClass} placeholder="Target (AED)" value={targetInput} onChange={(e) => setTargetInput(e.target.value)} autoFocus />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowTarget(false)} className={btnSecondary}>Cancel</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? "Saving…" : "Save"}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {showRecover ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setShowRecover(false)}>
+          <form onSubmit={saveRecover} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Log recovered cart</h3>
+            <p className="mb-3 text-xs text-slate-500">Enter the recovered Shopify order number — it’s validated against Shopify as proof.</p>
+            <input className={inputClass} placeholder="Order # (e.g. #1234)" value={orderRef} onChange={(e) => setOrderRef(e.target.value)} autoFocus />
+            <input type="number" min="0" step="0.01" className={`${inputClass} mt-2`} placeholder="Amount (optional — auto from Shopify)" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowRecover(false)} className={btnSecondary}>Cancel</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? "Validating…" : "Validate & Log"}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 interface ModuleCard {
   key: string;
   title: string;
@@ -510,6 +671,8 @@ function DashboardContent() {
           );
         })}
       </div>
+
+      {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
 
       <KpiDashboard profile={profile} />
 
