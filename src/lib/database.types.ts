@@ -1322,6 +1322,44 @@ export type Database = {
           },
         ]
       }
+      staff_leave: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_date: string
+          id: string
+          reason: string | null
+          to_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_date: string
+          id?: string
+          reason?: string | null
+          to_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_date?: string
+          id?: string
+          reason?: string | null
+          to_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_leave_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submissions: {
         Row: {
           daily_task_id: string

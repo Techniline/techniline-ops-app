@@ -19,6 +19,7 @@ import {
   type TaskEvidence,
   type TaskStatus,
 } from "@/lib/checklist";
+import { addLeave, deleteLeave, fetchLeave, type LeaveRow } from "@/lib/leave";
 import { canViewUser, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
@@ -434,8 +435,142 @@ function WorkLogPanel({
   );
 }
 
+/* ------------------------------- Leave --------------------------------- */
+
+function LeaveModal({
+  profile,
+  managerView,
+  userNames,
+  onClose,
+  onChanged,
+}: {
+  profile: UserProfile;
+  managerView: boolean;
+  userNames: Map<string, string>;
+  onClose: () => void;
+  onChanged: (message: string) => void;
+}) {
+  const [rows, setRows] = useState<LeaveRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(profile.id);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setRows(await fetchLeave(profile));
+    setLoading(false);
+  }, [profile]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const userOptions = useMemo(
+    () => [...userNames.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+    [userNames]
+  );
+
+  async function add(): Promise<void> {
+    setErr(null);
+    setBusy(true);
+    try {
+      await addLeave({
+        userId: managerView ? userId : profile.id,
+        fromDate,
+        toDate,
+        reason: reason.trim() || null,
+        createdBy: profile.id,
+      });
+      setFromDate(""); setToDate(""); setReason("");
+      await reload();
+      onChanged("Leave recorded — no tasks generate on those days.");
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string): Promise<void> {
+    setBusy(true);
+    try {
+      await deleteLeave(id);
+      await reload();
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div className="my-auto w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-slate-800 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leave / absence</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="-mr-1 -mt-1 rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+        </div>
+        <p className="mb-4 text-xs text-slate-500">On leave days, no checklist is generated for that person — so absences aren&apos;t counted as missed work.</p>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {managerView ? (
+            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Person</span>
+              <select className={inputClass} value={userId} onChange={(e) => setUserId(e.target.value)}>
+                {userOptions.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+              </select>
+            </label>
+          ) : null}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-300">From</span>
+            <input type="date" className={inputClass} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-300">To</span>
+            <input type="date" className={inputClass} value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700 dark:text-slate-300">Reason (optional)</span>
+            <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+        </div>
+        {err ? <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p> : null}
+        <div className="mt-3 flex justify-end">
+          <button type="button" disabled={busy} onClick={() => void add()} className={btnPrimary}>{busy ? "Saving…" : "Add leave"}</button>
+        </div>
+
+        <div className="mt-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Recorded leave</p>
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="text-sm text-slate-400">None recorded.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {rows.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {managerView ? `${userNames.get(r.user_id) ?? "User"} · ` : ""}{r.from_date} → {r.to_date}
+                    {r.reason ? <span className="text-slate-400"> — {r.reason}</span> : null}
+                  </span>
+                  <button type="button" disabled={busy} onClick={() => void remove(r.id)} className="text-xs font-medium text-red-500 hover:text-red-700">Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChecklistContent() {
   const { profile } = useAuth();
+  const [showLeave, setShowLeave] = useState(false);
 
   const [tasks, setTasks] = useState<DailyTaskWithDefinition[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -538,7 +673,25 @@ function ChecklistContent() {
 
   return (
     <div>
-      <PageHeader title="Today's Checklist" subtitle={todayLabel()} />
+      <PageHeader
+        title="Today's Checklist"
+        subtitle={todayLabel()}
+        actions={
+          <button type="button" onClick={() => setShowLeave(true)} className={btnSecondary}>
+            Leave / absence
+          </button>
+        }
+      />
+
+      {showLeave ? (
+        <LeaveModal
+          profile={profile}
+          managerView={managerView}
+          userNames={userNameById}
+          onClose={() => setShowLeave(false)}
+          onChanged={() => { setShowLeave(false); setActionError(null); void load(); }}
+        />
+      ) : null}
 
       {actionError ? (
         <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
