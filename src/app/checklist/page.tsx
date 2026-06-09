@@ -606,15 +606,12 @@ function ChecklistContent() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Per-section manual open/closed override; absent → default (completed sections
+  // auto-collapse so focus lands on what's left).
+  const [sectionOverride, setSectionOverride] = useState<Map<string, boolean>>(new Map());
 
-  function toggleSection(category: string): void {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
+  function toggleSection(category: string, currentlyCollapsed: boolean): void {
+    setSectionOverride((prev) => new Map(prev).set(category, !currentlyCollapsed));
   }
 
   const profileId = profile?.id ?? null;
@@ -773,14 +770,16 @@ function ChecklistContent() {
           <ProgressBar done={done} total={total} />
           <div className="flex flex-col gap-3">
             {groupedTasks.map((group) => {
-              const isCollapsed = collapsed.has(group.category);
               const gTotal = group.items.length;
               const gDone = group.items.filter((t) => DONE_STATUSES.has(t.status)).length;
+              const fullyDone = gTotal > 0 && gDone === gTotal;
+              const override = sectionOverride.get(group.category);
+              const isCollapsed = override ?? fullyDone; // default: collapse completed sections
               return (
                 <section key={group.category}>
                   <button
                     type="button"
-                    onClick={() => toggleSection(group.category)}
+                    onClick={() => toggleSection(group.category, isCollapsed)}
                     className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
                   >
                     <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
