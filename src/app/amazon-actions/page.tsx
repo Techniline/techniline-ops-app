@@ -775,6 +775,15 @@ function AmazonActionsContent() {
             </select>
           </div>
         </div>
+        <div className="mt-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            {(CATEGORY_TABS.find((t) => t.key === categoryFilter)?.label ?? "All")} ({list.length})
+          </h2>
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
+            Show resolved
+          </label>
+        </div>
       </div>
 
       {banner ? (
@@ -793,17 +802,6 @@ function AmazonActionsContent() {
         </div>
       ) : (
         <>
-          {/* Actions list */}
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              {(CATEGORY_TABS.find((t) => t.key === categoryFilter)?.label ?? "All")} ({list.length})
-            </h2>
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
-              Show resolved
-            </label>
-          </div>
-
           {list.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
               <p className="text-sm text-slate-500">No actions to show.</p>
