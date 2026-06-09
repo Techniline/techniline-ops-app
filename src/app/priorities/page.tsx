@@ -75,9 +75,10 @@ function NewPriorityModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const managerView = isManager(profile);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assignee, setAssignee] = useState<string>(users[0]?.id ?? "both");
+  const [assignee, setAssignee] = useState<string>(managerView ? (users[0]?.id ?? "both") : profile.id);
   const [level, setLevel] = useState<PriorityLevel>("P2");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -92,36 +93,39 @@ function NewPriorityModal({
 
     setSaving(true);
     try {
-      const both = assignee === "both";
+      const both = managerView && assignee === "both";
       const created = await createPriority({
         createdBy: profile.id,
         title: title.trim(),
         description: description.trim() || null,
-        assignedTo: both ? null : assignee,
+        assignedTo: both ? null : managerView ? assignee : profile.id,
         assignedToBoth: both,
         dueDate,
         priorityLevel: level,
         notes: notes.trim() || null,
       });
 
-      // Notify the assignee(s). Priority is already saved — only warn on failure.
-      const recipients = both
-        ? users.map((u) => u.email).filter(Boolean)
-        : [users.find((u) => u.id === assignee)?.email].filter((x): x is string => !!x);
+      // Managers notify the assignee(s) via the manager-gated email route.
+      // Self-created priorities are the user's own — no notification.
       let warn = "";
-      if (recipients.length > 0) {
-        const subject = `New Priority assigned: ${created.title} (${level})`;
-        const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
-          <h2 style="margin:0 0 8px">New Priority assigned</h2>
-          <p><b>${created.title}</b> &nbsp;<span style="color:#666">[${level}]</span></p>
-          ${created.description ? `<p>${created.description}</p>` : ""}
-          <p><b>Due:</b> ${dueDate}</p>
-          <p style="color:#666">Assigned by ${profile.full_name ?? profile.email ?? "your manager"}.</p>
-        </div>`;
-        const r = await sendNotification(recipients, subject, html);
-        if (!r.ok) warn = ` (⚠ email notification failed: ${r.error})`;
-      } else {
-        warn = " (no email on file for the assignee)";
+      if (managerView) {
+        const recipients = both
+          ? users.map((u) => u.email).filter(Boolean)
+          : [users.find((u) => u.id === assignee)?.email].filter((x): x is string => !!x);
+        if (recipients.length > 0) {
+          const subject = `New Priority assigned: ${created.title} (${level})`;
+          const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
+            <h2 style="margin:0 0 8px">New Priority assigned</h2>
+            <p><b>${created.title}</b> &nbsp;<span style="color:#666">[${level}]</span></p>
+            ${created.description ? `<p>${created.description}</p>` : ""}
+            <p><b>Due:</b> ${dueDate}</p>
+            <p style="color:#666">Assigned by ${profile.full_name ?? profile.email ?? "your manager"}.</p>
+          </div>`;
+          const r = await sendNotification(recipients, subject, html);
+          if (!r.ok) warn = ` (⚠ email notification failed: ${r.error})`;
+        } else {
+          warn = " (no email on file for the assignee)";
+        }
       }
       onSaved(`Priority created.${warn}`);
     } catch (e) {
@@ -144,12 +148,21 @@ function NewPriorityModal({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-300">Assign to</span>
-            <select className={inputClass} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}{u.email ? ` (${u.email})` : ""}</option>
-              ))}
-              <option value="both">Both</option>
-            </select>
+            {managerView ? (
+              <select className={inputClass} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}{u.email ? ` (${u.email})` : ""}</option>
+                ))}
+                <option value="both">Both</option>
+              </select>
+            ) : (
+              <input
+                className={inputClass}
+                value={`${profile.full_name ?? profile.email ?? "You"} (you)`}
+                readOnly
+                disabled
+              />
+            )}
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-300">Priority</span>
@@ -350,14 +363,14 @@ function PrioritiesContent() {
     <div>
       <PageHeader
         title="Priorities"
-        subtitle={managerView ? "Assign and track priorities across the team." : "Your assigned priorities."}
+        subtitle={managerView ? "Assign and track priorities across the team." : "Your priorities — assigned to you, plus ones you add."}
         actions={
-          managerView ? (
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            {managerView ? (
               <button type="button" onClick={() => setShowWeekly(true)} className={btnSecondary}>Send weekly summary</button>
-              <button type="button" onClick={() => { setBanner(null); setShowNew(true); }} className={btnPrimary}>+ New Priority</button>
-            </div>
-          ) : null
+            ) : null}
+            <button type="button" onClick={() => { setBanner(null); setShowNew(true); }} className={btnPrimary}>+ New Priority</button>
+          </div>
         }
       />
 
@@ -376,7 +389,7 @@ function PrioritiesContent() {
       ) : sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
           <p className="text-sm text-slate-500">
-            {managerView ? "No priorities yet. Create one and assign it." : "No priorities assigned to you yet."}
+            {managerView ? "No priorities yet. Create one and assign it." : "No priorities yet. Add your own with “+ New Priority”."}
           </p>
         </div>
       ) : (
