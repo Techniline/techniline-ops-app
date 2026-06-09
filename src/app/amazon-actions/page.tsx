@@ -807,9 +807,9 @@ function AmazonActionsContent() {
               <p className="text-sm text-slate-500">No actions to show.</p>
             </div>
           ) : (
-            <div className={tableWrap}>
+            <div className={`${tableWrap} max-h-[calc(100dvh-20rem)] overflow-auto`}>
               <table className="min-w-full text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
                   <tr>
                     <th className={thCell}>Category</th>
                     <th className={thCell}>Amazon Ref</th>

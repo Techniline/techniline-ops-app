@@ -900,9 +900,9 @@ function AgeingTable({
     if (url) window.open(url, "_blank", "noopener,noreferrer");
   }
   return (
-    <div className={`${surface} overflow-x-auto`}>
+    <div className={`${surface} max-h-[calc(100dvh-15rem)] overflow-auto`}>
       <table className="min-w-full text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+        <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
           <tr>
             <th className={TH_CLASS}>Invoice Number</th>
             <th className={TH_CLASS}>Invoice Date</th>
