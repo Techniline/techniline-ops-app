@@ -7,7 +7,7 @@ import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
-import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
+import { btnPrimary, btnSecondary, btnSmall, inputClass, surface } from "@/components/ui";
 import {
   fetchChecklistForDate,
   fetchSubmissionsForTasks,
@@ -21,7 +21,14 @@ import {
 } from "@/lib/checklist";
 import { addLeave, deleteLeave, fetchLeave, type LeaveRow } from "@/lib/leave";
 import { canViewUser, isManager } from "@/lib/permissions";
+import {
+  fetchDealLogs,
+  validateDealViaApi,
+  type ResellerDealLog,
+} from "@/lib/reseller";
 import type { UserProfile } from "@/lib/types";
+
+const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
 /** Local-time today as YYYY-MM-DD (matches `daily_tasks.task_date`). */
 function todayISODate(): string {
@@ -595,6 +602,107 @@ function LeaveModal({
   );
 }
 
+/* ----------------------- Reseller deals (Zoho) ------------------------- */
+
+const DEAL_STATUS_STYLE: Record<string, string> = {
+  valid: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  invalid: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  api_error: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  pending_validation: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+};
+function DealStatusBadge({ status }: { status: string }) {
+  const s = DEAL_STATUS_STYLE[status] ?? DEAL_STATUS_STYLE.pending_validation;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s}`}>{status.replace(/_/g, " ")}</span>;
+}
+
+function ResellerDealsCard() {
+  const [dealInput, setDealInput] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [logs, setLogs] = useState<ResellerDealLog[]>([]);
+
+  const reload = useCallback(async () => {
+    setLogs(await fetchDealLogs());
+  }, []);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const todayStr = todayISODate();
+  const todays = logs.filter((l) => (l.logged_at ?? "").slice(0, 10) === todayStr);
+
+  async function logDeal(): Promise<void> {
+    setErr(null);
+    if (dealInput.trim() === "") return setErr("Enter the Zoho deal URL or ID.");
+    setBusy(true);
+    try {
+      await validateDealViaApi(dealInput.trim(), note.trim() || null);
+      setDealInput("");
+      setNote("");
+      await reload();
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={`${surface} mb-6 p-4`}>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reseller Inquiries + CRM Deals</h2>
+        <span className="text-xs font-medium text-slate-500">{todays.length} logged today</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input
+          className={inputClass}
+          placeholder="Zoho deal URL or ID"
+          value={dealInput}
+          onChange={(e) => setDealInput(e.target.value)}
+        />
+        <input
+          className={inputClass}
+          placeholder="Customer / inquiry note (optional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <button type="button" disabled={busy} onClick={() => void logDeal()} className={btnPrimary}>
+          {busy ? "Validating…" : "Validate & Log"}
+        </button>
+      </div>
+      {err ? (
+        <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p>
+      ) : null}
+
+      {todays.length > 0 ? (
+        <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800/60">
+          {todays.map((l) => (
+            <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+              <div className="min-w-0">
+                <span className="font-medium text-slate-800 dark:text-slate-200">{l.deal_name ?? l.deal_id}</span>
+                {l.owner_name ? <span className="text-xs text-slate-500"> · {l.owner_name}</span> : null}
+                {l.stage ? <span className="text-xs text-slate-400"> · {l.stage}</span> : null}
+                {l.amount != null ? <span className="text-xs text-slate-400"> · AED {l.amount.toLocaleString()}</span> : null}
+                {l.deal_created_time ? <span className="text-xs text-slate-400"> · created {new Date(l.deal_created_time).toLocaleDateString()}</span> : null}
+                {l.inquiry_note ? <span className="text-xs text-slate-400"> · {l.inquiry_note}</span> : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <DealStatusBadge status={l.validation_status} />
+                {l.deal_url ? (
+                  <a href={l.deal_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">Open ↗</a>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-xs text-slate-400">No deals logged yet today. Log each one as you create it in Zoho.</p>
+      )}
+    </div>
+  );
+}
+
 function ChecklistContent() {
   const { profile } = useAuth();
   const [showLeave, setShowLeave] = useState(false);
@@ -751,6 +859,8 @@ function ChecklistContent() {
           {actionError}
         </p>
       ) : null}
+
+      {managerView || profile.id === MARICEL_ID ? <ResellerDealsCard /> : null}
 
       {loading ? (
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>

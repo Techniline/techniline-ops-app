@@ -21,6 +21,7 @@ import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
 import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/lp";
+import { computeResellerKpis, fetchDealLogs } from "@/lib/reseller";
 import {
   fetchBreachCountSince,
   fetchChecklistForDate,
@@ -85,7 +86,8 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 
   useEffect(() => {
     let active = true;
-    const order = ["checklist", "priorities", "cocoblu", "lp", "amazon"];
+    const order = ["checklist", "priorities", "reseller", "cocoblu", "lp", "amazon"];
+    const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
     (async () => {
       const result: KpiGroup[] = [];
@@ -203,6 +205,40 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
                     tone:
                       s.warningRecords > 0 ? "text-orange-600 dark:text-orange-400" : undefined,
                   },
+                ],
+              });
+            } catch {
+              /* skip module on error */
+            }
+          })()
+        );
+      }
+
+      if (isManager(profile) || profile.id === MARICEL_ID) {
+        jobs.push(
+          (async () => {
+            try {
+              const logs = await fetchDealLogs();
+              const k = computeResellerKpis(logs);
+              result.push({
+                key: "reseller",
+                title: "Reseller Deals (Zoho)",
+                href: "/checklist",
+                kpis: [
+                  { label: "Logged Today", value: k.today.toLocaleString() },
+                  { label: "Valid", value: k.valid.toLocaleString(), tone: "text-emerald-600 dark:text-emerald-400" },
+                  {
+                    label: "Pending",
+                    value: k.pending.toLocaleString(),
+                    tone: k.pending > 0 ? "text-slate-500" : undefined,
+                  },
+                  {
+                    label: "Invalid / API err",
+                    value: (k.invalid + k.apiError).toLocaleString(),
+                    tone: k.invalid + k.apiError > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
+                  },
+                  { label: "Week / Month", value: `${k.week} / ${k.month}` },
+                  { label: "Deal Value (valid)", value: formatAED(k.totalValue) },
                 ],
               });
             } catch {

@@ -1173,6 +1173,65 @@ export type Database = {
           },
         ]
       }
+      reseller_deal_logs: {
+        Row: {
+          amount: number | null
+          deal_created_time: string | null
+          deal_id: string
+          deal_name: string | null
+          deal_url: string | null
+          id: string
+          inquiry_note: string | null
+          logged_at: string
+          logged_by: string | null
+          owner_email: string | null
+          owner_name: string | null
+          stage: string | null
+          validation_message: string | null
+          validation_status: string
+        }
+        Insert: {
+          amount?: number | null
+          deal_created_time?: string | null
+          deal_id: string
+          deal_name?: string | null
+          deal_url?: string | null
+          id?: string
+          inquiry_note?: string | null
+          logged_at?: string
+          logged_by?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          stage?: string | null
+          validation_message?: string | null
+          validation_status?: string
+        }
+        Update: {
+          amount?: number | null
+          deal_created_time?: string | null
+          deal_id?: string
+          deal_name?: string | null
+          deal_url?: string | null
+          id?: string
+          inquiry_note?: string | null
+          logged_at?: string
+          logged_by?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          stage?: string | null
+          validation_message?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_deal_logs_logged_by_fkey"
+            columns: ["logged_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       returns: {
         Row: {
           amazon_invoice: string | null
