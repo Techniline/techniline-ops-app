@@ -606,6 +606,16 @@ function ChecklistContent() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleSection(category: string): void {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
 
   const profileId = profile?.id ?? null;
 
@@ -761,30 +771,47 @@ function ChecklistContent() {
       ) : (
         <>
           <ProgressBar done={done} total={total} />
-          <div className="flex flex-col gap-6">
-            {groupedTasks.map((group) => (
-              <section key={group.category}>
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {group.category}
-                </h2>
-                <ul className="flex flex-col gap-3">
-                  {group.items.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      profile={profile}
-                      isManagerView={managerView}
-                      submitting={submittingId === task.id}
-                      submittedLine={submittedLineFor(task.id)}
-                      assignedToName={
-                        task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
-                      }
-                      onSubmit={handleSubmit}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
+          <div className="flex flex-col gap-3">
+            {groupedTasks.map((group) => {
+              const isCollapsed = collapsed.has(group.category);
+              const gTotal = group.items.length;
+              const gDone = group.items.filter((t) => DONE_STATUSES.has(t.status)).length;
+              return (
+                <section key={group.category}>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(group.category)}
+                    className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  >
+                    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <span className="text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
+                      {group.category}
+                    </span>
+                    <span className={`text-xs font-medium ${gDone === gTotal ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
+                      {gDone}/{gTotal} done
+                    </span>
+                  </button>
+                  {!isCollapsed ? (
+                    <ul className="mt-2 flex flex-col gap-3">
+                      {group.items.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          profile={profile}
+                          isManagerView={managerView}
+                          submitting={submittingId === task.id}
+                          submittedLine={submittedLineFor(task.id)}
+                          assignedToName={
+                            task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
+                          }
+                          onSubmit={handleSubmit}
+                        />
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+              );
+            })}
           </div>
           <WorkLogPanel
             submissions={submissions}
