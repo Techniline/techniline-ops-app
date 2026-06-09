@@ -1523,7 +1523,7 @@ function LpContent() {
 
       <div className="flex flex-col gap-4 lg:flex-row">
         {/* Left in-module nav */}
-        <nav className={`flex shrink-0 flex-wrap gap-2 lg:w-44 lg:flex-col ${surface} p-2`}>
+        <nav className={`flex shrink-0 flex-wrap gap-2 lg:sticky lg:top-0 lg:w-44 lg:flex-col lg:self-start ${surface} p-2`}>
           {navItem("overview", "Overview")}
           {navItem("browse", "Browse lines")}
           <button type="button" onClick={() => { setUploadError(null); fileInputRef.current?.click(); }} disabled={parsing} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800">
