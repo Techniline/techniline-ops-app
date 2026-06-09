@@ -70,6 +70,32 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function CadenceBadge({ cadence, weekday }: { cadence: string | null; weekday: number | null }) {
+  const c = cadence ?? "daily";
+  if (c === "weekly") {
+    const wd = weekday != null && weekday >= 0 && weekday <= 6 ? ` · ${WEEKDAY[weekday]}` : "";
+    return (
+      <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        Weekly{wd}
+      </span>
+    );
+  }
+  if (c === "adhoc") {
+    return (
+      <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        As needed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
+      Daily
+    </span>
+  );
+}
+
 function formatCreatedAt(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -211,11 +237,12 @@ function TaskCard({
     <li className={`${surface} p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-medium text-slate-900 dark:text-slate-100">
               {title}
             </h3>
             <StatusBadge status={task.status} />
+            <CadenceBadge cadence={definition?.cadence ?? "daily"} weekday={definition?.weekday ?? null} />
           </div>
           {submittedLine ? (
             <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">✓ {submittedLine}</p>
@@ -652,6 +679,25 @@ function ChecklistContent() {
     return m;
   }, [submissions]);
 
+  // Group tasks under their definition's category, ordered by sort_order.
+  const groupedTasks = useMemo(() => {
+    const order = (t: DailyTaskWithDefinition) => t.task_definitions?.sort_order ?? 9999;
+    const byCat = new Map<string, DailyTaskWithDefinition[]>();
+    for (const t of tasks) {
+      const cat = t.task_definitions?.category ?? "Other";
+      const arr = byCat.get(cat);
+      if (arr) arr.push(t);
+      else byCat.set(cat, [t]);
+    }
+    return [...byCat.entries()]
+      .map(([category, items]) => ({
+        category,
+        items: [...items].sort((a, b) => order(a) - order(b)),
+        min: Math.min(...items.map(order)),
+      }))
+      .sort((a, b) => a.min - b.min);
+  }, [tasks]);
+
   if (!profile) return null;
 
   const managerView = isManager(profile);
@@ -715,22 +761,31 @@ function ChecklistContent() {
       ) : (
         <>
           <ProgressBar done={done} total={total} />
-          <ul className="flex flex-col gap-3">
-            {tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                profile={profile}
-                isManagerView={managerView}
-                submitting={submittingId === task.id}
-                submittedLine={submittedLineFor(task.id)}
-                assignedToName={
-                  task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
-                }
-                onSubmit={handleSubmit}
-              />
+          <div className="flex flex-col gap-6">
+            {groupedTasks.map((group) => (
+              <section key={group.category}>
+                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {group.category}
+                </h2>
+                <ul className="flex flex-col gap-3">
+                  {group.items.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      profile={profile}
+                      isManagerView={managerView}
+                      submitting={submittingId === task.id}
+                      submittedLine={submittedLineFor(task.id)}
+                      assignedToName={
+                        task.assigned_to ? userNameById.get(task.assigned_to) ?? null : null
+                      }
+                      onSubmit={handleSubmit}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
           <WorkLogPanel
             submissions={submissions}
             taskTitleById={taskTitleById}

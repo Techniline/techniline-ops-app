@@ -1411,6 +1411,8 @@ export type Database = {
       task_definitions: {
         Row: {
           assigned_to: string | null
+          cadence: string
+          category: string | null
           created_at: string | null
           eod_time: string | null
           evidence_hint: string | null
@@ -1418,10 +1420,14 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_email_triggered: boolean | null
+          sort_order: number | null
           title: string
+          weekday: number | null
         }
         Insert: {
           assigned_to?: string | null
+          cadence?: string
+          category?: string | null
           created_at?: string | null
           eod_time?: string | null
           evidence_hint?: string | null
@@ -1429,10 +1435,14 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_email_triggered?: boolean | null
+          sort_order?: number | null
           title: string
+          weekday?: number | null
         }
         Update: {
           assigned_to?: string | null
+          cadence?: string
+          category?: string | null
           created_at?: string | null
           eod_time?: string | null
           evidence_hint?: string | null
@@ -1440,7 +1450,9 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_email_triggered?: boolean | null
+          sort_order?: number | null
           title?: string
+          weekday?: number | null
         }
         Relationships: [
           {
