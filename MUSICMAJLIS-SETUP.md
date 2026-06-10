@@ -79,9 +79,13 @@ Re-generate `ZOHO_REFRESH_TOKEN` with scopes:
 
 | Variable | Value |
 |---|---|
-| `ZOHO_MM_PIPELINE` | `Back to Back` (exact pipeline name in your Deals layout) |
-| `ZOHO_MM_STAGE` | the first stage of that pipeline, e.g. `Qualification` |
+| `ZOHO_MM_PIPELINE` | `Back-to-Back Orders` (confirmed exact name from the Deals Pipeline field) |
+| `ZOHO_MM_STAGE` | `New Inquiry` (first stage for a new deal) |
 | `ZOHO_ORG_ID` | `712284897` (used to build deal links; already the known org) |
+
+> Set & verified 2026-06-10: token re-issued with `deals.ALL, contacts.READ, settings.ALL`;
+> refresh round-trip OK. (A dedicated `MusicMajlis` pipeline also exists in CRM if you ever
+> prefer cart deals to land there instead — just change `ZOHO_MM_PIPELINE`.)
 
 Until the write scope is in place, the **Create Zoho deal** button returns a clear error
 and nothing else breaks (actioning/clearing carts still works).
