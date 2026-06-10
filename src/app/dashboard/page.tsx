@@ -429,7 +429,7 @@ function MmTile({ label, value, tone, big = false }: { label: string; value: str
       className={`group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         big
           ? "min-h-[128px] border-emerald-200 from-emerald-50 to-white p-5 hover:ring-emerald-300 dark:border-emerald-800 dark:from-emerald-950/40 dark:to-slate-900"
-          : "min-h-[112px] border-emerald-100 from-white to-emerald-50/40 p-4 hover:ring-emerald-200 dark:border-emerald-900/60 dark:from-slate-900 dark:to-emerald-950/20 dark:hover:ring-emerald-800"
+          : "min-h-[112px] items-center text-center border-emerald-100 from-white to-emerald-50/40 p-4 hover:ring-emerald-200 dark:border-emerald-900/60 dark:from-slate-900 dark:to-emerald-950/20 dark:hover:ring-emerald-800"
       }`}
     >
       <span className={`absolute inset-y-0 left-0 transition-all group-hover:w-1.5 ${big ? "w-1.5 bg-emerald-500" : "w-1 bg-emerald-400/70 group-hover:bg-emerald-500 dark:bg-emerald-700"}`} />
@@ -619,13 +619,13 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <button
           type="button"
           onClick={() => setShowCarts((s) => !s)}
-          className="group relative flex h-full min-h-[112px] flex-col justify-between overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50/60 p-4 text-left shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-amber-300 dark:border-amber-900/60 dark:from-slate-900 dark:to-amber-950/20"
+          className="group relative flex h-full min-h-[112px] flex-col items-center justify-between overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50/60 p-4 text-center shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-amber-300 dark:border-amber-900/60 dark:from-slate-900 dark:to-amber-950/20"
         >
           <span className="absolute inset-y-0 left-0 w-1 bg-amber-400/80 transition-all group-hover:w-1.5 group-hover:bg-amber-500 dark:bg-amber-700" />
           <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
             Abandoned Carts{abandonedLabel ? ` (${abandonedLabel})` : ""}
           </p>
-          <div>
+          <div className="flex flex-col items-center">
             <p className="text-2xl font-bold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">{abandonedTileValue}</p>
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200 px-2.5 py-1 text-[11px] font-semibold text-amber-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(0,0,0,0.12)] transition-all group-hover:from-amber-200 group-hover:to-amber-300 group-active:translate-y-px group-active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)] dark:border-amber-700 dark:from-amber-800 dark:to-amber-900 dark:text-amber-100">
               {showCarts ? "Hide list ▲" : "Action carts ▼"}
