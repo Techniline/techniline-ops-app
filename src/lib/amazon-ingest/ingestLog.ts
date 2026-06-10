@@ -40,12 +40,15 @@ export async function recordProcessedMessage(args: {
 }): Promise<void> {
   const { error } = await client()
     .from("ingest_log")
-    .insert({
-      message_id: args.messageId,
-      mailbox: args.mailbox,
-      received_at: args.receivedAt,
-      email_type: args.emailType,
-    });
+    .upsert(
+      {
+        message_id: args.messageId,
+        mailbox: args.mailbox,
+        received_at: args.receivedAt,
+        email_type: args.emailType,
+      },
+      { onConflict: "message_id", ignoreDuplicates: true }
+    );
   if (error) throw new Error(error.message);
 }
 
@@ -85,13 +88,14 @@ export async function recordProcessedMessages(
   if (rows.length === 0) return;
   const { error } = await client()
     .from("ingest_log")
-    .insert(
+    .upsert(
       rows.map((r) => ({
         message_id: r.messageId,
         mailbox: r.mailbox,
         received_at: r.receivedAt,
         email_type: r.emailType,
-      }))
+      })),
+      { onConflict: "message_id", ignoreDuplicates: true }
     );
   if (error) throw new Error(error.message);
 }
