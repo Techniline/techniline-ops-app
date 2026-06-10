@@ -15,6 +15,15 @@ interface NeedsActionDeal {
   url: string;
 }
 
+// Today's date in Dubai (GMT+4) as YYYY-MM-DD.
+function dubaiToday(): string {
+  return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+function isCreatedToday(iso: string | null): boolean {
+  if (!iso) return false;
+  return new Date(new Date(iso).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10) === dubaiToday();
+}
+
 function daysAgo(iso: string | null): string {
   if (!iso) return "";
   const ms = Date.now() - new Date(iso).getTime();
@@ -64,7 +73,14 @@ export function AaronDealsBand() {
       </p>
 
       {deals && deals.length > 0 ? (
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-emerald-900/50 dark:from-slate-900 dark:to-emerald-950/20">
+            <span className="absolute inset-y-0 left-0 w-1 bg-emerald-400/80 dark:bg-emerald-700" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-400/90">Created Today</p>
+            <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+              {deals.filter((d) => isCreatedToday(d.createdTime)).length}
+            </p>
+          </div>
           <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-violet-900/50 dark:from-slate-900 dark:to-violet-950/20">
             <span className="absolute inset-y-0 left-0 w-1 bg-violet-400/80 dark:bg-violet-700" />
             <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-700/90 dark:text-violet-400/90">Deals Needing Action</p>
