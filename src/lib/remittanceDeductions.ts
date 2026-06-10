@@ -124,16 +124,25 @@ export interface RemittancePayment {
   subject: string | null;
 }
 
+// Start tracking remittances from this date forward (no historical backlog).
+const REMITTANCE_START = "2026-06-10";
+
 /** Ingested remittance payments still needing review (from the Amazon-actions feed). */
 export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]> {
   const { data, error } = await supabase
     .from("expected_actions")
     .select("id, ref_number, aed_amount, email_received_at, email_subject, status, type")
     .eq("type", "remittance")
+    .gte("email_received_at", REMITTANCE_START)
     .order("email_received_at", { ascending: false });
   if (error || !data) return [];
   return data
-    .filter((r) => r.status !== "resolved" && r.ref_number)
+    .filter(
+      (r) =>
+        r.status !== "resolved" &&
+        r.ref_number &&
+        /^\d{6,}$/.test(r.ref_number) // real Amazon payment numbers only (drops "Payment Advice")
+    )
     .map((r) => ({
       id: r.id as string,
       ref: r.ref_number as string,
