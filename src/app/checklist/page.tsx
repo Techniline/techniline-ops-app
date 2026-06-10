@@ -52,6 +52,14 @@ const DONE_STATUSES: ReadonlySet<string> = new Set<TaskStatus>(["submitted"]);
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  // Supabase/PostgREST errors are plain objects, not Error instances — surface
+  // their real message (+ details/hint) instead of a generic string, so schema
+  // or RLS problems are diagnosable immediately rather than hidden.
+  if (error && typeof error === "object") {
+    const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const parts = [e.message, e.details, e.hint].filter((p): p is string => typeof p === "string" && p.length > 0);
+    if (parts.length > 0) return e.code ? `${parts.join(" — ")} (${String(e.code)})` : parts.join(" — ");
+  }
   return "Something went wrong.";
 }
 
