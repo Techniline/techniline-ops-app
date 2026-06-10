@@ -26,7 +26,8 @@ export type UpsertTable =
   | "returns"
   | "purchase_orders"
   | "remittances"
-  | "remittance_lines";
+  | "remittance_lines"
+  | "remittance_deductions";
 
 export type UpsertAction = "insert_or_update" | "skip";
 
@@ -75,3 +76,4 @@ export type ReturnInsert = TablesInsert<"returns">;
 export type PurchaseOrderInsert = TablesInsert<"purchase_orders">;
 export type RemittanceInsert = TablesInsert<"remittances">;
 export type RemittanceLineInsert = TablesInsert<"remittance_lines">;
+export type RemittanceDeductionInsert = TablesInsert<"remittance_deductions">;

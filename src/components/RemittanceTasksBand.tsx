@@ -15,6 +15,7 @@ import {
   deleteDeduction,
   fetchDeductions,
   fetchOpenRemittancePayments,
+  fetchRemittanceLines,
   markRemittanceReviewed,
   recoveryPct,
   reopenDeduction,
@@ -24,6 +25,7 @@ import {
   type ChargeType,
   type DeductionDraft,
   type RemittanceDeduction,
+  type RemittanceLine,
   type RemittancePayment,
 } from "@/lib/remittanceDeductions";
 import type { UserProfile } from "@/lib/types";
@@ -164,6 +166,53 @@ function DeductionForm({
   );
 }
 
+/** Auto-parsed invoice breakdown for a payment (read-only table, like the email). */
+function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
+  const [lines, setLines] = useState<RemittanceLine[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchRemittanceLines(paymentRef).then((l) => { if (active) setLines(l); });
+    return () => { active = false; };
+  }, [paymentRef]);
+
+  if (lines === null) return <p className="mt-2 text-[11px] text-slate-400">Loading breakdown…</p>;
+  if (lines.length === 0) {
+    return <p className="mt-2 text-[11px] text-slate-400">No line breakdown parsed for this payment yet (header-only email, or not re-ingested).</p>;
+  }
+  return (
+    <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+      <table className="w-full text-[12px]">
+        <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/50">
+          <tr>
+            <th className="px-2 py-1 text-left font-medium">Invoice</th>
+            <th className="px-2 py-1 text-left font-medium">Date</th>
+            <th className="px-2 py-1 text-left font-medium">Description</th>
+            <th className="px-2 py-1 text-right font-medium">Amount Paid</th>
+            <th className="px-2 py-1 text-right font-medium">Remaining</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l) => {
+            const neg = (l.amount_paid_aed ?? 0) < 0;
+            return (
+              <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="px-2 py-1 font-medium text-slate-800 dark:text-slate-200">{l.invoice_number}{l.partial ? " *" : ""}</td>
+                <td className="px-2 py-1 text-slate-500">{l.invoice_date ?? "—"}</td>
+                <td className="px-2 py-1 text-slate-500">{l.description}</td>
+                <td className={`px-2 py-1 text-right tabular-nums ${neg ? "font-semibold text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}`}>
+                  {l.amount_paid_aed != null ? formatAED(l.amount_paid_aed) : "—"}
+                </td>
+                <td className="px-2 py-1 text-right tabular-nums text-slate-500">{l.amount_remaining_aed != null ? formatAED(l.amount_remaining_aed) : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="px-2 py-1 text-[10px] text-slate-400">Negative (red) lines are deductions Amazon took back — categorise each below. “*” = partially paid / previously deducted.</p>
+    </div>
+  );
+}
+
 function Card({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-br from-white to-rose-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-rose-900/50 dark:from-slate-900 dark:to-rose-950/20">
@@ -271,8 +320,10 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
                 </div>
 
                 {isOpen ? (
-                  deds.length === 0 ? (
-                    <p className="mt-2 text-[11px] text-slate-400">No deductions recorded yet. Use “+ Deduction” to enter each negative line from the Vendor Central report, or “Mark reviewed” if this payment has none.</p>
+                  <>
+                  <PaymentBreakdown paymentRef={p.ref} />
+                  {deds.length === 0 ? (
+                    <p className="mt-2 text-[11px] text-slate-400">No deductions to categorise. If the breakdown above shows red (negative) lines that aren’t listed below, re-ingest the email; otherwise “Mark reviewed”.</p>
                   ) : (
                     <ul className="mt-2 flex flex-col gap-2">
                       {deds.map((r) => {
@@ -301,7 +352,8 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
                         );
                       })}
                     </ul>
-                  )
+                  )}
+                  </>
                 ) : null}
               </li>
             );

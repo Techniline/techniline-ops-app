@@ -1,4 +1,5 @@
 import { amountNear, combinedText, DEFAULT_ASSIGNEE_ID, matchOne } from "./detectType";
+import { parseRemittanceTable } from "./remittanceTable";
 import type {
   ExpectedActionInsert,
   IngestPayload,
@@ -10,11 +11,16 @@ import type {
 export function parseRemittance(payload: IngestPayload): ParseResult {
   const text = combinedText(payload);
 
+  // Parse the invoice line table straight from the HTML body (reliable structure).
+  const parsed = parseRemittanceTable(payload.bodyText);
+
+  // Prefer the explicit "Payment number: <digits>" from the table; fall back to text.
   const remittanceRef =
+    parsed.paymentNumber ??
+    matchOne(text, /payment[\s#:-]*(?:number|no)[\s#:-]*([0-9]{6,})/i) ??
     matchOne(text, /remittance[\s#:-]*(?:ref|number|id)?[\s#:-]*([A-Z0-9-]{6,})/i) ??
-    matchOne(text, /payment[\s#:-]*(?:number|no|ref)[\s#:-]*([A-Z0-9-]{6,})/i) ??
     matchOne(text, /\b\d{9,}\b/);
-  const netPaid = amountNear(text, /net\s*paid|net\s*payment/i);
+  const netPaid = parsed.paymentAmount ?? amountNear(text, /net\s*paid|net\s*payment/i);
   const gross = amountNear(text, /gross/i);
   const deductions = amountNear(text, /deduction/i);
 
@@ -57,9 +63,55 @@ export function parseRemittance(payload: IngestPayload): ParseResult {
     values: eaValues,
   });
 
-  notes.push(
-    "Remittance → upsert remittances + expected_actions type remittance (open). Line items are not parsed from a notification email."
-  );
+  // Invoice breakdown → remittance_lines (one per row); negative Amount Paid lines
+  // also create a remittance_deductions task for Maricel to categorise + close.
+  if (remittanceRef && parsed.lines.length > 0) {
+    let negatives = 0;
+    for (const ln of parsed.lines) {
+      const lineKey = `${remittanceRef}:${ln.invoiceNumber}`;
+      const isCoop = /co-?op/i.test(ln.description);
+      operations.push({
+        table: "remittance_lines",
+        naturalKey: { column: "line_key", value: lineKey },
+        action: "insert_or_update",
+        values: {
+          line_key: lineKey,
+          remittance_ref: remittanceRef,
+          invoice_number: ln.invoiceNumber,
+          invoice_date: ln.invoiceDate,
+          description: ln.description,
+          amount_paid_aed: ln.amountPaid,
+          amount_remaining_aed: ln.amountRemaining,
+          is_credit: (ln.amountPaid ?? 0) < 0,
+          partial: ln.partial,
+          transaction_type: isCoop ? "coop" : null,
+        },
+      });
+
+      // A negative Amount Paid is a deduction Amazon took back → needs explaining.
+      if ((ln.amountPaid ?? 0) < 0) {
+        negatives += 1;
+        operations.push({
+          table: "remittance_deductions",
+          naturalKey: { column: "source_line_key", value: lineKey },
+          action: "insert_or_update",
+          values: {
+            source_line_key: lineKey,
+            remittance_ref: remittanceRef,
+            amount_aed: ln.amountPaid,
+            charge_type: isCoop ? "coop_mdf" : null,
+            status: "open",
+            created_by: DEFAULT_ASSIGNEE_ID,
+          },
+        });
+      }
+    }
+    notes.push(
+      `Remittance → ${parsed.lines.length} line(s) parsed; ${negatives} negative deduction(s) created for review.`
+    );
+  } else {
+    notes.push("Remittance → no invoice line table found in this email (header only).");
+  }
 
   return {
     type: "remittance",

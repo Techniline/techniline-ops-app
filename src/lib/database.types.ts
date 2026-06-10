@@ -199,6 +199,7 @@ export type Database = {
           remittance_ref: string
           return_id: string | null
           return_missing: boolean
+          source_line_key: string | null
           srt_number: string | null
           status: string
           tle_invoice_number: string | null
@@ -223,6 +224,7 @@ export type Database = {
           remittance_ref: string
           return_id?: string | null
           return_missing?: boolean
+          source_line_key?: string | null
           srt_number?: string | null
           status?: string
           tle_invoice_number?: string | null
@@ -247,6 +249,7 @@ export type Database = {
           remittance_ref?: string
           return_id?: string | null
           return_missing?: boolean
+          source_line_key?: string | null
           srt_number?: string | null
           status?: string
           tle_invoice_number?: string | null
@@ -1342,9 +1345,11 @@ export type Database = {
           invoice_date: string | null
           invoice_number: string | null
           is_credit: boolean | null
+          line_key: string | null
           matched_dispute: string | null
           matched_invoice: string | null
           matched_return_id: string | null
+          partial: boolean | null
           remittance_ref: string
           transaction_type: string | null
         }
@@ -1359,9 +1364,11 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           is_credit?: boolean | null
+          line_key?: string | null
           matched_dispute?: string | null
           matched_invoice?: string | null
           matched_return_id?: string | null
+          partial?: boolean | null
           remittance_ref: string
           transaction_type?: string | null
         }
@@ -1376,9 +1383,11 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           is_credit?: boolean | null
+          line_key?: string | null
           matched_dispute?: string | null
           matched_invoice?: string | null
           matched_return_id?: string | null
+          partial?: boolean | null
           remittance_ref?: string
           transaction_type?: string | null
         }

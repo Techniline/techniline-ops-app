@@ -128,6 +128,21 @@ export async function executePlan(
       case "remittance_lines":
         r = await upsertRow("remittance_lines", keyColumn, op.values as TablesInsert<"remittance_lines">);
         break;
+      case "remittance_deductions":
+        // Auto-created from a negative line; never clobber Maricel's categorisation
+        // or closure on re-ingest of the same email.
+        r = await upsertRow(
+          "remittance_deductions",
+          keyColumn,
+          op.values as TablesInsert<"remittance_deductions">,
+          [
+            "charge_type", "return_id", "po_number", "tle_invoice_number", "srt_number",
+            "prt_number", "dispute_id", "amazon_case_id", "return_missing", "claim_amount_aed",
+            "approved_amount_aed", "recovery_date", "dispute_status", "remark", "status",
+            "closed_by", "closed_at",
+          ]
+        );
+        break;
     }
 
     out.push({

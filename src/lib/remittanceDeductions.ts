@@ -152,6 +152,19 @@ export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]
     }));
 }
 
+export type RemittanceLine = Tables<"remittance_lines">;
+
+/** The full invoice breakdown for a payment (auto-parsed from the email). */
+export async function fetchRemittanceLines(ref: string): Promise<RemittanceLine[]> {
+  const { data, error } = await supabase
+    .from("remittance_lines")
+    .select("*")
+    .eq("remittance_ref", ref)
+    .order("amount_paid_aed", { ascending: true }); // negatives (deductions) first
+  if (error) return [];
+  return data ?? [];
+}
+
 /** Mark a remittance payment reviewed — resolves the Amazon-actions item too. */
 export async function markRemittanceReviewed(expectedActionId: string): Promise<void> {
   const { error } = await supabase.from("expected_actions").update({ status: "resolved" }).eq("id", expectedActionId);
