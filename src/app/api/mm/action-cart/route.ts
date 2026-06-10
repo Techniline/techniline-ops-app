@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Invalid JSON." }, { status: 400 });
   }
   const checkoutId = typeof b.checkoutId === "string" ? b.checkoutId.trim() : "";
-  const status = b.status === "dismissed" ? "dismissed" : "actioned";
+  const requested = b.status === "dismissed" ? "dismissed" : b.status === "open" ? "open" : "actioned";
   if (!checkoutId) return Response.json({ ok: false, error: "Missing checkout id." }, { status: 400 });
 
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -45,6 +45,14 @@ export async function POST(request: Request): Promise<Response> {
   if (!url || !service) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
   const svc = createClient(url, service, { auth: { persistSession: false } });
 
+  // "open" = undo: remove the action record so the cart is fresh/open again.
+  if (requested === "open") {
+    const { error } = await svc.from("mm_abandoned_actions").delete().eq("checkout_id", checkoutId);
+    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+    return Response.json({ ok: true, reverted: true });
+  }
+
+  const status = requested;
   const row = {
     checkout_id: checkoutId,
     action_status: status,

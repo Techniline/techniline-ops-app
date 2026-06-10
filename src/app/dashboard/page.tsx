@@ -491,6 +491,19 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
     }
   }
 
+  async function undoCart(cart: AbandonedCart): Promise<void> {
+    setError(null);
+    setCartBusy(cart.id);
+    try {
+      await actionAbandonedCart(cart, "open", null);
+      await load();
+    } catch (e2) {
+      setError(errMsg(e2));
+    } finally {
+      setCartBusy(null);
+    }
+  }
+
   async function makeDeal(cart: AbandonedCart): Promise<void> {
     setError(null);
     setBanner(null);
@@ -610,9 +623,20 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
                       </a>
                     ) : null}
                     {done ? (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                        {c.actionStatus === "deal_created" ? "Deal" : "Actioned"}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                          {c.actionStatus === "deal_created" ? "Deal" : "Actioned"}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={cartBusy === c.id}
+                          onClick={() => undoCart(c)}
+                          className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
+                          title="Undo — put this cart back to open"
+                        >
+                          {cartBusy === c.id ? "…" : "Undo"}
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex gap-1.5">
                         <button
