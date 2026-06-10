@@ -81,17 +81,54 @@ interface KpiGroup {
   kpis: Kpi[];
 }
 
-function KpiTile({ kpi }: { kpi: Kpi }) {
+// Pastel accent per metric group (bar + label tint + tile gradient).
+const KPI_ACCENTS: Record<string, { bar: string; label: string; tile: string }> = {
+  checklist: {
+    bar: "bg-indigo-400/80 group-hover:bg-indigo-500",
+    label: "text-indigo-700/90 dark:text-indigo-400/90",
+    tile: "border-indigo-100 from-white to-indigo-50/50 hover:ring-indigo-200 dark:border-indigo-900/50 dark:from-slate-900 dark:to-indigo-950/20",
+  },
+  priorities: {
+    bar: "bg-amber-400/80 group-hover:bg-amber-500",
+    label: "text-amber-700/90 dark:text-amber-400/90",
+    tile: "border-amber-100 from-white to-amber-50/50 hover:ring-amber-200 dark:border-amber-900/50 dark:from-slate-900 dark:to-amber-950/20",
+  },
+  reseller: {
+    bar: "bg-violet-400/80 group-hover:bg-violet-500",
+    label: "text-violet-700/90 dark:text-violet-400/90",
+    tile: "border-violet-100 from-white to-violet-50/50 hover:ring-violet-200 dark:border-violet-900/50 dark:from-slate-900 dark:to-violet-950/20",
+  },
+  cocoblu: {
+    bar: "bg-emerald-400/80 group-hover:bg-emerald-500",
+    label: "text-emerald-700/90 dark:text-emerald-400/90",
+    tile: "border-emerald-100 from-white to-emerald-50/50 hover:ring-emerald-200 dark:border-emerald-900/50 dark:from-slate-900 dark:to-emerald-950/20",
+  },
+  lp: {
+    bar: "bg-sky-400/80 group-hover:bg-sky-500",
+    label: "text-sky-700/90 dark:text-sky-400/90",
+    tile: "border-sky-100 from-white to-sky-50/50 hover:ring-sky-200 dark:border-sky-900/50 dark:from-slate-900 dark:to-sky-950/20",
+  },
+  amazon: {
+    bar: "bg-rose-400/80 group-hover:bg-rose-500",
+    label: "text-rose-700/90 dark:text-rose-400/90",
+    tile: "border-rose-100 from-white to-rose-50/50 hover:ring-rose-200 dark:border-rose-900/50 dark:from-slate-900 dark:to-rose-950/20",
+  },
+};
+const KPI_ACCENT_DEFAULT = {
+  bar: "bg-slate-300 group-hover:bg-slate-400",
+  label: "text-slate-500",
+  tile: "border-slate-200/80 from-white to-slate-50/70 hover:ring-slate-200 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950",
+};
+
+function KpiTile({ kpi, accentKey }: { kpi: Kpi; accentKey?: string }) {
+  const a = (accentKey && KPI_ACCENTS[accentKey]) || KPI_ACCENT_DEFAULT;
   return (
-    <div className={`${surface} p-4`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-        {kpi.label}
-      </p>
-      <p
-        className={`mt-1 text-2xl font-semibold ${
-          kpi.tone ?? "text-slate-900 dark:text-slate-100"
-        }`}
-      >
+    <div
+      className={`group relative flex h-full min-h-[96px] flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_6px_16px_-8px_rgba(15,23,42,0.12)] ring-1 ring-inset ring-white/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:ring-white/5 ${a.tile}`}
+    >
+      <span className={`absolute inset-y-0 left-0 w-1 transition-all group-hover:w-1.5 ${a.bar}`} />
+      <p className={`text-[11px] font-semibold uppercase tracking-wider ${a.label}`}>{kpi.label}</p>
+      <p className={`mt-1 text-2xl font-bold tabular-nums tracking-tight ${kpi.tone ?? "text-slate-900 dark:text-slate-100"}`}>
         {kpi.value}
       </p>
       {kpi.sub ? <p className="mt-0.5 text-xs text-slate-400">{kpi.sub}</p> : null}
@@ -368,7 +405,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {g.kpis.map((k, i) => (
-              <KpiTile key={i} kpi={k} />
+              <KpiTile key={i} kpi={k} accentKey={g.key} />
             ))}
           </div>
         </section>
