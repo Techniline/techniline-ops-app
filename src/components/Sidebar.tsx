@@ -26,6 +26,7 @@ import {
   LogoutIcon,
   LpTrackerIcon,
   PrioritiesIcon,
+  ReturnsIcon,
 } from "./icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -106,6 +107,12 @@ export function Sidebar({
       href: "/amazon-actions",
       label: "Amazon Actions",
       icon: ActionsIcon,
+      show: canViewFinance(profile),
+    },
+    {
+      href: "/returns",
+      label: "Returns",
+      icon: ReturnsIcon,
       show: canViewFinance(profile),
     },
   ];
