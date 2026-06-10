@@ -19,6 +19,7 @@ import {
 import { btnSecondary, surface } from "@/components/ui";
 import { AaronDealsBand } from "@/components/AaronDealsBand";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
+import { RemittanceTasksBand } from "@/components/RemittanceTasksBand";
 import { ZohoPipelineBand } from "@/components/ZohoPipelineBand";
 import { supabase } from "@/lib/supabaseClient";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
@@ -1026,6 +1027,8 @@ function DashboardContent() {
 
       {managerView ? <ZohoPipelineBand /> : null}
       {!managerView && profile.id === AARON_ID ? <AaronDealsBand /> : null}
+
+      {canViewFinance(profile) ? <RemittanceTasksBand profile={profile} /> : null}
 
       <KpiDashboard profile={profile} />
 

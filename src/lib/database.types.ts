@@ -178,6 +178,89 @@ export type Database = {
           },
         ]
       }
+      remittance_deductions: {
+        Row: {
+          amazon_case_id: string | null
+          amount_aed: number | null
+          approved_amount_aed: number | null
+          charge_type: string | null
+          claim_amount_aed: number | null
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          created_by: string | null
+          dispute_id: string | null
+          dispute_status: string | null
+          id: string
+          po_number: string | null
+          prt_number: string | null
+          recovery_date: string | null
+          remark: string | null
+          remittance_ref: string
+          return_id: string | null
+          return_missing: boolean
+          srt_number: string | null
+          status: string
+          tle_invoice_number: string | null
+        }
+        Insert: {
+          amazon_case_id?: string | null
+          amount_aed?: number | null
+          approved_amount_aed?: number | null
+          charge_type?: string | null
+          claim_amount_aed?: number | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispute_id?: string | null
+          dispute_status?: string | null
+          id?: string
+          po_number?: string | null
+          prt_number?: string | null
+          recovery_date?: string | null
+          remark?: string | null
+          remittance_ref: string
+          return_id?: string | null
+          return_missing?: boolean
+          srt_number?: string | null
+          status?: string
+          tle_invoice_number?: string | null
+        }
+        Update: {
+          amazon_case_id?: string | null
+          amount_aed?: number | null
+          approved_amount_aed?: number | null
+          charge_type?: string | null
+          claim_amount_aed?: number | null
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispute_id?: string | null
+          dispute_status?: string | null
+          id?: string
+          po_number?: string | null
+          prt_number?: string | null
+          recovery_date?: string | null
+          remark?: string | null
+          remittance_ref?: string
+          return_id?: string | null
+          return_missing?: boolean
+          srt_number?: string | null
+          status?: string
+          tle_invoice_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "remittance_deductions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_sync: {
         Row: {
           key: string
