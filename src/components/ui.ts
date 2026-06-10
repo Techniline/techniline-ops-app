@@ -1,20 +1,23 @@
 // Shared style tokens so every screen uses one consistent visual language.
 
-/** Card / panel surface. */
+/**
+ * Card / panel surface — soft pastel gloss (top-down gradient + inset highlight)
+ * with a layered, embossed shadow. Used across every screen.
+ */
 export const surface =
-  "rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900";
+  "rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/80 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_6px_16px_-8px_rgba(15,23,42,0.12)] ring-1 ring-inset ring-white/60 dark:border-slate-800 dark:from-slate-900 dark:to-slate-950 dark:ring-white/5";
 
-/** Primary action button. */
+/** Primary action button — glossy gradient with embossed highlight + press. */
 export const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-slate-900";
+  "inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-indigo-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_2px_6px_-1px_rgba(79,70,229,0.4)] transition-all hover:from-indigo-500 hover:to-indigo-500 active:translate-y-px focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-slate-900";
 
-/** Secondary / neutral button. */
+/** Secondary / neutral button — subtle gloss + emboss. */
 export const btnSecondary =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-offset-slate-900";
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-gradient-to-b from-white to-slate-100 px-4 py-2 text-sm font-medium text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(15,23,42,0.08)] transition-all hover:to-slate-200 active:translate-y-px focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900 dark:text-slate-200 dark:hover:to-slate-800 dark:focus:ring-offset-slate-900";
 
-/** Small button (table row actions). */
+/** Small button (table row actions) — light gloss. */
 export const btnSmall =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800";
+  "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-gradient-to-b from-white to-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_1px_rgba(15,23,42,0.06)] transition-all hover:to-slate-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900 dark:text-slate-200 dark:hover:to-slate-800";
 
 /** Text input / textarea. */
 export const inputClass =

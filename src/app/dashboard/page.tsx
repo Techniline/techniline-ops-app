@@ -716,9 +716,14 @@ interface ModuleCard {
   href: string | null;
   icon: IconType;
   accent: string;
+  tint: string;
   show: boolean;
   comingSoon: boolean;
 }
+
+// Glossy + embossed card base (pastel gradient comes from each card's `tint`).
+const CARD_BASE =
+  "group rounded-2xl border p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-12px_rgba(15,23,42,0.18)] ring-1 ring-inset ring-white/60 transition-all duration-200 dark:ring-white/5";
 
 function DashboardContent() {
   const { profile } = useAuth();
@@ -738,7 +743,9 @@ function DashboardContent() {
       href: "/checklist",
       icon: ChecklistIcon,
       accent:
-        "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300",
+        "bg-indigo-100 text-indigo-600 shadow-inner dark:bg-indigo-950 dark:text-indigo-300",
+      tint:
+        "border-indigo-200/70 bg-gradient-to-br from-indigo-50 to-white dark:border-indigo-900/50 dark:from-indigo-950/40 dark:to-slate-900",
       show: canViewChecklist(profile),
       comingSoon: false,
     },
@@ -749,7 +756,9 @@ function DashboardContent() {
       href: "/priorities",
       icon: PrioritiesIcon,
       accent:
-        "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+        "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
+      tint:
+        "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
       show: true,
       comingSoon: false,
     },
@@ -760,7 +769,9 @@ function DashboardContent() {
       href: "/cocoblu",
       icon: CocobluIcon,
       accent:
-        "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",
+        "bg-emerald-100 text-emerald-600 shadow-inner dark:bg-emerald-950 dark:text-emerald-300",
+      tint:
+        "border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-slate-900",
       show: canViewCocoblu(profile),
       comingSoon: false,
     },
@@ -771,7 +782,9 @@ function DashboardContent() {
       href: "/lp",
       icon: LpTrackerIcon,
       accent:
-        "bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-300",
+        "bg-sky-100 text-sky-600 shadow-inner dark:bg-sky-950 dark:text-sky-300",
+      tint:
+        "border-sky-200/70 bg-gradient-to-br from-sky-50 to-white dark:border-sky-900/50 dark:from-sky-950/40 dark:to-slate-900",
       show: canViewLpTracker(profile),
       comingSoon: false,
     },
@@ -782,7 +795,9 @@ function DashboardContent() {
       href: "/amazon-actions",
       icon: ActionsIcon,
       accent:
-        "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300",
+        "bg-rose-100 text-rose-600 shadow-inner dark:bg-rose-950 dark:text-rose-300",
+      tint:
+        "border-rose-200/70 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/50 dark:from-rose-950/40 dark:to-slate-900",
       show: canViewFinance(profile),
       comingSoon: false,
     },
@@ -838,7 +853,7 @@ function DashboardContent() {
               <Link
                 key={card.key}
                 href={card.href}
-                className={`${surface} group p-5 transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-800`}
+                className={`${CARD_BASE} ${card.tint} hover:-translate-y-0.5 hover:shadow-lg`}
               >
                 {inner}
                 <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 dark:text-indigo-400">
@@ -854,7 +869,7 @@ function DashboardContent() {
           return (
             <div
               key={card.key}
-              className={`${surface} p-5 opacity-75`}
+              className={`${CARD_BASE} ${card.tint} opacity-75`}
               aria-disabled="true"
             >
               {inner}
