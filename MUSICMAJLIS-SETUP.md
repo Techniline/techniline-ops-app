@@ -91,10 +91,10 @@ Adds a daily one-tap task reminding Aaron to clear yesterday's abandoned carts o
 dashboard MUSICMAJLIS band. (Cadence-aware engine skips Sundays already.)
 ```sql
 insert into public.task_definitions
-  (title, description, evidence_type, cadence, category, sort_order, assigned_to, is_active)
+  (title, evidence_hint, evidence_type, cadence, category, sort_order, assigned_to, is_active)
 values
   ('Action Music Majlis abandoned carts',
-   'Open the dashboard MUSICMAJLIS band → review yesterday''s abandoned carts. For each, either create a Back-to-Back Zoho deal or mark it actioned. Monday covers Sat+Sun.',
+   'Open the dashboard MUSICMAJLIS band → review yesterday''s abandoned carts; for each, create a Back-to-Back Zoho deal or mark it actioned. Monday covers Sat+Sun.',
    'one_tap', 'daily', 'Music Majlis', 5,
    'cbb81b27-8756-4f2d-bfe0-04211c27092c', true)
 on conflict do nothing;
