@@ -1544,6 +1544,7 @@ export type Database = {
       }
       returns: {
         Row: {
+          amazon_case_id: string | null
           amazon_invoice: string | null
           closed_at: string | null
           comments: string | null
@@ -1583,6 +1584,7 @@ export type Database = {
           warehouse: string | null
         }
         Insert: {
+          amazon_case_id?: string | null
           amazon_invoice?: string | null
           closed_at?: string | null
           comments?: string | null
@@ -1622,6 +1624,7 @@ export type Database = {
           warehouse?: string | null
         }
         Update: {
+          amazon_case_id?: string | null
           amazon_invoice?: string | null
           closed_at?: string | null
           comments?: string | null
