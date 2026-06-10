@@ -17,6 +17,7 @@ import {
   PrioritiesIcon,
 } from "@/components/icons";
 import { btnSecondary, surface } from "@/components/ui";
+import { ManagerScorecard } from "@/components/ManagerScorecard";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
@@ -824,6 +825,8 @@ function DashboardContent() {
           );
         })}
       </div>
+
+      {managerView ? <ManagerScorecard profile={profile} /> : null}
 
       {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
 
