@@ -178,6 +178,24 @@ export type Database = {
           },
         ]
       }
+      shopify_sync: {
+        Row: {
+          key: string
+          last_event_at: string
+          last_topic: string | null
+        }
+        Insert: {
+          key: string
+          last_event_at?: string
+          last_topic?: string | null
+        }
+        Update: {
+          key?: string
+          last_event_at?: string
+          last_topic?: string | null
+        }
+        Relationships: []
+      }
       breach_log: {
         Row: {
           aed_at_risk: number | null

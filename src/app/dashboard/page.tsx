@@ -19,6 +19,7 @@ import {
 import { btnSecondary, surface } from "@/components/ui";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
 import { ZohoPipelineBand } from "@/components/ZohoPipelineBand";
+import { supabase } from "@/lib/supabaseClient";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
@@ -560,6 +561,18 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
     return () => {
       clearInterval(id);
       window.removeEventListener("focus", onFocus);
+    };
+  }, [load]);
+
+  // Instant refresh when a Shopify webhook bumps the heartbeat (Supabase Realtime).
+  // Fail-soft: if the table/realtime isn't set up, polling above still covers it.
+  useEffect(() => {
+    const ch = supabase
+      .channel("shopify_sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "shopify_sync" }, () => { void load(); })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
     };
   }, [load]);
 
