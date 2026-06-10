@@ -144,7 +144,7 @@ export interface NewDealInput {
 
 /**
  * Create a deal in the Back-to-Back pipeline for an abandoned cart, after a
- * duplicate check by customer email. Deal name = "<customer> – MM Cart" (Aaron
+ * duplicate check by customer email. Deal name = "<customer> – MM Abandoned Cart" (Aaron
  * edits in CRM). Pipeline/stage come from ZOHO_MM_PIPELINE / ZOHO_MM_STAGE.
  */
 export async function createBackToBackDeal(input: NewDealInput): Promise<CreateDealOutcome> {
@@ -173,7 +173,7 @@ export async function createBackToBackDeal(input: NewDealInput): Promise<CreateD
     const token = await getAccessToken();
     const customer = (input.customerName ?? "").trim() || (email ? email.split("@")[0] : "Music Majlis");
     const record: Record<string, unknown> = {
-      Deal_Name: `${customer} – MM Cart`,
+      Deal_Name: `${customer} – MM Abandoned Cart`,
       Pipeline: process.env.ZOHO_MM_PIPELINE || "Back to Back",
       Stage: process.env.ZOHO_MM_STAGE || "Qualification",
       Description: [
