@@ -382,17 +382,29 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 function MmTile({ label, value, tone, big = false }: { label: string; value: string; tone?: string; big?: boolean }) {
+  const valueTone = tone ?? "text-slate-900 dark:text-slate-100";
+  // For big currency tiles, show "AED" as a small label above the number so the
+  // figure is the clean hero and never wraps awkwardly.
+  const aed = big && value.startsWith("AED ");
+  const amount = aed ? value.slice(4) : value;
   return (
     <div
-      className={`group relative flex h-full min-h-[112px] flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+      className={`group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         big
-          ? "border-emerald-200 from-emerald-50 to-white p-4 hover:ring-emerald-300 dark:border-emerald-800 dark:from-emerald-950/40 dark:to-slate-900"
-          : "border-emerald-100 from-white to-emerald-50/40 p-4 hover:ring-emerald-200 dark:border-emerald-900/60 dark:from-slate-900 dark:to-emerald-950/20 dark:hover:ring-emerald-800"
+          ? "min-h-[128px] border-emerald-200 from-emerald-50 to-white p-5 hover:ring-emerald-300 dark:border-emerald-800 dark:from-emerald-950/40 dark:to-slate-900"
+          : "min-h-[112px] border-emerald-100 from-white to-emerald-50/40 p-4 hover:ring-emerald-200 dark:border-emerald-900/60 dark:from-slate-900 dark:to-emerald-950/20 dark:hover:ring-emerald-800"
       }`}
     >
       <span className={`absolute inset-y-0 left-0 transition-all group-hover:w-1.5 ${big ? "w-1.5 bg-emerald-500" : "w-1 bg-emerald-400/70 group-hover:bg-emerald-500 dark:bg-emerald-700"}`} />
       <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-400/90">{label}</p>
-      <p className={`mt-1 font-bold tabular-nums leading-tight ${big ? "text-3xl" : "text-2xl"} ${tone ?? "text-slate-900 dark:text-slate-100"}`}>{value}</p>
+      {aed ? (
+        <div className="mt-2 flex items-baseline gap-1.5">
+          <span className="text-sm font-semibold text-emerald-600/70 dark:text-emerald-500/70">AED</span>
+          <span className={`text-3xl font-bold tabular-nums leading-none tracking-tight ${valueTone}`}>{amount}</span>
+        </div>
+      ) : (
+        <p className={`mt-1 font-bold tabular-nums leading-tight ${big ? "text-3xl" : "text-2xl"} ${valueTone}`}>{value}</p>
+      )}
     </div>
   );
 }
