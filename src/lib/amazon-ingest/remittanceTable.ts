@@ -49,10 +49,18 @@ function parseAmount(raw: string): number | null {
 
 function stripTags(html: string): string {
   return html
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+// A real invoice number is short and alphanumeric, e.g. "6000141979", "WS2601079".
+function looksLikeInvoice(s: string): boolean {
+  return /^[A-Za-z]{0,4}\d{4,}$/.test(s) && s.length <= 24;
 }
 
 /** Parse the remittance email HTML (or plain text fallback) into header + lines. */
@@ -71,21 +79,31 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
   const date = html.match(/Payment\s*date:\s*<\/b>\s*<\/td>\s*<td[^>]*>\s*([0-9]{1,2}-[A-Za-z]{3}-\d{4})/i);
   if (date) out.paymentDate = toIsoDate(date[1]);
 
-  // Invoice rows: any <tr> with exactly the 6 invoice columns. The header row's
-  // first cell is "Invoice Number" — skip it.
-  const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
+  // Scope strictly to the invoice table: find the header row that contains the
+  // "Invoice Number … Amount Paid … Amount Remaining" titles, then read only the
+  // rows of THAT table (up to the next </table>). This avoids matching the
+  // forwarded-email wrapper tables (From/Sent/To/Subject, caution banners).
+  const headerIdx = html.search(
+    /Invoice\s*Number[\s\S]{0,500}?Amount\s*Paid[\s\S]{0,200}?Amount\s*Remaining/i
+  );
+  if (headerIdx === -1) return out;
+  const after = html.slice(headerIdx);
+  const endIdx = after.search(/<\/table>/i);
+  const region = endIdx === -1 ? after : after.slice(0, endIdx);
+
+  const rows = [...region.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   for (const row of rows) {
-    const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]);
-    if (cells.length !== 6) continue;
-    const invoiceNumber = stripTags(cells[0]);
-    if (!invoiceNumber || /^invoice\s*number$/i.test(invoiceNumber)) continue; // header / blank
-    const rawPaid = cells[4];
+    const rawCells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]);
+    if (rawCells.length !== 6) continue;
+    const invoiceNumber = stripTags(rawCells[0]);
+    if (!looksLikeInvoice(invoiceNumber)) continue; // skips header + any junk row
+    const rawPaid = rawCells[4];
     out.lines.push({
       invoiceNumber,
-      invoiceDate: toIsoDate(stripTags(cells[1])),
-      description: stripTags(cells[2]),
+      invoiceDate: toIsoDate(stripTags(rawCells[1])),
+      description: stripTags(rawCells[2]),
       amountPaid: parseAmount(stripTags(rawPaid)),
-      amountRemaining: parseAmount(stripTags(cells[5])),
+      amountRemaining: parseAmount(stripTags(rawCells[5])),
       partial: /\*/.test(rawPaid),
     });
   }
