@@ -52,6 +52,10 @@ export interface PollItem {
   operations: number;
   result: "dry-run" | "written" | "skipped_duplicate" | "error";
   error?: string;
+  lineOps?: number; // remittance_lines ops emitted (parsed invoice lines)
+  opErrors?: number; // per-operation write failures
+  firstOpError?: string;
+  notes?: string[];
 }
 
 export interface PollSummary {
@@ -188,7 +192,9 @@ export async function runPoll(opts: {
     }> = [];
     for (const { c, result } of parsed) {
       try {
-        await executePlan(result.operations);
+        const executed = await executePlan(result.operations);
+        const opErrs = executed.filter((o) => o.result === "error");
+        const lineOps = result.operations.filter((o) => o.table === "remittance_lines").length;
         written += 1;
         toRecord.push({
           messageId: c.messageId,
@@ -203,6 +209,10 @@ export async function runPoll(opts: {
           type: result.type,
           operations: result.operations.length,
           result: "written",
+          lineOps,
+          opErrors: opErrs.length,
+          firstOpError: opErrs[0]?.error,
+          notes: result.notes,
         });
       } catch (err) {
         errors += 1;

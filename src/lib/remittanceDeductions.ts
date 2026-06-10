@@ -172,14 +172,19 @@ export async function triggerReingest(): Promise<string> {
   const token = session?.access_token;
   if (!token) throw new Error("You must be signed in.");
   const res = await fetch("/api/amazon/reingest", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; processed?: number; inserted?: number; updated?: number; error?: string };
+  const j = (await res.json().catch(() => ({}))) as {
+    ok?: boolean; error?: string; fetched?: number; written?: number; errors?: number;
+    items?: Array<{ type: string; subject?: string | null; lineOps?: number; opErrors?: number; firstOpError?: string; notes?: string[] }>;
+  };
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
-  const bits = [
-    j.processed != null ? `${j.processed} emails` : null,
-    j.inserted != null ? `${j.inserted} new` : null,
-    j.updated != null ? `${j.updated} updated` : null,
-  ].filter(Boolean);
-  return bits.length ? `Synced — ${bits.join(", ")}.` : "Email sync complete.";
+  // Surface the remittance email's parse outcome so issues are visible.
+  const rem = (j.items ?? []).find((i) => i.type === "remittance");
+  if (rem) {
+    if (rem.firstOpError) return `Synced, but a write failed: ${rem.firstOpError}`;
+    if ((rem.lineOps ?? 0) === 0) return `Synced — but no invoice lines were parsed from the email body. ${rem.notes?.join(" ") ?? ""}`.trim();
+    return `Synced — ${rem.lineOps} invoice line(s) parsed${rem.opErrors ? `, ${rem.opErrors} write error(s)` : ""}.`;
+  }
+  return `Email sync complete (${j.written ?? 0} written, ${j.errors ?? 0} errors).`;
 }
 
 /** Save a per-line reconciliation remark (any line, not just negatives). */
