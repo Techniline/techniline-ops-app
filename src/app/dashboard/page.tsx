@@ -606,9 +606,14 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">Shopify not connected yet — net sales &amp; abandoned carts show “—”. Set the env vars to light them up.</p>
       ) : null}
 
-      <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Top row — the two headline sales figures, large and roomy. */}
+      <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2">
         <MmTile label="Monthly Target" value={formatAED(k.target)} big />
         <MmTile label="Achieved (net sales)" value={connected ? formatAED(k.achieved) : "—"} tone="text-emerald-700 dark:text-emerald-400" big />
+      </div>
+
+      {/* Supporting metrics below. */}
+      <div className="mt-3 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <MmTile label="% Achieved" value={target > 0 && connected ? `${Math.round(k.pct)}%` : "—"} tone={k.pct >= 100 ? "text-emerald-700 dark:text-emerald-400" : undefined} />
         <MmTile label={`Today's Target (${remainingWorkingDays()}d left)`} value={target > 0 ? formatAED(k.todayTarget) : "—"} />
         <button
