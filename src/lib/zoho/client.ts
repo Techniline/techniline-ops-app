@@ -85,6 +85,37 @@ interface RawZohoDeal {
   Contact_Name?: { name?: string | null } | null;
 }
 
+// Resolve a Zoho user id from an email by scanning recent deals' Owner/Created_By
+// (no users-read scope needed). Cached per email. Falls back to ZOHO_AARON_USER_ID.
+const ownerIdCache: Record<string, string> = {};
+async function resolveUserIdByEmail(email: string): Promise<string | null> {
+  const key = email.trim().toLowerCase();
+  if (!key) return null;
+  if (ownerIdCache[key]) return ownerIdCache[key];
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(
+      `https://www.zohoapis.${dc()}/crm/v5/Deals?fields=Owner,Created_By&per_page=200&sort_by=Modified_Time&sort_order=desc`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+    );
+    if (res.ok) {
+      const json = (await res.json()) as {
+        data?: Array<{
+          Owner?: { id?: string; email?: string | null } | null;
+          Created_By?: { id?: string; email?: string | null } | null;
+        }>;
+      };
+      for (const d of json.data ?? []) {
+        if ((d.Owner?.email ?? "").toLowerCase() === key && d.Owner?.id) { ownerIdCache[key] = d.Owner.id; return d.Owner.id; }
+        if ((d.Created_By?.email ?? "").toLowerCase() === key && d.Created_By?.id) { ownerIdCache[key] = d.Created_By.id; return d.Created_By.id; }
+      }
+    }
+  } catch {
+    /* fall through to env */
+  }
+  return process.env.ZOHO_AARON_USER_ID || null;
+}
+
 // ── Back-to-Back deal creation for abandoned carts ──────────────────────────
 
 interface ZohoContact {
@@ -186,6 +217,12 @@ export async function createBackToBackDeal(input: NewDealInput): Promise<CreateD
     };
     if (input.amount != null && Number.isFinite(input.amount)) record.Amount = input.amount;
     if (contactId) record.Contact_Name = { id: contactId };
+    // Assign the deal to Aaron so it shows in his "deals needing action" list.
+    const aaronEmail = process.env.ZOHO_AARON_EMAIL;
+    if (aaronEmail) {
+      const ownerId = await resolveUserIdByEmail(aaronEmail);
+      if (ownerId) record.Owner = { id: ownerId };
+    }
 
     const res = await fetch(`https://www.zohoapis.${dc()}/crm/v5/Deals`, {
       method: "POST",
@@ -309,13 +346,14 @@ export async function fetchNeedsActionDeals(createdByEmail: string, pipelines: s
         const url =
           `https://www.zohoapis.${dc()}/crm/v5/Deals/search` +
           `?criteria=${encodeURIComponent(`(Pipeline:equals:${pipeline})`)}` +
-          `&fields=Deal_Name,Stage,Amount,Created_By,Created_Time,Last_Activity_Time&per_page=200&page=${page}`;
+          `&fields=Deal_Name,Stage,Amount,Owner,Created_By,Created_Time,Last_Activity_Time&per_page=200&page=${page}`;
         const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
         if (res.status === 204 || !res.ok) break;
         const json = (await res.json()) as {
           data?: Array<{
             id?: string; Deal_Name?: string | null; Stage?: string | null; Amount?: number | null;
             Created_Time?: string | null; Last_Activity_Time?: string | null;
+            Owner?: { email?: string | null } | null;
             Created_By?: { email?: string | null } | null;
           }>;
           info?: { more_records?: boolean };
@@ -323,7 +361,10 @@ export async function fetchNeedsActionDeals(createdByEmail: string, pipelines: s
         const rows = json.data ?? [];
         for (const d of rows) {
           if (!d.id) continue;
-          if ((d.Created_By?.email ?? "").toLowerCase() !== email) continue; // his deals only
+          // His deals = owned by him OR created by him.
+          const ownerEmail = (d.Owner?.email ?? "").toLowerCase();
+          const creatorEmail = (d.Created_By?.email ?? "").toLowerCase();
+          if (ownerEmail !== email && creatorEmail !== email) continue;
           const stage = d.Stage ?? "";
           if (isWon(stage) || isClosed(stage)) continue; // open only
           if (d.Last_Activity_Time) continue; // already has an action/task → skip

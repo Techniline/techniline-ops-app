@@ -62,6 +62,28 @@ export function AaronDealsBand() {
         Deals you created that still have no activity or task — open each in Zoho and log the next step.
       </p>
 
+      {deals && deals.length > 0 ? (
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-violet-900/50 dark:from-slate-900 dark:to-violet-950/20">
+            <span className="absolute inset-y-0 left-0 w-1 bg-violet-400/80 dark:bg-violet-700" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-700/90 dark:text-violet-400/90">Deals Needing Action</p>
+            <p className="mt-1 text-3xl font-bold tabular-nums text-violet-700 dark:text-violet-400">{deals.length}</p>
+          </div>
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-violet-900/50 dark:from-slate-900 dark:to-violet-950/20">
+            <span className="absolute inset-y-0 left-0 w-1 bg-violet-400/80 dark:bg-violet-700" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-700/90 dark:text-violet-400/90">Total Value</p>
+            <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+              {formatAED(deals.reduce((s, d) => s + (d.amount ?? 0), 0))}
+            </p>
+          </div>
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/50 p-4 text-center shadow-sm ring-1 ring-inset ring-white/60 dark:border-violet-900/50 dark:from-slate-900 dark:to-violet-950/20">
+            <span className="absolute inset-y-0 left-0 w-1 bg-violet-400/80 dark:bg-violet-700" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-700/90 dark:text-violet-400/90">Oldest Waiting</p>
+            <p className="mt-1 text-3xl font-bold tabular-nums text-amber-700 dark:text-amber-400">{daysAgo(deals[0]?.createdTime)}</p>
+          </div>
+        </div>
+      ) : null}
+
       {deals === null ? (
         <p className="text-sm text-slate-500">Loading…</p>
       ) : deals.length === 0 ? (
