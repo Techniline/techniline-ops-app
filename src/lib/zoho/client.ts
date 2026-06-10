@@ -211,6 +211,75 @@ export async function createBackToBackDeal(input: NewDealInput): Promise<CreateD
   }
 }
 
+// ── Pipeline KPIs (read-only dashboard aggregates) ──────────────────────────
+
+export interface StageBucket {
+  stage: string;
+  count: number;
+  value: number;
+}
+export interface PipelineKpis {
+  pipeline: string;
+  openCount: number;
+  openValue: number;
+  wonCount: number;
+  wonValue: number;
+  totalCount: number;
+  byStage: StageBucket[];
+}
+
+function isWon(stage: string): boolean {
+  return /closed won|order\/advance received/i.test(stage);
+}
+function isClosed(stage: string): boolean {
+  return /closed|cancel|rejected/i.test(stage);
+}
+
+/** Aggregate deals in a pipeline by stage (open vs won vs total). Paged + bounded. */
+export async function fetchPipelineKpis(pipeline: string): Promise<PipelineKpis> {
+  const empty: PipelineKpis = { pipeline, openCount: 0, openValue: 0, wonCount: 0, wonValue: 0, totalCount: 0, byStage: [] };
+  try {
+    const token = await getAccessToken();
+    const buckets = new Map<string, StageBucket>();
+    let openCount = 0, openValue = 0, wonCount = 0, wonValue = 0, totalCount = 0;
+    let page = 1;
+    const per = 200;
+    while (page <= 10) {
+      const url =
+        `https://www.zohoapis.${dc()}/crm/v5/Deals/search` +
+        `?criteria=${encodeURIComponent(`(Pipeline:equals:${pipeline})`)}` +
+        `&fields=Stage,Amount&per_page=${per}&page=${page}`;
+      const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+      if (res.status === 204) break;
+      if (!res.ok) break;
+      const json = (await res.json()) as { data?: Array<{ Stage?: string | null; Amount?: number | null }>; info?: { more_records?: boolean } };
+      const rows = json.data ?? [];
+      for (const d of rows) {
+        const stage = d.Stage ?? "—";
+        const amount = typeof d.Amount === "number" ? d.Amount : 0;
+        totalCount += 1;
+        const b = buckets.get(stage) ?? { stage, count: 0, value: 0 };
+        b.count += 1; b.value += amount; buckets.set(stage, b);
+        if (isWon(stage)) { wonCount += 1; wonValue += amount; }
+        else if (!isClosed(stage)) { openCount += 1; openValue += amount; }
+      }
+      if (!json.info?.more_records || rows.length === 0) break;
+      page += 1;
+    }
+    return {
+      pipeline,
+      openCount,
+      openValue: Math.round(openValue),
+      wonCount,
+      wonValue: Math.round(wonValue),
+      totalCount,
+      byStage: [...buckets.values()].sort((a, b) => b.count - a.count),
+    };
+  } catch {
+    return empty;
+  }
+}
+
 /** Look up a deal by id. Distinguishes not-found (invalid) from call failures (api_error). */
 export async function validateDeal(dealId: string): Promise<ZohoValidation> {
   try {

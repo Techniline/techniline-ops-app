@@ -18,6 +18,7 @@ import {
 } from "@/components/icons";
 import { btnSecondary, surface } from "@/components/ui";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
+import { ZohoPipelineBand } from "@/components/ZohoPipelineBand";
 import { WeeklySummaryModal } from "@/components/WeeklySummaryModal";
 import { computeActionSummary, fetchAmazonActions } from "@/lib/amazon-actions";
 import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
@@ -1008,6 +1009,8 @@ function DashboardContent() {
       {managerView ? <ManagerScorecard profile={profile} /> : null}
 
       {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
+
+      {isManager(profile) || profile.id === AARON_ID ? <ZohoPipelineBand /> : null}
 
       <KpiDashboard profile={profile} />
 
