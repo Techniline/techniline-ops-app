@@ -79,28 +79,21 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
   const date = html.match(/Payment\s*date:\s*<\/b>\s*<\/td>\s*<td[^>]*>\s*([0-9]{1,2}-[A-Za-z]{3}-\d{4})/i);
   if (date) out.paymentDate = toIsoDate(date[1]);
 
-  // Scope strictly to the invoice table: find the header row that contains the
-  // "Invoice Number … Amount Paid … Amount Remaining" titles, then read only the
-  // rows of THAT table (up to the next </table>). This avoids matching the
-  // forwarded-email wrapper tables (From/Sent/To/Subject, caution banners).
-  const headerIdx = html.search(
-    /Invoice\s*Number[\s\S]{0,500}?Amount\s*Paid[\s\S]{0,200}?Amount\s*Remaining/i
-  );
-  if (headerIdx === -1) return out;
-  const after = html.slice(headerIdx);
-  const endIdx = after.search(/<\/table>/i);
-  const region = endIdx === -1 ? after : after.slice(0, endIdx);
-
-  const rows = [...region.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
+  // Find invoice rows anywhere in the body. A real invoice line is a 6-cell row
+  // whose first cell looks like an invoice number AND whose second cell is a
+  // valid DD-MON-YYYY date. That uniquely identifies the invoice table rows and
+  // rejects the forwarded-email wrapper rows — no fragile header anchoring.
+  const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   for (const row of rows) {
     const rawCells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]);
     if (rawCells.length !== 6) continue;
     const invoiceNumber = stripTags(rawCells[0]);
-    if (!looksLikeInvoice(invoiceNumber)) continue; // skips header + any junk row
+    const invoiceDate = toIsoDate(stripTags(rawCells[1]));
+    if (!looksLikeInvoice(invoiceNumber) || !invoiceDate) continue; // not an invoice row
     const rawPaid = rawCells[4];
     out.lines.push({
       invoiceNumber,
-      invoiceDate: toIsoDate(stripTags(rawCells[1])),
+      invoiceDate,
       description: stripTags(rawCells[2]),
       amountPaid: parseAmount(stripTags(rawPaid)),
       amountRemaining: parseAmount(stripTags(rawCells[5])),
