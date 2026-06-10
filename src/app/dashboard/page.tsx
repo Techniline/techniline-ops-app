@@ -17,6 +17,7 @@ import {
   PrioritiesIcon,
 } from "@/components/icons";
 import { btnSecondary, surface } from "@/components/ui";
+import { AaronDealsBand } from "@/components/AaronDealsBand";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
 import { ZohoPipelineBand } from "@/components/ZohoPipelineBand";
 import { supabase } from "@/lib/supabaseClient";
@@ -1023,7 +1024,8 @@ function DashboardContent() {
 
       {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
 
-      {isManager(profile) || profile.id === AARON_ID ? <ZohoPipelineBand /> : null}
+      {managerView ? <ZohoPipelineBand /> : null}
+      {!managerView && profile.id === AARON_ID ? <AaronDealsBand /> : null}
 
       <KpiDashboard profile={profile} />
 

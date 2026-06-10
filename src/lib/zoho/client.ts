@@ -280,6 +280,75 @@ export async function fetchPipelineKpis(pipeline: string): Promise<PipelineKpis>
   }
 }
 
+// ── "My deals needing action" (created by a user, no activity yet) ──────────
+
+export interface NeedsActionDeal {
+  id: string;
+  name: string | null;
+  stage: string | null;
+  amount: number | null;
+  pipeline: string;
+  createdTime: string | null;
+  url: string;
+}
+
+/**
+ * Open deals CREATED BY the given email across the named pipelines that have no
+ * activity/task yet (Last_Activity_Time is empty) — i.e. nothing has been actioned.
+ * Uses only the Deals module (no Tasks scope needed). Paged + bounded.
+ */
+export async function fetchNeedsActionDeals(createdByEmail: string, pipelines: string[]): Promise<NeedsActionDeal[]> {
+  const email = createdByEmail.trim().toLowerCase();
+  if (!email) return [];
+  const out: NeedsActionDeal[] = [];
+  try {
+    const token = await getAccessToken();
+    for (const pipeline of pipelines) {
+      let page = 1;
+      while (page <= 10) {
+        const url =
+          `https://www.zohoapis.${dc()}/crm/v5/Deals/search` +
+          `?criteria=${encodeURIComponent(`(Pipeline:equals:${pipeline})`)}` +
+          `&fields=Deal_Name,Stage,Amount,Created_By,Created_Time,Last_Activity_Time&per_page=200&page=${page}`;
+        const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+        if (res.status === 204 || !res.ok) break;
+        const json = (await res.json()) as {
+          data?: Array<{
+            id?: string; Deal_Name?: string | null; Stage?: string | null; Amount?: number | null;
+            Created_Time?: string | null; Last_Activity_Time?: string | null;
+            Created_By?: { email?: string | null } | null;
+          }>;
+          info?: { more_records?: boolean };
+        };
+        const rows = json.data ?? [];
+        for (const d of rows) {
+          if (!d.id) continue;
+          if ((d.Created_By?.email ?? "").toLowerCase() !== email) continue; // his deals only
+          const stage = d.Stage ?? "";
+          if (isWon(stage) || isClosed(stage)) continue; // open only
+          if (d.Last_Activity_Time) continue; // already has an action/task → skip
+          out.push({
+            id: d.id,
+            name: d.Deal_Name ?? null,
+            stage: d.Stage ?? null,
+            amount: typeof d.Amount === "number" ? d.Amount : null,
+            pipeline,
+            createdTime: d.Created_Time ?? null,
+            url: buildDealUrl(orgId(), d.id),
+          });
+        }
+        if (!json.info?.more_records || rows.length === 0) break;
+        page += 1;
+      }
+    }
+  } catch {
+    return out;
+  }
+  // Oldest first (longest waiting for action).
+  out.sort((a, b) => (a.createdTime ?? "").localeCompare(b.createdTime ?? ""));
+  return out;
+}
+
 /** Look up a deal by id. Distinguishes not-found (invalid) from call failures (api_error). */
 export async function validateDeal(dealId: string): Promise<ZohoValidation> {
   try {
