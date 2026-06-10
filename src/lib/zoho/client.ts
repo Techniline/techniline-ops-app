@@ -4,8 +4,15 @@
  * ZOHO_REFRESH_TOKEN; ZOHO_DC defaults to "com".
  */
 
+import { buildDealUrl } from "./dealId";
+
 function dc(): string {
   return process.env.ZOHO_DC || "com";
+}
+
+/** Org id used to build canonical deal URLs (from ZOHO_ORG_ID; falls back to the known org). */
+function orgId(): string {
+  return process.env.ZOHO_ORG_ID || "712284897";
 }
 
 /** True when the Zoho OAuth env is configured (else callers fall back to pending). */
@@ -76,6 +83,132 @@ interface RawZohoDeal {
   Created_Time?: string | null;
   Account_Name?: { name?: string | null } | null;
   Contact_Name?: { name?: string | null } | null;
+}
+
+// ── Back-to-Back deal creation for abandoned carts ──────────────────────────
+
+interface ZohoContact {
+  id: string;
+  name: string | null;
+}
+
+/** Find a Contact by email (dedup key). Returns null if none / on error. */
+async function searchContactByEmail(email: string): Promise<ZohoContact | null> {
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(
+      `https://www.zohoapis.${dc()}/crm/v5/Contacts/search?email=${encodeURIComponent(email)}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+    );
+    if (res.status === 204) return null;
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: Array<{ id?: string; Full_Name?: string | null }> };
+    const c = json.data?.[0];
+    if (!c?.id) return null;
+    return { id: c.id, name: c.Full_Name ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Does this contact already have a deal? (used to refuse duplicates). */
+async function firstDealForContact(contactId: string): Promise<{ id: string; name: string | null } | null> {
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(
+      `https://www.zohoapis.${dc()}/crm/v5/Contacts/${encodeURIComponent(contactId)}/Deals?fields=Deal_Name&per_page=1`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+    );
+    if (res.status === 204) return null;
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: Array<{ id?: string; Deal_Name?: string | null }> };
+    const d = json.data?.[0];
+    if (!d?.id) return null;
+    return { id: d.id, name: d.Deal_Name ?? null };
+  } catch {
+    return null;
+  }
+}
+
+export type CreateDealOutcome =
+  | { status: "created"; dealId: string; dealUrl: string; message: string }
+  | { status: "duplicate"; dealId: string; dealUrl: string; message: string }
+  | { status: "error"; message: string };
+
+export interface NewDealInput {
+  customerName: string | null;
+  customerEmail: string | null;
+  amount: number | null;
+  recoveryUrl: string | null;
+}
+
+/**
+ * Create a deal in the Back-to-Back pipeline for an abandoned cart, after a
+ * duplicate check by customer email. Deal name = "<customer> – MM Cart" (Aaron
+ * edits in CRM). Pipeline/stage come from ZOHO_MM_PIPELINE / ZOHO_MM_STAGE.
+ */
+export async function createBackToBackDeal(input: NewDealInput): Promise<CreateDealOutcome> {
+  try {
+    const email = (input.customerEmail ?? "").trim();
+    let contactId: string | null = null;
+
+    // 1) Dedup by email.
+    if (email) {
+      const contact = await searchContactByEmail(email);
+      if (contact) {
+        contactId = contact.id;
+        const existing = await firstDealForContact(contact.id);
+        if (existing) {
+          return {
+            status: "duplicate",
+            dealId: existing.id,
+            dealUrl: buildDealUrl(orgId(), existing.id),
+            message: `A deal already exists for ${email}${existing.name ? ` (“${existing.name}”)` : ""}.`,
+          };
+        }
+      }
+    }
+
+    // 2) Create the deal.
+    const token = await getAccessToken();
+    const customer = (input.customerName ?? "").trim() || (email ? email.split("@")[0] : "Music Majlis");
+    const record: Record<string, unknown> = {
+      Deal_Name: `${customer} – MM Cart`,
+      Pipeline: process.env.ZOHO_MM_PIPELINE || "Back to Back",
+      Stage: process.env.ZOHO_MM_STAGE || "Qualification",
+      Description: [
+        "Created from a Music Majlis abandoned cart.",
+        email ? `Email: ${email}` : null,
+        input.recoveryUrl ? `Recovery: ${input.recoveryUrl}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+    if (input.amount != null && Number.isFinite(input.amount)) record.Amount = input.amount;
+    if (contactId) record.Contact_Name = { id: contactId };
+
+    const res = await fetch(`https://www.zohoapis.${dc()}/crm/v5/Deals`, {
+      method: "POST",
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: [record] }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ code?: string; details?: { id?: string }; message?: string }>;
+    };
+    const row = json.data?.[0];
+    if (!res.ok || row?.code !== "SUCCESS" || !row.details?.id) {
+      return { status: "error", message: row?.message ? `Zoho: ${row.message}` : `Zoho create failed (${res.status}).` };
+    }
+    const id = row.details.id;
+    return {
+      status: "created",
+      dealId: id,
+      dealUrl: buildDealUrl(orgId(), id),
+      message: "Deal created in Back-to-Back. Open it in CRM to finish the details.",
+    };
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Zoho request failed." };
+  }
 }
 
 /** Look up a deal by id. Distinguishes not-found (invalid) from call failures (api_error). */

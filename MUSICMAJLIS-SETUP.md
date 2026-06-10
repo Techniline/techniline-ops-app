@@ -46,6 +46,62 @@ with check (public.current_user_role() = 'manager' or auth.uid() = 'cbb81b27-875
 (`cbb81b27-…` = Aaron. Recovered-cart writes go through the server route with the
 service-role key, but the read policy lets Aaron/managers see the list.)
 
+### 1b. Abandoned-cart actioning (run this to enable the daily review + Zoho deal flow)
+```sql
+-- One row per Shopify abandoned checkout Aaron has actioned.
+create table if not exists public.mm_abandoned_actions (
+  id                  uuid primary key default gen_random_uuid(),
+  checkout_id         text not null unique,        -- Shopify checkout id
+  checkout_created_at timestamptz,
+  customer_name       text,
+  customer_email      text,
+  total               numeric,
+  recovery_url        text,
+  action_status       text not null default 'open', -- open | actioned | deal_created | dismissed
+  zoho_deal_id        text,
+  note                text,
+  actioned_by         uuid references public.users(id),
+  actioned_at         timestamptz,
+  created_at          timestamptz not null default now()
+);
+alter table public.mm_abandoned_actions enable row level security;
+drop policy if exists "mm_abandoned_rw" on public.mm_abandoned_actions;
+create policy "mm_abandoned_rw" on public.mm_abandoned_actions for all to authenticated
+using (public.current_user_role() = 'manager' or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c')
+with check (public.current_user_role() = 'manager' or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');
+```
+
+### 1c. Zoho deal-creation env (Vercel → Production, server-only)
+Creating a Back-to-Back deal needs the Zoho refresh token re-issued with **write** scope.
+Re-generate `ZOHO_REFRESH_TOKEN` with scopes:
+`ZohoCRM.modules.deals.ALL,ZohoCRM.modules.contacts.READ,ZohoCRM.settings.ALL`
+(the existing read-only token only validated deals). Then set:
+
+| Variable | Value |
+|---|---|
+| `ZOHO_MM_PIPELINE` | `Back to Back` (exact pipeline name in your Deals layout) |
+| `ZOHO_MM_STAGE` | the first stage of that pipeline, e.g. `Qualification` |
+| `ZOHO_ORG_ID` | `712284897` (used to build deal links; already the known org) |
+
+Until the write scope is in place, the **Create Zoho deal** button returns a clear error
+and nothing else breaks (actioning/clearing carts still works).
+
+### 1d. Aaron's daily abandoned-cart review task (checklist)
+Adds a daily one-tap task reminding Aaron to clear yesterday's abandoned carts on the
+dashboard MUSICMAJLIS band. (Cadence-aware engine skips Sundays already.)
+```sql
+insert into public.task_definitions
+  (title, description, evidence_type, cadence, category, sort_order, assigned_to, is_active)
+values
+  ('Action Music Majlis abandoned carts',
+   'Open the dashboard MUSICMAJLIS band → review yesterday''s abandoned carts. For each, either create a Back-to-Back Zoho deal or mark it actioned. Monday covers Sat+Sun.',
+   'one_tap', 'daily', 'Music Majlis', 5,
+   'cbb81b27-8756-4f2d-bfe0-04211c27092c', true)
+on conflict do nothing;
+```
+(Adjust column names if your `task_definitions` differs — `assigned_to` scopes it to Aaron;
+omit it to give the task to everyone.)
+
 ## 2. Shopify Admin API credentials (Vercel → Production env, server-only)
 Create a **custom app** in the Music Majlis Shopify admin with **Admin API** scopes
 `read_orders` + `read_checkouts`, install it, copy the **Admin API access token**, then set:

@@ -897,6 +897,62 @@ export type Database = {
           },
         ]
       }
+      mm_abandoned_actions: {
+        Row: {
+          action_status: string
+          actioned_at: string | null
+          actioned_by: string | null
+          checkout_created_at: string | null
+          checkout_id: string
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          id: string
+          note: string | null
+          recovery_url: string | null
+          total: number | null
+          zoho_deal_id: string | null
+        }
+        Insert: {
+          action_status?: string
+          actioned_at?: string | null
+          actioned_by?: string | null
+          checkout_created_at?: string | null
+          checkout_id: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          note?: string | null
+          recovery_url?: string | null
+          total?: number | null
+          zoho_deal_id?: string | null
+        }
+        Update: {
+          action_status?: string
+          actioned_at?: string | null
+          actioned_by?: string | null
+          checkout_created_at?: string | null
+          checkout_id?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          note?: string | null
+          recovery_url?: string | null
+          total?: number | null
+          zoho_deal_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mm_abandoned_actions_actioned_by_fkey"
+            columns: ["actioned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mm_recovered_carts: {
         Row: {
           amount: number | null

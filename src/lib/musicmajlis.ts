@@ -16,6 +16,23 @@ export function monthBounds(): { monthStr: string; fromIso: string; toIso: strin
   return { monthStr: ymd(first), fromIso: first.toISOString(), toIso: nextFirst.toISOString() };
 }
 
+/**
+ * The abandoned-cart review window = the previous working day(s), since carts are
+ * actioned the next morning. Returns null on Sunday (non-working day → show nothing).
+ * - Tue–Sat: yesterday 00:00 → today 00:00.
+ * - Monday:  Saturday 00:00 → Monday 00:00 (covers Sat + Sun in one go).
+ */
+export function abandonedWindow(): { fromIso: string; toIso: string; label: string } | null {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun … 6=Sat
+  if (day === 0) return null; // Sunday — nothing to action
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const from = new Date(today);
+  from.setDate(today.getDate() - (day === 1 ? 2 : 1)); // Monday reaches back to Saturday
+  const label = day === 1 ? "Sat–Sun" : "yesterday";
+  return { fromIso: from.toISOString(), toIso: today.toISOString(), label };
+}
+
 /** Working days (Mon–Sat) remaining this month, including today. */
 export function remainingWorkingDays(): number {
   const now = new Date();
@@ -75,6 +92,108 @@ export async function logRecoveredCart(orderRef: string, amount: number | null, 
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; log?: MmRecoveredCart; error?: string };
   if (!res.ok || !j.ok || !j.log) throw new Error(j.error ?? `HTTP ${res.status}`);
   return j.log;
+}
+
+export interface AbandonedCart {
+  id: string;
+  createdAt: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  total: number | null;
+  recoveryUrl: string | null;
+  actionStatus: "open" | "actioned" | "deal_created" | "dismissed";
+  zohoDealId: string | null;
+  zohoDealUrl: string | null;
+  note: string | null;
+}
+
+export interface AbandonedResult {
+  configured: boolean;
+  windowLabel: string | null; // null on Sunday
+  carts: AbandonedCart[];
+  openCount: number;
+  error?: string;
+}
+
+/** Abandoned carts for the previous-working-day window, merged with Aaron's actions. */
+export async function fetchAbandonedCarts(): Promise<AbandonedResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return { configured: false, windowLabel: null, carts: [], openCount: 0 };
+  const res = await fetch("/api/shopify/abandoned", { headers: { Authorization: `Bearer ${token}` } });
+  const j = (await res.json().catch(() => ({}))) as Partial<AbandonedResult> & { ok?: boolean };
+  if (!res.ok || !j.ok) {
+    return { configured: false, windowLabel: null, carts: [], openCount: 0, error: j.error };
+  }
+  return {
+    configured: !!j.configured,
+    windowLabel: j.windowLabel ?? null,
+    carts: j.carts ?? [],
+    openCount: j.openCount ?? 0,
+  };
+}
+
+/** Mark an abandoned cart actioned (cleared) or dismissed. */
+export async function actionAbandonedCart(
+  cart: AbandonedCart,
+  status: "actioned" | "dismissed",
+  note: string | null
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/mm/action-cart", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      checkoutId: cart.id,
+      status,
+      note,
+      customerName: cart.customerName,
+      customerEmail: cart.customerEmail,
+      total: cart.total,
+      recoveryUrl: cart.recoveryUrl,
+      createdAt: cart.createdAt,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+}
+
+export interface CreateDealResult {
+  status: "created" | "duplicate" | "error";
+  dealId: string | null;
+  dealUrl: string | null;
+  message: string;
+}
+
+/** Create a Back-to-Back deal in Zoho for an abandoned cart (dedup by email first). */
+export async function createDealForCart(cart: AbandonedCart): Promise<CreateDealResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/zoho/create-deal", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      checkoutId: cart.id,
+      customerName: cart.customerName,
+      customerEmail: cart.customerEmail,
+      total: cart.total,
+      recoveryUrl: cart.recoveryUrl,
+      createdAt: cart.createdAt,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as Partial<CreateDealResult> & { ok?: boolean; error?: string };
+  if (!res.ok || !j.status) {
+    return { status: "error", dealId: null, dealUrl: null, message: j.error ?? `HTTP ${res.status}` };
+  }
+  return {
+    status: j.status,
+    dealId: j.dealId ?? null,
+    dealUrl: j.dealUrl ?? null,
+    message: j.message ?? "",
+  };
 }
 
 export interface MmMetrics {

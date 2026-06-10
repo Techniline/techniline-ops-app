@@ -86,6 +86,60 @@ export async function fetchMonthMetrics(
   return { netSales: Number(netSales.toFixed(2)), orderCount, abandonedCarts };
 }
 
+export interface AbandonedCheckout {
+  id: string;
+  createdAt: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  total: number | null;
+  recoveryUrl: string | null;
+}
+
+interface RawCheckout {
+  id?: number | string;
+  created_at?: string | null;
+  email?: string | null;
+  total_price?: string | null;
+  abandoned_checkout_url?: string | null;
+  customer?: { first_name?: string | null; last_name?: string | null } | null;
+}
+
+/**
+ * Abandoned checkouts created within [fromIso, toIso). Returns the individual
+ * carts (id, customer, total, recovery URL) so they can be actioned one by one.
+ * Paged via the Link header; bounded.
+ */
+export async function fetchAbandonedCheckouts(fromIso: string, toIso: string): Promise<AbandonedCheckout[]> {
+  const out: AbandonedCheckout[] = [];
+  let url: string | null =
+    `/checkouts.json?limit=250` +
+    `&created_at_min=${encodeURIComponent(fromIso)}&created_at_max=${encodeURIComponent(toIso)}`;
+  let pages = 0;
+  while (url && pages < 20) {
+    const res: Response = await shopGet(url);
+    if (!res.ok) throw new Error(`Shopify checkouts ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    const json = (await res.json()) as { checkouts?: RawCheckout[] };
+    for (const c of json.checkouts ?? []) {
+      const name = [c.customer?.first_name, c.customer?.last_name].filter(Boolean).join(" ").trim();
+      const amt = Number(c.total_price ?? 0);
+      out.push({
+        id: String(c.id ?? ""),
+        createdAt: c.created_at ?? null,
+        customerName: name || null,
+        customerEmail: c.email ?? null,
+        total: Number.isFinite(amt) ? amt : null,
+        recoveryUrl: c.abandoned_checkout_url ?? null,
+      });
+    }
+    const link = res.headers.get("link") || res.headers.get("Link");
+    const next = link?.split(",").find((p) => p.includes('rel="next"'));
+    const m = next?.match(/<[^>]*\/admin\/api\/[^>]*(\/checkouts\.json[^>]*)>/);
+    url = m ? m[1] : null;
+    pages += 1;
+  }
+  return out;
+}
+
 export type OrderValidation =
   | { status: "valid"; orderName: string; amount: number | null }
   | { status: "invalid"; message: string }

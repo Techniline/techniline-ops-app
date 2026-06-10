@@ -23,13 +23,18 @@ import { calculateCocobluSummary, fetchAllCocobluAgeing } from "@/lib/cocoblu";
 import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/lp";
 import { computeResellerKpis, fetchDealLogs } from "@/lib/reseller";
 import {
+  actionAbandonedCart,
   computeMmKpis,
+  createDealForCart,
+  fetchAbandonedCarts,
   fetchMmMetrics,
   fetchMmTarget,
   fetchRecoveredThisMonth,
   logRecoveredCart,
   remainingWorkingDays,
   setMmTarget,
+  type AbandonedCart,
+  type AbandonedResult,
   type MmMetrics,
   type MmRecoveredCart,
 } from "@/lib/musicmajlis";
@@ -402,12 +407,22 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const [recAmount, setRecAmount] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const [abandoned, setAbandoned] = useState<AbandonedResult | null>(null);
+  const [showCarts, setShowCarts] = useState(false);
+  const [cartBusy, setCartBusy] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const [t, m, r] = await Promise.all([fetchMmTarget(), fetchMmMetrics(), fetchRecoveredThisMonth()]);
+    const [t, m, r, a] = await Promise.all([
+      fetchMmTarget(),
+      fetchMmMetrics(),
+      fetchRecoveredThisMonth(),
+      fetchAbandonedCarts(),
+    ]);
     setTarget(t?.target_amount ?? 0);
     setMetrics(m);
     setRecovered(r);
+    setAbandoned(a);
     setLoading(false);
   }, []);
   useEffect(() => {
@@ -457,6 +472,43 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
     }
   }
 
+  async function clearCart(cart: AbandonedCart): Promise<void> {
+    setError(null);
+    setCartBusy(cart.id);
+    try {
+      await actionAbandonedCart(cart, "actioned", null);
+      await load();
+    } catch (e2) {
+      setError(errMsg(e2));
+    } finally {
+      setCartBusy(null);
+    }
+  }
+
+  async function makeDeal(cart: AbandonedCart): Promise<void> {
+    setError(null);
+    setBanner(null);
+    setCartBusy(cart.id);
+    try {
+      const r = await createDealForCart(cart);
+      if (r.status === "error") setError(r.message);
+      else setBanner(r.status === "duplicate" ? `Duplicate — ${r.message}` : r.message);
+      await load();
+    } catch (e2) {
+      setError(errMsg(e2));
+    } finally {
+      setCartBusy(null);
+    }
+  }
+
+  const abandonedOpen = abandoned?.openCount ?? 0;
+  const abandonedLabel = abandoned?.windowLabel ?? null;
+  const abandonedTileValue = !connected
+    ? "—"
+    : abandonedLabel == null
+      ? "—"
+      : String(abandonedOpen);
+
   return (
     <section className="mt-8 rounded-2xl border-2 border-emerald-300 bg-emerald-50/60 p-4 dark:border-emerald-800 dark:bg-emerald-950/20">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -483,9 +535,87 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <MmTile label="Achieved (net sales)" value={connected ? formatAED(k.achieved) : "—"} tone="text-emerald-700 dark:text-emerald-400" />
         <MmTile label="% Achieved" value={target > 0 && connected ? `${Math.round(k.pct)}%` : "—"} tone={k.pct >= 100 ? "text-emerald-700 dark:text-emerald-400" : undefined} />
         <MmTile label={`Today's Target (${remainingWorkingDays()}d left)`} value={target > 0 ? formatAED(k.todayTarget) : "—"} />
-        <MmTile label="Abandoned Carts" value={connected && metrics?.abandonedCarts != null ? String(metrics.abandonedCarts) : "—"} tone="text-amber-700 dark:text-amber-400" />
+        <button
+          type="button"
+          onClick={() => setShowCarts((s) => !s)}
+          className="rounded-xl border border-amber-200 bg-white/70 p-3 text-left transition hover:border-amber-400 dark:border-amber-900 dark:bg-slate-900/40"
+        >
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Abandoned Carts{abandonedLabel ? ` (${abandonedLabel})` : ""}
+          </p>
+          <p className="mt-1 text-xl font-semibold text-amber-700 dark:text-amber-400">{abandonedTileValue}</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">{showCarts ? "Hide list ▲" : "Action carts ▼"}</p>
+        </button>
         <MmTile label="Recovered (this mo)" value={`${k.recoveredCount} · ${formatAED(k.recoveredValue)}`} />
       </div>
+
+      {showCarts ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-white/70 p-3 dark:border-amber-900 dark:bg-slate-900/30">
+          {!connected ? (
+            <p className="text-xs text-amber-700">Shopify not connected — connect it to load abandoned carts.</p>
+          ) : abandonedLabel == null ? (
+            <p className="text-xs text-slate-500">Sunday — nothing to action. Monday will show Saturday + Sunday carts.</p>
+          ) : (abandoned?.carts.length ?? 0) === 0 ? (
+            <p className="text-xs text-slate-500">No abandoned carts for {abandonedLabel}. 🎉</p>
+          ) : (
+            <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+              {abandoned!.carts.map((c) => {
+                const done = c.actionStatus !== "open";
+                return (
+                  <li key={c.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-slate-800 dark:text-slate-200">
+                        {c.customerName ?? c.customerEmail ?? "Unknown customer"}
+                        {c.total != null ? <span className="ml-2 text-slate-500">{formatAED(c.total)}</span> : null}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-400">
+                        {c.customerEmail ?? "no email"}
+                        {c.actionStatus === "deal_created" && c.zohoDealUrl ? (
+                          <>
+                            {" · "}
+                            <a href={c.zohoDealUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+                              Zoho deal
+                            </a>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                    {c.recoveryUrl ? (
+                      <a href={c.recoveryUrl} target="_blank" rel="noreferrer" className="text-[11px] text-emerald-700 underline">
+                        Recovery link
+                      </a>
+                    ) : null}
+                    {done ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        {c.actionStatus === "deal_created" ? "Deal" : "Actioned"}
+                      </span>
+                    ) : (
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          disabled={cartBusy === c.id}
+                          onClick={() => makeDeal(c)}
+                          className="rounded-md border border-indigo-300 px-2 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-800 dark:text-indigo-300"
+                        >
+                          {cartBusy === c.id ? "…" : "Create Zoho deal"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={cartBusy === c.id}
+                          onClick={() => clearCart(c)}
+                          className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
+                        >
+                          {cartBusy === c.id ? "…" : "Mark actioned"}
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       {showTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setShowTarget(false)}>
