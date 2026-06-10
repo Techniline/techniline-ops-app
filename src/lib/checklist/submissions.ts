@@ -80,18 +80,19 @@ export async function submitTaskWithEvidence(args: SubmitTaskArgs): Promise<void
     submittedBy,
     evidenceText = null,
     evidenceCount = null,
-    evidenceFilePath = null,
     isNothingToAction = false,
     nothingToActionNote = null,
   } = args;
 
+  // Note: evidence_file_path is intentionally NOT inserted — the file-attach
+  // feature was reverted and that column may not exist on the table; including
+  // it made every submission fail.
   const payload: SubmissionInsert = {
     daily_task_id: taskId,
     submitted_by: submittedBy,
     submitted_at: new Date().toISOString(),
     evidence_text: evidenceText,
     evidence_count: evidenceCount,
-    evidence_file_path: evidenceFilePath,
     is_nothing_to_action: isNothingToAction,
     nothing_to_action_note: nothingToActionNote,
   };
