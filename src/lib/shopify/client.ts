@@ -36,6 +36,7 @@ interface RawRefund {
   refund_line_items?: RawRefundLineItem[] | null;
 }
 interface RawOrder {
+  created_at?: string | null;
   subtotal_price?: string | null;
   current_total_price?: string | null;
   total_price?: string | null;
@@ -51,17 +52,19 @@ interface OrdersResp {
  * returns, EXCLUDING tax & shipping. We sum `subtotal_price` (line totals after
  * all discounts, before tax/shipping) and subtract refunded line-item subtotals
  * (returns). Paginated via the Link header; cancelled orders are skipped.
+ * Also returns net sales bucketed by Dubai day (YYYY-MM-DD) for the pace chart.
  */
 export async function fetchMonthMetrics(
   fromIso: string,
   toIso: string
-): Promise<{ netSales: number; orderCount: number; abandonedCarts: number }> {
+): Promise<{ netSales: number; orderCount: number; abandonedCarts: number; daily: Record<string, number> }> {
   let netSales = 0;
   let orderCount = 0;
+  const daily: Record<string, number> = {};
 
   // Orders (paged). Use the REST Link-header cursor.
   let url: string | null =
-    `/orders.json?status=any&limit=250&fields=subtotal_price,current_total_price,total_price,cancelled_at,refunds` +
+    `/orders.json?status=any&limit=250&fields=created_at,subtotal_price,current_total_price,total_price,cancelled_at,refunds` +
     `&created_at_min=${encodeURIComponent(fromIso)}&created_at_max=${encodeURIComponent(toIso)}`;
   let pages = 0;
   while (url && pages < 40) {
@@ -79,7 +82,13 @@ export async function fetchMonthMetrics(
         }
       }
       const net = subtotal - returns;
-      if (Number.isFinite(net)) netSales += net;
+      if (Number.isFinite(net)) {
+        netSales += net;
+        if (o.created_at) {
+          const day = new Date(new Date(o.created_at).getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          daily[day] = (daily[day] ?? 0) + net;
+        }
+      }
       orderCount += 1;
     }
     // Parse next cursor from Link header.
@@ -102,7 +111,7 @@ export async function fetchMonthMetrics(
     /* abandoned-cart count is best-effort */
   }
 
-  return { netSales: Number(netSales.toFixed(2)), orderCount, abandonedCarts };
+  return { netSales: Number(netSales.toFixed(2)), orderCount, abandonedCarts, daily };
 }
 
 export interface AbandonedCheckout {

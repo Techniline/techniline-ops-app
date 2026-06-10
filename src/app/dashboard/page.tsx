@@ -25,6 +25,7 @@ import { computeLpSummary, computePriceAlerts, fetchLpItemsWindow } from "@/lib/
 import { computeResellerKpis, fetchDealLogs } from "@/lib/reseller";
 import {
   actionAbandonedCart,
+  buildPaceSeries,
   computeMmKpis,
   createDealForCart,
   fetchAbandonedCarts,
@@ -450,6 +451,63 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
 }
 
+/** Cumulative actual net sales vs the ideal target pace for the month. */
+function PaceChart({ target, daily }: { target: number; daily: Record<string, number> }) {
+  const pts = buildPaceSeries(target, daily);
+  if (pts.length < 2 || target <= 0) return null;
+  const W = 640;
+  const H = 150;
+  const padL = 6;
+  const padR = 6;
+  const padT = 10;
+  const padB = 16;
+  const maxY = Math.max(target, ...pts.map((p) => Math.max(p.pace, p.actual ?? 0)), 1);
+  const n = pts.length;
+  const x = (i: number) => padL + (i / (n - 1)) * (W - padL - padR);
+  const y = (v: number) => padT + (1 - v / maxY) * (H - padT - padB);
+
+  const pacePath = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.pace).toFixed(1)}`).join(" ");
+  const actualPts = pts.filter((p) => p.actual != null);
+  const actualPath = actualPts
+    .map((p, i) => `${i ? "L" : "M"}${x(p.day - 1).toFixed(1)},${y(p.actual as number).toFixed(1)}`)
+    .join(" ");
+  const last = actualPts[actualPts.length - 1];
+  const today = pts.find((p) => p.isToday);
+  const ahead = today && last ? (last.actual as number) - today.pace : 0;
+
+  return (
+    <div className="mt-3 rounded-2xl border border-emerald-100 bg-white/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-slate-900/40">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-400/90">
+          Sales pace vs target — this month
+        </p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            ahead >= 0
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+          }`}
+        >
+          {ahead >= 0 ? "▲ Ahead of pace " : "▼ Behind pace "}
+          {formatAED(Math.abs(Math.round(ahead)))}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-36 w-full" preserveAspectRatio="none">
+        <path d={pacePath} fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="5 4" className="text-slate-300 dark:text-slate-600" />
+        {actualPath ? (
+          <path d={actualPath} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-500" strokeLinejoin="round" strokeLinecap="round" />
+        ) : null}
+        {last ? <circle cx={x(last.day - 1)} cy={y(last.actual as number)} r="3.5" className="fill-emerald-500" /> : null}
+      </svg>
+      <div className="mt-1 flex items-center gap-4 text-[10px] text-slate-500">
+        <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-4 rounded bg-emerald-500" /> Achieved</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-0 w-4 border-t-2 border-dashed border-slate-400" /> Target pace</span>
+        <span className="ml-auto">Day {today?.day ?? "—"} of {n}</span>
+      </div>
+    </div>
+  );
+}
+
 function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const manager = isManager(profile);
   const [target, setTarget] = useState(0);
@@ -665,6 +723,8 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
           tone="text-emerald-700 dark:text-emerald-400"
         />
       </div>
+
+      {connected && target > 0 ? <PaceChart target={target} daily={metrics?.daily ?? {}} /> : null}
 
       {showCarts ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-white/70 p-3 dark:border-amber-900 dark:bg-slate-900/30">

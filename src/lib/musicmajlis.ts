@@ -256,27 +256,71 @@ export interface MmMetrics {
   configured: boolean;
   netSales: number | null;
   abandonedCarts: number | null;
+  daily: Record<string, number>; // YYYY-MM-DD → net sales that day (Dubai)
   error?: string;
 }
 
-/** Shopify net sales + abandoned carts for this month (server route). */
+/** Shopify net sales + abandoned carts (+ daily series) for this month (server route). */
 export async function fetchMmMetrics(): Promise<MmMetrics> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token) return { configured: false, netSales: null, abandonedCarts: null };
+  if (!token) return { configured: false, netSales: null, abandonedCarts: null, daily: {} };
   const { fromIso, toIso } = monthBounds();
   const res = await fetch(`/api/shopify/mm-metrics?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const j = (await res.json().catch(() => ({}))) as {
-    ok?: boolean; configured?: boolean; netSales?: number; abandonedCarts?: number; error?: string;
+    ok?: boolean; configured?: boolean; netSales?: number; abandonedCarts?: number; daily?: Record<string, number>; error?: string;
   };
-  if (!res.ok || !j.ok) return { configured: false, netSales: null, abandonedCarts: null, error: j.error };
+  if (!res.ok || !j.ok) return { configured: false, netSales: null, abandonedCarts: null, daily: {}, error: j.error };
   return {
     configured: !!j.configured,
     netSales: j.netSales ?? null,
     abandonedCarts: j.abandonedCarts ?? null,
+    daily: j.daily ?? {},
   };
+}
+
+/** Build cumulative actual vs ideal-pace series for the month (for the chart). */
+export interface PacePoint {
+  day: number; // day-of-month
+  date: string; // YYYY-MM-DD
+  actual: number | null; // cumulative net sales up to & incl. this day (null = future)
+  pace: number; // cumulative ideal target by this day
+  isToday: boolean;
+}
+
+export function buildPaceSeries(target: number, daily: Record<string, number>): PacePoint[] {
+  const now = dubaiNow();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const todayDom = now.getUTCDate();
+  const lastDom = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+
+  // Total working days (Mon–Sat) in the month → ideal daily pace.
+  let totalWorkdays = 0;
+  for (let d = 1; d <= lastDom; d += 1) {
+    if (new Date(Date.UTC(y, m, d)).getUTCDay() !== 0) totalWorkdays += 1;
+  }
+  const perWorkday = totalWorkdays > 0 ? target / totalWorkdays : 0;
+
+  const pts: PacePoint[] = [];
+  let cumActual = 0;
+  let cumPace = 0;
+  for (let d = 1; d <= lastDom; d += 1) {
+    const date = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const isWorkday = new Date(Date.UTC(y, m, d)).getUTCDay() !== 0;
+    if (isWorkday) cumPace += perWorkday;
+    if (d <= todayDom) cumActual += daily[date] ?? 0;
+    pts.push({
+      day: d,
+      date,
+      actual: d <= todayDom ? Number(cumActual.toFixed(2)) : null,
+      pace: Number(cumPace.toFixed(2)),
+      isToday: d === todayDom,
+    });
+  }
+  return pts;
 }
 
 export interface MmKpis {
