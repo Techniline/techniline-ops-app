@@ -567,9 +567,9 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
           </p>
           <div>
             <p className="text-2xl font-bold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">{abandonedTileValue}</p>
-            <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600/80 transition-transform group-hover:translate-x-0.5 dark:text-amber-500/80">
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200 px-2.5 py-1 text-[11px] font-semibold text-amber-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(0,0,0,0.12)] transition-all group-hover:from-amber-200 group-hover:to-amber-300 group-active:translate-y-px group-active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)] dark:border-amber-700 dark:from-amber-800 dark:to-amber-900 dark:text-amber-100">
               {showCarts ? "Hide list ▲" : "Action carts ▼"}
-            </p>
+            </span>
           </div>
         </button>
         <MmTile label="Recovered (this mo)" value={`${k.recoveredCount} · ${formatAED(k.recoveredValue)}`} />
