@@ -116,6 +116,39 @@ export async function fetchDeductions(opts: { includeClosed: boolean }): Promise
   return data ?? [];
 }
 
+export interface RemittancePayment {
+  id: string; // expected_actions.id
+  ref: string;
+  amount: number | null; // net paid captured from the email
+  receivedAt: string | null;
+  subject: string | null;
+}
+
+/** Ingested remittance payments still needing review (from the Amazon-actions feed). */
+export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]> {
+  const { data, error } = await supabase
+    .from("expected_actions")
+    .select("id, ref_number, aed_amount, email_received_at, email_subject, status, type")
+    .eq("type", "remittance")
+    .order("email_received_at", { ascending: false });
+  if (error || !data) return [];
+  return data
+    .filter((r) => r.status !== "resolved" && r.ref_number)
+    .map((r) => ({
+      id: r.id as string,
+      ref: r.ref_number as string,
+      amount: r.aed_amount as number | null,
+      receivedAt: r.email_received_at as string | null,
+      subject: r.email_subject as string | null,
+    }));
+}
+
+/** Mark a remittance payment reviewed — resolves the Amazon-actions item too. */
+export async function markRemittanceReviewed(expectedActionId: string): Promise<void> {
+  const { error } = await supabase.from("expected_actions").update({ status: "resolved" }).eq("id", expectedActionId);
+  if (error) throw new Error(error.message);
+}
+
 /** Captured remittances that still have an unexplained deduction total (for the picker). */
 export async function fetchRemittanceRefs(): Promise<{ ref: string; deductions: number | null; date: string | null }[]> {
   const { data, error } = await supabase
