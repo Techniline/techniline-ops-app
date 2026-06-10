@@ -230,6 +230,28 @@ export async function createDealForCart(cart: AbandonedCart): Promise<CreateDeal
   };
 }
 
+export interface MonthActionCounts {
+  actioned: number; // marked actioned (not turned into a deal)
+  deals: number; // turned into a Zoho deal
+}
+
+/** Carts actioned / turned into deals this month (Dubai), from our records. */
+export async function fetchActionedThisMonth(): Promise<MonthActionCounts> {
+  const { monthStr } = monthBounds();
+  const { data, error } = await supabase
+    .from("mm_abandoned_actions")
+    .select("action_status, actioned_at")
+    .gte("actioned_at", `${monthStr}T00:00:00+04:00`);
+  if (error) return { actioned: 0, deals: 0 };
+  let actioned = 0;
+  let deals = 0;
+  for (const r of data ?? []) {
+    if (r.action_status === "deal_created") deals += 1;
+    else if (r.action_status === "actioned") actioned += 1;
+  }
+  return { actioned, deals };
+}
+
 export interface MmMetrics {
   configured: boolean;
   netSales: number | null;

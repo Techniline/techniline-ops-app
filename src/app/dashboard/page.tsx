@@ -27,6 +27,7 @@ import {
   computeMmKpis,
   createDealForCart,
   fetchAbandonedCarts,
+  fetchActionedThisMonth,
   fetchMmMetrics,
   fetchMmTarget,
   fetchRecoveredThisMonth,
@@ -37,6 +38,7 @@ import {
   type AbandonedResult,
   type MmMetrics,
   type MmRecoveredCart,
+  type MonthActionCounts,
 } from "@/lib/musicmajlis";
 import { btnPrimary, inputClass } from "@/components/ui";
 import {
@@ -410,19 +412,22 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const [abandoned, setAbandoned] = useState<AbandonedResult | null>(null);
   const [showCarts, setShowCarts] = useState(false);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
+  const [actionCounts, setActionCounts] = useState<MonthActionCounts>({ actioned: 0, deals: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [t, m, r, a] = await Promise.all([
+    const [t, m, r, a, ac] = await Promise.all([
       fetchMmTarget(),
       fetchMmMetrics(),
       fetchRecoveredThisMonth(),
       fetchAbandonedCarts(),
+      fetchActionedThisMonth(),
     ]);
     setTarget(t?.target_amount ?? 0);
     setMetrics(m);
     setRecovered(r);
     setAbandoned(a);
+    setActionCounts(ac);
     setLoading(false);
   }, []);
   useEffect(() => {
@@ -547,6 +552,24 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
           <p className="mt-0.5 text-[10px] text-slate-400">{showCarts ? "Hide list ▲" : "Action carts ▼"}</p>
         </button>
         <MmTile label="Recovered (this mo)" value={`${k.recoveredCount} · ${formatAED(k.recoveredValue)}`} />
+        <MmTile
+          label="Abandoned (this mo)"
+          value={connected && metrics?.abandonedCarts != null ? String(metrics.abandonedCarts) : "—"}
+          tone="text-amber-700 dark:text-amber-400"
+        />
+        <MmTile
+          label="Actioned · Deals (this mo)"
+          value={`${actionCounts.actioned + actionCounts.deals} · ${actionCounts.deals}`}
+        />
+        <MmTile
+          label="Recovery Rate (this mo)"
+          value={
+            connected && metrics?.abandonedCarts != null && metrics.abandonedCarts > 0
+              ? `${Math.round((k.recoveredCount / metrics.abandonedCarts) * 100)}%`
+              : "—"
+          }
+          tone="text-emerald-700 dark:text-emerald-400"
+        />
       </div>
 
       {showCarts ? (
