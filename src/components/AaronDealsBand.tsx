@@ -27,6 +27,7 @@ function daysAgo(iso: string | null): string {
 export function AaronDealsBand() {
   const [deals, setDeals] = useState<NeedsActionDeal[] | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -91,7 +92,16 @@ export function AaronDealsBand() {
           All your deals have a next action. 🎉
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-gradient-to-b from-white to-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(15,23,42,0.08)] transition-all hover:to-violet-100 active:translate-y-px dark:border-violet-700 dark:from-slate-800 dark:to-violet-950/40 dark:text-violet-300"
+          >
+            {expanded ? "Hide list ▲" : `Show ${deals.length} deal${deals.length === 1 ? "" : "s"} ▼`}
+          </button>
+          {expanded ? (
+            <ul className="flex flex-col gap-2">
           {deals.map((d) => (
             <li
               key={d.id}
@@ -115,9 +125,11 @@ export function AaronDealsBand() {
               >
                 Open in CRM →
               </a>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+            </ul>
+          ) : null}
+        </>
       )}
     </section>
   );

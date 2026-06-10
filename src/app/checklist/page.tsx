@@ -905,11 +905,10 @@ function ChecklistContent() {
             {groupedTasks.map((group) => {
               const gTotal = group.items.length;
               const gDone = group.items.filter((t) => DONE_STATUSES.has(t.status)).length;
-              const fullyDone = gTotal > 0 && gDone === gTotal;
               const isReseller = group.isReseller;
               const override = sectionOverride.get(group.category);
-              // Collapse completed sections by default — except the priority reseller section.
-              const isCollapsed = override ?? (fullyDone && !isReseller);
+              // All sections start collapsed; the user expands what they want to work on.
+              const isCollapsed = override ?? true;
               return (
                 <section
                   key={group.category}
