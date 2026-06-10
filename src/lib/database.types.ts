@@ -113,6 +113,71 @@ export type Database = {
           },
         ]
       }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Relationships: []
+      }
+      blockers: {
+        Row: {
+          ageing_from: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          what: string
+        }
+        Insert: {
+          ageing_from?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          what: string
+        }
+        Update: {
+          ageing_from?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          what?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blockers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       breach_log: {
         Row: {
           aed_at_risk: number | null

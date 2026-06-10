@@ -17,6 +17,7 @@ import {
 
 import {
   ActionsIcon,
+  BlockerIcon,
   ChecklistIcon,
   ChevronLeftIcon,
   CocobluIcon,
@@ -81,6 +82,12 @@ export function Sidebar({
       href: "/priorities",
       label: "Priorities",
       icon: PrioritiesIcon,
+      show: true,
+    },
+    {
+      href: "/blockers",
+      label: "Blockers",
+      icon: BlockerIcon,
       show: true,
     },
     {

@@ -135,6 +135,15 @@ export function LpTrackerIcon(props: IconProps) {
   );
 }
 
+export function BlockerIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6l12.8 12.8" />
+    </svg>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>
