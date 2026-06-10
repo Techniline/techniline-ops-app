@@ -383,9 +383,10 @@ const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 function MmTile({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900 dark:bg-slate-900">
-      <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${tone ?? "text-slate-900 dark:text-slate-100"}`}>{value}</p>
+    <div className="group relative flex h-full min-h-[104px] flex-col justify-between overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/50 p-4 shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-200 dark:border-emerald-900/60 dark:from-slate-900 dark:to-emerald-950/20 dark:hover:ring-emerald-800">
+      <span className="absolute inset-y-0 left-0 w-1 bg-emerald-400/70 transition-all group-hover:w-1.5 group-hover:bg-emerald-500 dark:bg-emerald-700" />
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-400/90">{label}</p>
+      <p className={`mt-1 text-2xl font-bold tabular-nums tracking-tight ${tone ?? "text-slate-900 dark:text-slate-100"}`}>{value}</p>
     </div>
   );
 }
@@ -529,11 +530,12 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
       : String(abandonedOpen);
 
   return (
-    <section className="mt-8 rounded-2xl border-2 border-emerald-300 bg-emerald-50/60 p-4 dark:border-emerald-800 dark:bg-emerald-950/20">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-emerald-800 dark:text-emerald-300">
+    <section className="mt-8 rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-white p-5 shadow-sm dark:border-emerald-900/60 dark:from-emerald-950/30 dark:via-slate-900 dark:to-slate-900">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-emerald-800 dark:text-emerald-300">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.2)]" />
           MUSICMAJLIS
-          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Sales focus</span>
+          <span className="rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">Sales focus</span>
         </h2>
         <div className="flex gap-2">
           {manager ? (
@@ -549,7 +551,7 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">Shopify not connected yet — net sales &amp; abandoned carts show “—”. Set the env vars to light them up.</p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-9">
         <MmTile label="Monthly Target" value={formatAED(k.target)} />
         <MmTile label="Achieved (net sales)" value={connected ? formatAED(k.achieved) : "—"} tone="text-emerald-700 dark:text-emerald-400" />
         <MmTile label="% Achieved" value={target > 0 && connected ? `${Math.round(k.pct)}%` : "—"} tone={k.pct >= 100 ? "text-emerald-700 dark:text-emerald-400" : undefined} />
@@ -557,13 +559,18 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <button
           type="button"
           onClick={() => setShowCarts((s) => !s)}
-          className="rounded-xl border border-amber-200 bg-white/70 p-3 text-left transition hover:border-amber-400 dark:border-amber-900 dark:bg-slate-900/40"
+          className="group relative flex h-full min-h-[104px] flex-col justify-between overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50/60 p-4 text-left shadow-sm ring-1 ring-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-amber-300 dark:border-amber-900/60 dark:from-slate-900 dark:to-amber-950/20"
         >
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          <span className="absolute inset-y-0 left-0 w-1 bg-amber-400/80 transition-all group-hover:w-1.5 group-hover:bg-amber-500 dark:bg-amber-700" />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
             Abandoned Carts{abandonedLabel ? ` (${abandonedLabel})` : ""}
           </p>
-          <p className="mt-1 text-xl font-semibold text-amber-700 dark:text-amber-400">{abandonedTileValue}</p>
-          <p className="mt-0.5 text-[10px] text-slate-400">{showCarts ? "Hide list ▲" : "Action carts ▼"}</p>
+          <div>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">{abandonedTileValue}</p>
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600/80 transition-transform group-hover:translate-x-0.5 dark:text-amber-500/80">
+              {showCarts ? "Hide list ▲" : "Action carts ▼"}
+            </p>
+          </div>
         </button>
         <MmTile label="Recovered (this mo)" value={`${k.recoveredCount} · ${formatAED(k.recoveredValue)}`} />
         <MmTile
