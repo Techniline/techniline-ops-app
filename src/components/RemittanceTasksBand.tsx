@@ -10,13 +10,16 @@ import {
   CHARGE_TYPES,
   DISPUTE_STATUSES,
   addDeduction,
+  buildReconEmailHtml,
   chargeTypeLabel,
   closeDeduction,
   deleteDeduction,
+  emailReconciliation,
   fetchDeductions,
   fetchOpenRemittancePayments,
   fetchRemittanceLines,
   markRemittanceReviewed,
+  saveLineRemark,
   recoveryPct,
   reopenDeduction,
   rowToDraft,
@@ -189,6 +192,7 @@ function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
             <th className="px-2 py-1 text-left font-medium">Description</th>
             <th className="px-2 py-1 text-right font-medium">Amount Paid</th>
             <th className="px-2 py-1 text-right font-medium">Remaining</th>
+            <th className="px-2 py-1 text-left font-medium">Note / reason (for accounts)</th>
           </tr>
         </thead>
         <tbody>
@@ -203,12 +207,20 @@ function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
                   {l.amount_paid_aed != null ? formatAED(l.amount_paid_aed) : "—"}
                 </td>
                 <td className="px-2 py-1 text-right tabular-nums text-slate-500">{l.amount_remaining_aed != null ? formatAED(l.amount_remaining_aed) : "—"}</td>
+                <td className="px-2 py-1">
+                  <input
+                    defaultValue={l.recon_remark ?? ""}
+                    placeholder="e.g. distributor return…"
+                    onBlur={(e) => { if ((e.target.value.trim() || "") !== (l.recon_remark ?? "")) void saveLineRemark(l.id, e.target.value); }}
+                    className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-800"
+                  />
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      <p className="px-2 py-1 text-[10px] text-slate-400">Negative (red) lines are deductions Amazon took back — categorise each below. “*” = partially paid / previously deducted.</p>
+      <p className="px-2 py-1 text-[10px] text-slate-400">Add a note on any line (e.g. distributor return) — it’s saved automatically and included in the email to accounts. Negative (red) lines are deductions to categorise below. “*” = partially paid / previously deducted.</p>
     </div>
   );
 }
@@ -234,6 +246,39 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   const [addFor, setAddFor] = useState<string | null>(null); // payment ref the add modal targets
   const [newAmount, setNewAmount] = useState("");
   const [adding, setAdding] = useState(false);
+
+  const [emailFor, setEmailFor] = useState<RemittancePayment | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailCc, setEmailCc] = useState("");
+  const [sending, setSending] = useState(false);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  async function sendEmail(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!emailFor) return;
+    setErr(null);
+    setBanner(null);
+    if (!emailTo.includes("@")) { setErr("Enter a valid recipient email."); return; }
+    setSending(true);
+    try {
+      const lines = await fetchRemittanceLines(emailFor.ref);
+      const html = buildReconEmailHtml(emailFor, lines, dedsByRef(emailFor.ref));
+      await emailReconciliation({
+        to: emailTo,
+        cc: emailCc,
+        subject: `Remittance reconciliation — Payment ${emailFor.ref}`,
+        html,
+      });
+      setEmailFor(null);
+      setEmailTo("");
+      setEmailCc("");
+      setBanner(`Reconciliation emailed for Payment ${emailFor.ref}.`);
+    } catch (e2) {
+      setErr(errMsg(e2));
+    } finally {
+      setSending(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -290,6 +335,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
         <Card label="Total Negative (open)" value={formatAED(totalNeg)} tone="text-amber-700 dark:text-amber-400" />
       </div>
 
+      {banner ? <p className="mb-2 text-xs text-emerald-700 dark:text-emerald-400">{banner}</p> : null}
       {err ? <p className="mb-2 text-xs text-red-600">{err}</p> : null}
 
       {loading ? (
@@ -315,6 +361,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
                   <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950 dark:text-rose-300">{open.length} open · {deds.length - open.length} done</span>
                   <div className="ml-auto flex gap-1.5">
                     <button type="button" onClick={() => { setAddFor(p.ref); setNewAmount(""); }} className="rounded-md border border-rose-300 px-2 py-1 text-[11px] font-medium text-rose-700 dark:border-rose-800 dark:text-rose-300">+ Deduction</button>
+                    <button type="button" onClick={() => { setEmailFor(p); setEmailTo(""); setEmailCc(""); }} className="rounded-md border border-indigo-300 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">Email to accounts</button>
                     <button type="button" onClick={() => reviewed(p)} disabled={open.length > 0} title={open.length > 0 ? "Close all deductions first" : "Mark this payment reviewed"} className="rounded-md border border-emerald-300 px-2 py-1 text-[11px] font-medium text-emerald-700 disabled:opacity-40 dark:border-emerald-800 dark:text-emerald-300">Mark reviewed</button>
                   </div>
                 </div>
@@ -372,6 +419,31 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setAddFor(null)} className={btnSecondary}>Cancel</button>
               <button type="submit" disabled={adding} className={btnPrimary}>{adding ? "Adding…" : "Add"}</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {emailFor ? (
+        <Modal title={`Email reconciliation — Payment ${emailFor.ref}`} onClose={() => setEmailFor(null)} wide>
+          <form onSubmit={sendEmail}>
+            <Field label="To (accounts)" required>
+              <input className={inputClass} value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="accounts@techniline.org" autoFocus />
+            </Field>
+            <div className="mt-2">
+              <Field label="CC (optional, comma-separated)">
+                <input className={inputClass} value={emailCc} onChange={(e) => setEmailCc(e.target.value)} placeholder="manager@techniline.org, …" />
+              </Field>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              The email includes the full invoice breakdown for this payment, with each line’s amount and the
+              <b> reason / how-to-settle</b> from operations (charge type, return/dispute/case IDs, and your notes) so
+              accounts can reconcile it.
+            </p>
+            {err ? <p className="mt-2 text-xs text-red-600">{err}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setEmailFor(null)} className={btnSecondary}>Cancel</button>
+              <button type="submit" disabled={sending} className={btnPrimary}>{sending ? "Sending…" : "Send to accounts"}</button>
             </div>
           </form>
         </Modal>

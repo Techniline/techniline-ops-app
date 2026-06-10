@@ -1350,6 +1350,7 @@ export type Database = {
           matched_invoice: string | null
           matched_return_id: string | null
           partial: boolean | null
+          recon_remark: string | null
           remittance_ref: string
           transaction_type: string | null
         }
@@ -1369,6 +1370,7 @@ export type Database = {
           matched_invoice?: string | null
           matched_return_id?: string | null
           partial?: boolean | null
+          recon_remark?: string | null
           remittance_ref: string
           transaction_type?: string | null
         }
@@ -1388,6 +1390,7 @@ export type Database = {
           matched_invoice?: string | null
           matched_return_id?: string | null
           partial?: boolean | null
+          recon_remark?: string | null
           remittance_ref?: string
           transaction_type?: string | null
         }

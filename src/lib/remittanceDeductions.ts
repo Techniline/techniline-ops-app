@@ -1,3 +1,4 @@
+import { formatAED } from "@/lib/format";
 import { supabase } from "@/lib/supabaseClient";
 import type { Tables } from "@/lib/types";
 
@@ -163,6 +164,78 @@ export async function fetchRemittanceLines(ref: string): Promise<RemittanceLine[
     .order("amount_paid_aed", { ascending: true }); // negatives (deductions) first
   if (error) return [];
   return data ?? [];
+}
+
+/** Save a per-line reconciliation remark (any line, not just negatives). */
+export async function saveLineRemark(lineId: string, remark: string): Promise<void> {
+  const { error } = await supabase
+    .from("remittance_lines")
+    .update({ recon_remark: remark.trim() || null })
+    .eq("id", lineId);
+  if (error) throw new Error(error.message);
+}
+
+/** Compose the reconciliation email HTML for accounts: full breakdown + ops reasons. */
+export function buildReconEmailHtml(
+  payment: RemittancePayment,
+  lines: RemittanceLine[],
+  deductions: RemittanceDeduction[]
+): string {
+  const dedByKey = new Map(deductions.filter((d) => d.source_line_key).map((d) => [d.source_line_key as string, d]));
+  const fmt = (n: number | null) => (n == null ? "—" : formatAED(n));
+  const rows = lines
+    .map((l) => {
+      const neg = (l.amount_paid_aed ?? 0) < 0;
+      const ded = dedByKey.get(`${payment.ref}:${l.invoice_number}`);
+      const reasonBits = [
+        ded?.charge_type ? chargeTypeLabel(ded.charge_type) : null,
+        ded?.return_id ? `Return ${ded.return_id}` : null,
+        ded?.dispute_id ? `Dispute ${ded.dispute_id}` : null,
+        ded?.amazon_case_id ? `Case ${ded.amazon_case_id}` : null,
+        ded?.po_number ? `PO ${ded.po_number}` : null,
+        ded?.tle_invoice_number ? `TLE ${ded.tle_invoice_number}` : null,
+        ded?.remark ?? null,
+        l.recon_remark ?? null,
+      ].filter(Boolean);
+      const reason = reasonBits.length ? reasonBits.join(" · ") : "";
+      const amtStyle = neg ? "color:#b91c1c;font-weight:bold" : "";
+      return `<tr>
+        <td style="padding:4px 8px;border-top:1px solid #eee">${l.invoice_number ?? ""}${l.partial ? " *" : ""}</td>
+        <td style="padding:4px 8px;border-top:1px solid #eee">${l.invoice_date ?? ""}</td>
+        <td style="padding:4px 8px;border-top:1px solid #eee">${l.description ?? ""}</td>
+        <td style="padding:4px 8px;border-top:1px solid #eee;text-align:right;${amtStyle}">${fmt(l.amount_paid_aed)}</td>
+        <td style="padding:4px 8px;border-top:1px solid #eee;text-align:right">${fmt(l.amount_remaining_aed)}</td>
+        <td style="padding:4px 8px;border-top:1px solid #eee">${reason}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111">
+    <h2 style="margin:0 0 2px">Remittance reconciliation — Payment ${payment.ref}</h2>
+    <p style="margin:0 0 12px;color:#666">${payment.receivedAt ? payment.receivedAt.slice(0,10) : ""}${payment.amount != null ? ` · Net paid ${formatAED(payment.amount)}` : ""}</p>
+    <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;font-size:12px">
+      <thead><tr style="background:#f1f5f9;text-align:left">
+        <th style="padding:6px 8px">Invoice</th><th style="padding:6px 8px">Date</th>
+        <th style="padding:6px 8px">Description</th><th style="padding:6px 8px;text-align:right">Amount Paid</th>
+        <th style="padding:6px 8px;text-align:right">Remaining</th><th style="padding:6px 8px">Reason / how to settle</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin:12px 0 0;color:#999;font-size:11px">Negative (red) amounts are deductions Amazon took back. "*" = partially paid / previously deducted. Generated from Techniline Ops.</p>
+  </div>`;
+}
+
+/** Send the reconciliation email (To + CC) via the server route. */
+export async function emailReconciliation(args: { to: string; cc: string; subject: string; html: string }): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/remittance/email", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
 }
 
 /** Mark a remittance payment reviewed — resolves the Amazon-actions item too. */
