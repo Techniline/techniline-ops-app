@@ -20,6 +20,7 @@ import {
   fetchRemittanceLines,
   markRemittanceReviewed,
   saveLineRemark,
+  triggerReingest,
   recoveryPct,
   reopenDeduction,
   rowToDraft,
@@ -252,6 +253,22 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   const [emailCc, setEmailCc] = useState("");
   const [sending, setSending] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncEmails(): Promise<void> {
+    setErr(null);
+    setBanner(null);
+    setSyncing(true);
+    try {
+      const msg = await triggerReingest();
+      setBanner(msg);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function sendEmail(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -321,10 +338,15 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
 
   return (
     <section className="mt-8 rounded-3xl border border-rose-200 bg-gradient-to-br from-rose-50/80 via-white to-white p-5 shadow-sm dark:border-rose-900/60 dark:from-rose-950/30 dark:via-slate-900 dark:to-slate-900">
-      <h2 className="mb-1 flex items-center gap-2 text-base font-bold tracking-tight text-rose-800 dark:text-rose-300">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.2)]" />
-        REMITTANCE — PAYMENTS TO REVIEW
-      </h2>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-rose-800 dark:text-rose-300">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.2)]" />
+          REMITTANCE — PAYMENTS TO REVIEW
+        </h2>
+        <button type="button" onClick={syncEmails} disabled={syncing} className={btnSecondary}>
+          {syncing ? "Syncing…" : "Sync remittance emails"}
+        </button>
+      </div>
       <p className="mb-3 text-xs text-slate-500">
         Each Amazon payment captured from email. Break it down line-wise; every negative needs a charge type + mandatory evidence before it closes, then mark the payment reviewed.
       </p>

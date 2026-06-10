@@ -166,6 +166,22 @@ export async function fetchRemittanceLines(ref: string): Promise<RemittanceLine[
   return data ?? [];
 }
 
+/** Manager/Maricel-triggered live re-ingest of Amazon emails (no secret needed). */
+export async function triggerReingest(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/amazon/reingest", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; processed?: number; inserted?: number; updated?: number; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+  const bits = [
+    j.processed != null ? `${j.processed} emails` : null,
+    j.inserted != null ? `${j.inserted} new` : null,
+    j.updated != null ? `${j.updated} updated` : null,
+  ].filter(Boolean);
+  return bits.length ? `Synced — ${bits.join(", ")}.` : "Email sync complete.";
+}
+
 /** Save a per-line reconciliation remark (any line, not just negatives). */
 export async function saveLineRemark(lineId: string, remark: string): Promise<void> {
   const { error } = await supabase
