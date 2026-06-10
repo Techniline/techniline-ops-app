@@ -1,2 +1,2 @@
 export type { ReturnRow } from "./types";
-export { fetchReturns } from "./queries";
+export { fetchReturns, fetchCombinedReturns, type UnifiedReturn } from "./queries";
