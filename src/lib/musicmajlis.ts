@@ -4,16 +4,42 @@ import type { Tables } from "@/lib/types";
 export type MmTarget = Tables<"mm_targets">;
 export type MmRecoveredCart = Tables<"mm_recovered_carts">;
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// The store operates on Gulf Standard Time (GMT+4). Vercel runs in UTC, so we
+// shift "now" into Dubai time for all calendar maths and emit window bounds with
+// a +04:00 offset — this makes our month/day windows line up with Shopify's reports.
+const DUBAI_OFFSET_MS = 4 * 60 * 60 * 1000;
+const DUBAI_TZ = "+04:00";
+
+/** "Now" as seen on the wall clock in Dubai (use the getUTC* accessors on it). */
+function dubaiNow(): Date {
+  return new Date(Date.now() + DUBAI_OFFSET_MS);
 }
 
-/** Current-month boundaries: month key (1st) + ISO window for Shopify. */
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function ymd(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+/** Midnight (Dubai) of a given Y/M/D as an ISO string with the +04:00 offset. */
+function dubaiMidnightIso(y: number, m0: number, d: number): string {
+  return `${y}-${pad(m0 + 1)}-${pad(d)}T00:00:00${DUBAI_TZ}`;
+}
+
+/** Current-month boundaries (Dubai time): month key (1st) + ISO window for Shopify. */
 export function monthBounds(): { monthStr: string; fromIso: string; toIso: string } {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextFirst = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return { monthStr: ymd(first), fromIso: first.toISOString(), toIso: nextFirst.toISOString() };
+  const d = dubaiNow();
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const ny = m === 11 ? y + 1 : y;
+  const nm = m === 11 ? 0 : m + 1;
+  return {
+    monthStr: `${y}-${pad(m + 1)}-01`,
+    fromIso: dubaiMidnightIso(y, m, 1),
+    toIso: dubaiMidnightIso(ny, nm, 1),
+  };
 }
 
 /**
@@ -23,25 +49,33 @@ export function monthBounds(): { monthStr: string; fromIso: string; toIso: strin
  * - Monday:  Saturday 00:00 → Monday 00:00 (covers Sat + Sun in one go).
  */
 export function abandonedWindow(): { fromIso: string; toIso: string; label: string } | null {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun … 6=Sat
+  const d = dubaiNow();
+  const day = d.getUTCDay(); // 0=Sun … 6=Sat (Dubai wall clock)
   if (day === 0) return null; // Sunday — nothing to action
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const from = new Date(today);
-  from.setDate(today.getDate() - (day === 1 ? 2 : 1)); // Monday reaches back to Saturday
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const date = d.getUTCDate();
+  const back = day === 1 ? 2 : 1; // Monday reaches back to Saturday
+  // Build the "from" date by subtracting `back` days at UTC, then read its parts.
+  const fromDate = new Date(Date.UTC(y, m, date - back));
+  const today = new Date(Date.UTC(y, m, date));
   const label = day === 1 ? "Sat–Sun" : "yesterday";
-  return { fromIso: from.toISOString(), toIso: today.toISOString(), label };
+  return {
+    fromIso: dubaiMidnightIso(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()),
+    toIso: dubaiMidnightIso(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+    label,
+  };
 }
 
-/** Working days (Mon–Sat) remaining this month, including today. */
+/** Working days (Mon–Sat) remaining this month (Dubai time), including today. */
 export function remainingWorkingDays(): number {
-  const now = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const now = dubaiNow();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   let n = 0;
-  while (d <= end) {
-    if (d.getDay() !== 0) n += 1; // skip Sunday
-    d.setDate(d.getDate() + 1);
+  for (let day = now.getUTCDate(); day <= lastDay; day += 1) {
+    if (new Date(Date.UTC(y, m, day)).getUTCDay() !== 0) n += 1; // skip Sunday
   }
   return n;
 }

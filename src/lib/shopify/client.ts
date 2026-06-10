@@ -29,18 +29,28 @@ async function shopGet(path: string): Promise<Response> {
   });
 }
 
+interface RawRefundLineItem {
+  subtotal?: number | string | null;
+}
+interface RawRefund {
+  refund_line_items?: RawRefundLineItem[] | null;
+}
 interface RawOrder {
+  subtotal_price?: string | null;
   current_total_price?: string | null;
   total_price?: string | null;
+  cancelled_at?: string | null;
+  refunds?: RawRefund[] | null;
 }
 interface OrdersResp {
   orders?: RawOrder[];
 }
 
 /**
- * Month-to-date net sales (sum of current_total_price, which already reflects
- * refunds) + count of abandoned checkouts. Paginated via the Link header, capped
- * to keep the request bounded.
+ * Month-to-date **net sales** matching Shopify's definition: gross − discounts −
+ * returns, EXCLUDING tax & shipping. We sum `subtotal_price` (line totals after
+ * all discounts, before tax/shipping) and subtract refunded line-item subtotals
+ * (returns). Paginated via the Link header; cancelled orders are skipped.
  */
 export async function fetchMonthMetrics(
   fromIso: string,
@@ -51,7 +61,7 @@ export async function fetchMonthMetrics(
 
   // Orders (paged). Use the REST Link-header cursor.
   let url: string | null =
-    `/orders.json?status=any&limit=250&fields=current_total_price,total_price` +
+    `/orders.json?status=any&limit=250&fields=subtotal_price,current_total_price,total_price,cancelled_at,refunds` +
     `&created_at_min=${encodeURIComponent(fromIso)}&created_at_max=${encodeURIComponent(toIso)}`;
   let pages = 0;
   while (url && pages < 40) {
@@ -59,8 +69,17 @@ export async function fetchMonthMetrics(
     if (!res.ok) throw new Error(`Shopify orders ${res.status}: ${(await res.text()).slice(0, 160)}`);
     const json = (await res.json()) as OrdersResp;
     for (const o of json.orders ?? []) {
-      const v = Number(o.current_total_price ?? o.total_price ?? 0);
-      if (Number.isFinite(v)) netSales += v;
+      if (o.cancelled_at) continue; // cancelled orders don't count toward sales
+      const subtotal = Number(o.subtotal_price ?? 0); // after discounts, before tax/shipping
+      let returns = 0;
+      for (const r of o.refunds ?? []) {
+        for (const li of r.refund_line_items ?? []) {
+          const s = Number(li.subtotal ?? 0);
+          if (Number.isFinite(s)) returns += s;
+        }
+      }
+      const net = subtotal - returns;
+      if (Number.isFinite(net)) netSales += net;
       orderCount += 1;
     }
     // Parse next cursor from Link header.
