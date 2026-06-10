@@ -120,7 +120,6 @@ const CATEGORY_TABS: ReadonlyArray<{ key: UiFilter; label: string }> = [
   { key: "po", label: "PO Confirmation" },
   { key: "cancellation", label: "Cancellations" },
   { key: "dispute", label: "Disputes" },
-  { key: "return", label: "Returns" },
   { key: "shortage", label: "Shortage" },
   { key: "remittance", label: "Remittance" },
 ];
