@@ -491,6 +491,19 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
     void load();
   }, [load]);
 
+  // Keep the figures live: refresh every 3 minutes and whenever the tab regains
+  // focus, so incoming sales / returns adjust "Achieved" and today's target without
+  // a manual reload. (Shopify net sales already nets out refunds.)
+  useEffect(() => {
+    const id = setInterval(() => { void load(); }, 180_000);
+    const onFocus = () => { void load(); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [load]);
+
   const achieved = metrics?.netSales ?? 0;
   const k = computeMmKpis(target, achieved, recovered);
   const connected = metrics?.configured === true;
