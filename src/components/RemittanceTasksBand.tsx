@@ -361,7 +361,15 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
                   <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950 dark:text-rose-300">{open.length} open · {deds.length - open.length} done</span>
                   <div className="ml-auto flex gap-1.5">
                     <button type="button" onClick={() => { setAddFor(p.ref); setNewAmount(""); }} className="rounded-md border border-rose-300 px-2 py-1 text-[11px] font-medium text-rose-700 dark:border-rose-800 dark:text-rose-300">+ Deduction</button>
-                    <button type="button" onClick={() => { setEmailFor(p); setEmailTo(""); setEmailCc(""); }} className="rounded-md border border-indigo-300 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">Email to accounts</button>
+                    <button
+                      type="button"
+                      onClick={() => { setEmailFor(p); setEmailTo(""); setEmailCc(""); }}
+                      disabled={open.length > 0}
+                      title={open.length > 0 ? "Categorise & close every deduction first" : "Email the reconciliation to accounts"}
+                      className="rounded-md border border-indigo-300 px-2 py-1 text-[11px] font-medium text-indigo-700 disabled:opacity-40 dark:border-indigo-800 dark:text-indigo-300"
+                    >
+                      Email to accounts
+                    </button>
                     <button type="button" onClick={() => reviewed(p)} disabled={open.length > 0} title={open.length > 0 ? "Close all deductions first" : "Mark this payment reviewed"} className="rounded-md border border-emerald-300 px-2 py-1 text-[11px] font-medium text-emerald-700 disabled:opacity-40 dark:border-emerald-800 dark:text-emerald-300">Mark reviewed</button>
                   </div>
                 </div>
