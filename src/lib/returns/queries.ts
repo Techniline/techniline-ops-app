@@ -42,7 +42,7 @@ export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
     supabase
       .from("remittance_deductions")
       .select("*")
-      .in("charge_type", ["vendor_return", "return_dispute"])
+      .in("charge_type", ["vendor_return", "return_dispute", "shortage_claim"])
       .order("created_at", { ascending: false })
       .limit(500),
   ]);

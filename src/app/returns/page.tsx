@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnSecondary, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import { formatAED, formatDate } from "@/lib/format";
+import { downloadCsv, printReportHtml, renderTableReportHtml, toCsv, type ReportTable } from "@/lib/export";
 import { fetchCombinedReturns, type UnifiedReturn } from "@/lib/returns";
 
 function errorMessage(error: unknown): string {
@@ -48,6 +49,19 @@ function ReturnsContent() {
   const totalValue = monthRows.reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalRecovered = monthRows.reduce((s, r) => s + (r.recovery ?? 0), 0);
 
+  const report = useMemo<ReportTable>(() => ({
+    title: `Returns — ${month}`,
+    subtitle: `${monthRows.length} returns · value ${formatAED(totalValue)} · recovered ${formatAED(totalRecovered)}`,
+    headers: ["Date", "Return ID", "Type", "Ref (Invoice/PO)", "Value", "Recovered", "Status", "Source"],
+    rows: monthRows.map((r) => [
+      formatDate(r.date), r.returnId ?? "", r.type ?? "", r.reference ?? "",
+      r.amount ?? "", r.recovery ?? "", r.status ?? "", r.source === "remittance" ? "Remittance" : "Email",
+    ]),
+  }), [monthRows, month, totalValue, totalRecovered]);
+
+  const exportCsv = () => downloadCsv(`returns-${month}.csv`, toCsv(report.headers, report.rows));
+  const exportPdf = () => printReportHtml(report.title, renderTableReportHtml(report));
+
   function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
     return (
       <div className={`${surface} p-4 text-center`}>
@@ -63,12 +77,16 @@ function ReturnsContent() {
         title="Returns"
         subtitle="Vendor returns this month — from Amazon notifications and from remittance return/dispute deductions."
         actions={
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <button type="button" onClick={exportCsv} disabled={monthRows.length === 0} className={`${btnSecondary} disabled:opacity-40`}>CSV</button>
+            <button type="button" onClick={exportPdf} disabled={monthRows.length === 0} className={`${btnSecondary} disabled:opacity-40`}>PDF</button>
+          </div>
         }
       />
 
