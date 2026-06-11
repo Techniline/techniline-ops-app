@@ -161,6 +161,7 @@ export async function fetchRemittanceLines(ref: string): Promise<RemittanceLine[
     .from("remittance_lines")
     .select("*")
     .eq("remittance_ref", ref)
+    .not("invoice_date", "is", null) // guard: never show stray header/junk lines
     .order("amount_paid_aed", { ascending: true }); // negatives (deductions) first
   if (error) return [];
   return data ?? [];
