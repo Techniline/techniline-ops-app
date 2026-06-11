@@ -141,6 +141,7 @@ export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]
     .filter(
       (r) =>
         r.status !== "resolved" &&
+        r.status !== "actioned" && // reviewed remittances drop off the list
         r.ref_number &&
         /^\d{6,}$/.test(r.ref_number) // real Amazon payment numbers only (drops "Payment Advice")
     )
@@ -260,9 +261,10 @@ export async function emailReconciliation(args: { to: string; cc: string; subjec
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
 }
 
-/** Mark a remittance payment reviewed — resolves the Amazon-actions item too. */
+/** Mark a remittance payment reviewed. Uses 'actioned' — a valid expected_actions
+ *  status (the check constraint rejects 'resolved', which is a workflow status). */
 export async function markRemittanceReviewed(expectedActionId: string): Promise<void> {
-  const { error } = await supabase.from("expected_actions").update({ status: "resolved" }).eq("id", expectedActionId);
+  const { error } = await supabase.from("expected_actions").update({ status: "actioned" }).eq("id", expectedActionId);
   if (error) throw new Error(error.message);
 }
 
