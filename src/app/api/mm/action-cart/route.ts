@@ -40,6 +40,13 @@ export async function POST(request: Request): Promise<Response> {
   const requested = b.status === "dismissed" ? "dismissed" : b.status === "open" ? "open" : "actioned";
   if (!checkoutId) return Response.json({ ok: false, error: "Missing checkout id." }, { status: 400 });
 
+  const outcome = typeof b.outcome === "string" && b.outcome.trim() ? b.outcome.trim() : null;
+  const noteVal = typeof b.note === "string" && b.note.trim() ? b.note.trim() : null;
+  // Proof requirement: actioning a cart needs an outcome + a note (unless it became a deal).
+  if (requested === "actioned" && outcome !== "created_deal" && (!outcome || !noteVal)) {
+    return Response.json({ ok: false, error: "Pick an outcome and add a note before clearing the cart." }, { status: 400 });
+  }
+
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !service) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
@@ -61,7 +68,8 @@ export async function POST(request: Request): Promise<Response> {
     total: typeof b.total === "number" ? b.total : null,
     recovery_url: typeof b.recoveryUrl === "string" ? b.recoveryUrl : null,
     checkout_created_at: typeof b.createdAt === "string" ? b.createdAt : null,
-    note: typeof b.note === "string" && b.note.trim() ? b.note.trim() : null,
+    note: noteVal,
+    outcome,
     actioned_by: uid,
     actioned_at: new Date().toISOString(),
   };

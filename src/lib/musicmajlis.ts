@@ -167,11 +167,13 @@ export async function fetchAbandonedCarts(): Promise<AbandonedResult> {
   };
 }
 
-/** Mark an abandoned cart actioned (cleared) / dismissed, or "open" to undo. */
+/** Mark an abandoned cart actioned (cleared) / dismissed, or "open" to undo.
+ *  `outcome` records WHY (recovered / contacted / not_interested / created_deal). */
 export async function actionAbandonedCart(
   cart: AbandonedCart,
   status: "actioned" | "dismissed" | "open",
-  note: string | null
+  note: string | null,
+  outcome?: string | null
 ): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -183,6 +185,7 @@ export async function actionAbandonedCart(
       checkoutId: cart.id,
       status,
       note,
+      outcome: outcome ?? null,
       customerName: cart.customerName,
       customerEmail: cart.customerEmail,
       total: cart.total,

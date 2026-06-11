@@ -1168,12 +1168,14 @@ export type Database = {
           customer_name: string | null
           id: string
           note: string | null
+          outcome: string | null
           recovery_url: string | null
           total: number | null
           zoho_deal_id: string | null
         }
         Insert: {
           action_status?: string
+          outcome?: string | null
           actioned_at?: string | null
           actioned_by?: string | null
           checkout_created_at?: string | null
@@ -1198,6 +1200,7 @@ export type Database = {
           customer_name?: string | null
           id?: string
           note?: string | null
+          outcome?: string | null
           recovery_url?: string | null
           total?: number | null
           zoho_deal_id?: string | null

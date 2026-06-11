@@ -531,6 +531,10 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const [abandoned, setAbandoned] = useState<AbandonedResult | null>(null);
   const [showCarts, setShowCarts] = useState(false);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
+  const [logCart, setLogCart] = useState<AbandonedCart | null>(null);
+  const [logOutcome, setLogOutcome] = useState("");
+  const [logNote, setLogNote] = useState("");
+  const [logOrderRef, setLogOrderRef] = useState("");
   const [actionCounts, setActionCounts] = useState<MonthActionCounts>({ actioned: 0, deals: 0 });
 
   const load = useCallback(async () => {
@@ -621,11 +625,29 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
     }
   }
 
-  async function clearCart(cart: AbandonedCart): Promise<void> {
+  function openLog(cart: AbandonedCart): void {
     setError(null);
-    setCartBusy(cart.id);
+    setLogCart(cart);
+    setLogOutcome("");
+    setLogNote("");
+    setLogOrderRef("");
+  }
+
+  async function submitLog(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!logCart) return;
+    setError(null);
+    if (!logOutcome) return setError("Pick an outcome.");
+    if (!logNote.trim()) return setError("Add a note — what you did / found.");
+    if (logOutcome === "recovered" && !logOrderRef.trim()) return setError("Enter the recovered Shopify order number.");
+    setCartBusy(logCart.id);
     try {
-      await actionAbandonedCart(cart, "actioned", null);
+      // Recovered → also log + validate the order against Shopify (counts toward Recovered).
+      if (logOutcome === "recovered") {
+        await logRecoveredCart(logOrderRef.trim(), null, logNote.trim());
+      }
+      await actionAbandonedCart(logCart, "actioned", logNote.trim(), logOutcome);
+      setLogCart(null);
       await load();
     } catch (e2) {
       setError(errMsg(e2));
@@ -806,10 +828,10 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
                         <button
                           type="button"
                           disabled={cartBusy === c.id}
-                          onClick={() => clearCart(c)}
+                          onClick={() => openLog(c)}
                           className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
                         >
-                          {cartBusy === c.id ? "…" : "Mark actioned"}
+                          {cartBusy === c.id ? "…" : "Log outcome"}
                         </button>
                       </div>
                     )}
@@ -844,6 +866,32 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setShowRecover(false)} className={btnSecondary}>Cancel</button>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? "Validating…" : "Validate & Log"}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {logCart ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setLogCart(null)}>
+          <form onSubmit={submitLog} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Log outcome</h3>
+            <p className="mb-3 text-xs text-slate-500">{logCart.customerName ?? logCart.customerEmail ?? "Cart"} — record what you found before clearing it.</p>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Outcome</label>
+            <select className={inputClass} value={logOutcome} onChange={(e) => setLogOutcome(e.target.value)} autoFocus>
+              <option value="">— select —</option>
+              <option value="recovered">Recovered — customer ordered</option>
+              <option value="contacted">Contacted — awaiting reply</option>
+              <option value="not_interested">Not interested / invalid cart</option>
+            </select>
+            {logOutcome === "recovered" ? (
+              <input className={`${inputClass} mt-2`} placeholder="Shopify order # (e.g. #1234)" value={logOrderRef} onChange={(e) => setLogOrderRef(e.target.value)} />
+            ) : null}
+            <label className="mb-1 mt-2 block text-xs font-medium text-slate-600 dark:text-slate-400">Note (required) — what you did / found</label>
+            <textarea className={`${inputClass} min-h-[64px]`} placeholder={logOutcome === "contacted" ? "e.g. WhatsApp sent, awaiting reply" : "e.g. customer ordered offline / not reachable / spam"} value={logNote} onChange={(e) => setLogNote(e.target.value)} />
+            {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setLogCart(null)} className={btnSecondary}>Cancel</button>
+              <button type="submit" disabled={cartBusy === logCart.id} className={btnPrimary}>{cartBusy === logCart.id ? "Saving…" : "Save & clear cart"}</button>
             </div>
           </form>
         </div>
