@@ -282,6 +282,96 @@ export type Database = {
         }
         Relationships: []
       }
+      performance_targets: {
+        Row: {
+          id: string
+          metric_key: string
+          target_value: number | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          metric_key: string
+          target_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          metric_key?: string
+          target_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      performance_reviews: {
+        Row: {
+          id: string
+          notes: string | null
+          period_month: string
+          rating: number | null
+          reviewed_by: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          notes?: string | null
+          period_month: string
+          rating?: number | null
+          reviewed_by?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          notes?: string | null
+          period_month?: string
+          rating?: number | null
+          reviewed_by?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      quality_log: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          logged_by: string | null
+          occurred_on: string
+          severity: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logged_by?: string | null
+          occurred_on?: string
+          severity?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logged_by?: string | null
+          occurred_on?: string
+          severity?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       breach_log: {
         Row: {
           aed_at_risk: number | null

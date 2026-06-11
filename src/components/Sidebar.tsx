@@ -17,6 +17,7 @@ import {
 
 import {
   ActionsIcon,
+  AnalyticsIcon,
   BlockerIcon,
   ChecklistIcon,
   ChevronLeftIcon,
@@ -114,6 +115,12 @@ export function Sidebar({
       label: "Returns",
       icon: ReturnsIcon,
       show: canViewFinance(profile),
+    },
+    {
+      href: "/analytics",
+      label: "Analytics",
+      icon: AnalyticsIcon,
+      show: isManager(profile),
     },
   ];
 
