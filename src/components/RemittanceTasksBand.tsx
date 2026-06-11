@@ -19,6 +19,7 @@ import {
   fetchOpenRemittancePayments,
   fetchRemittanceLines,
   markRemittanceReviewed,
+  REMITTANCE_START,
   saveLineRemark,
   triggerReingest,
   recoveryPct,
@@ -310,7 +311,12 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   useEffect(() => { void load(); }, [load]);
 
   const dedsByRef = (ref: string) => rows.filter((r) => r.remittance_ref === ref);
-  const openDeds = rows.filter((r) => r.status === "open");
+  // Show recent payments OR any payment that has deductions to explain.
+  const shownPayments = payments.filter(
+    (p) => (p.receivedAt ?? "") >= REMITTANCE_START || dedsByRef(p.ref).length > 0
+  );
+  const shownRefs = new Set(shownPayments.map((p) => p.ref));
+  const openDeds = rows.filter((r) => r.status === "open" && shownRefs.has(r.remittance_ref));
   const totalNeg = openDeds.reduce((s, r) => s + Math.abs(r.amount_aed ?? 0), 0);
 
   async function add(e: FormEvent): Promise<void> {
@@ -352,7 +358,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
       </p>
 
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Card label="Payments to Review" value={String(payments.length)} tone="text-rose-700 dark:text-rose-400" />
+        <Card label="Payments to Review" value={String(shownPayments.length)} tone="text-rose-700 dark:text-rose-400" />
         <Card label="Open Deductions" value={String(openDeds.length)} />
         <Card label="Total Negative (open)" value={formatAED(totalNeg)} tone="text-amber-700 dark:text-amber-400" />
       </div>
@@ -362,13 +368,13 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
 
       {loading ? (
         <p className="text-sm text-slate-500">Loading…</p>
-      ) : payments.length === 0 ? (
+      ) : shownPayments.length === 0 ? (
         <div className="rounded-2xl border border-rose-100 bg-white/70 p-6 text-center text-sm text-slate-500 dark:border-rose-900/50 dark:bg-slate-900/30">
           No remittance payments awaiting review. 🎉
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {payments.map((p) => {
+          {shownPayments.map((p) => {
             const deds = dedsByRef(p.ref);
             const open = deds.filter((d) => d.status === "open");
             const isOpen = openPayment === p.ref;

@@ -125,8 +125,9 @@ export interface RemittancePayment {
   subject: string | null;
 }
 
-// Start tracking remittances from this date forward (no historical backlog).
-const REMITTANCE_START = "2026-06-10";
+// Start tracking remittances from this date forward (no historical backlog) —
+// but payments with open deductions always show regardless (see the band).
+export const REMITTANCE_START = "2026-06-10";
 
 /** Ingested remittance payments still needing review (from the Amazon-actions feed). */
 export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]> {
@@ -134,7 +135,6 @@ export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]
     .from("expected_actions")
     .select("id, ref_number, aed_amount, email_received_at, email_subject, status, type")
     .eq("type", "remittance")
-    .gte("email_received_at", REMITTANCE_START)
     .order("email_received_at", { ascending: false });
   if (error || !data) return [];
   return data
