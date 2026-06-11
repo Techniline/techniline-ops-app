@@ -104,38 +104,39 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
     });
   }
 
-  // Fallback: Graph often returns the body as PLAIN TEXT (tab/space-separated),
-  // where each invoice row looks like:
-  //   6000141979   05-JUN-2026   Co-op-...   *(448.37)   (11,398.37)
-  // Detect a row by: starts with an invoice number, contains a DD-MON-YYYY date,
-  // and has amount tokens. Robust to tabs or runs of spaces.
+  // Fallback: Graph usually returns the body as PLAIN TEXT. Capture EVERY line of
+  // the invoice table — anchor on the header row ("Amount Paid … Amount Remaining")
+  // and read every data line until the table's footer note. No per-row format
+  // filtering, so nothing is skipped; the last two amounts on a line are
+  // Amount Paid + Amount Remaining (so a "Discount Taken" value can't shift them).
   if (out.lines.length === 0) {
     const amountRe = /\*?\(?-?[\d,]+\.\d{2}\)?/g;
-    for (const rawLine of html.split(/\r?\n/)) {
-      const line = rawLine.replace(/&nbsp;/gi, " ").trim();
+    const allLines = html.split(/\r?\n/).map((l) => l.replace(/&nbsp;/gi, " ").trim());
+    const startIdx = allLines.findIndex((l) => /amount\s*paid/i.test(l) && /amount\s*remaining/i.test(l));
+    const scan = startIdx >= 0 ? allLines.slice(startIdx + 1) : allLines;
+    for (const line of scan) {
       if (!line) continue;
-      const dateMatch = line.match(/\b(\d{1,2}-[A-Za-z]{3}-\d{4})\b/);
-      if (!dateMatch || dateMatch.index == null) continue;
+      // Stop at the table footer note (the asterisk legend / totals).
+      if (/please\s*note|^total\b/i.test(line)) break;
+      const amts = line.match(amountRe);
+      if (!amts || amts.length === 0) continue; // not a data row (no money on it)
       const firstTok = line.split(/\s+/)[0];
-      if (!looksLikeInvoice(firstTok)) continue;
-      const invoiceDate = toIsoDate(dateMatch[1]);
-      if (!invoiceDate) continue;
-      const amts = line.match(amountRe) ?? [];
-      const firstAmt = amts[0];
-      if (!firstAmt) continue;
-      const amountPaid = parseAmount(firstAmt);
-      const amountRemaining = amts.length > 1 ? parseAmount(amts[amts.length - 1] ?? "") : null;
-      // Description = text between the date and the first amount token.
-      const afterDate = line.slice(dateMatch.index + dateMatch[1].length);
-      const firstAmtIdx = afterDate.search(amountRe);
-      const description = (firstAmtIdx > 0 ? afterDate.slice(0, firstAmtIdx) : "").replace(/\s+/g, " ").trim();
+      // Skip the header row and any obvious non-row; a data row's first token has digits.
+      if (!firstTok || !/\d/.test(firstTok)) continue;
+      const dateMatch = line.match(/\b(\d{1,2}-[A-Za-z]{3}-\d{4})\b/);
+      const paidTok = amts.length >= 2 ? amts[amts.length - 2]! : amts[0]!;
+      const remainTok = amts[amts.length - 1]!;
+      // Description = text between the first token (and date if present) and the first amount.
+      const firstAmtIdx = line.search(amountRe);
+      let desc = firstAmtIdx > 0 ? line.slice(firstTok.length, firstAmtIdx) : "";
+      if (dateMatch?.[1]) desc = desc.replace(dateMatch[1], "");
       out.lines.push({
         invoiceNumber: firstTok,
-        invoiceDate,
-        description,
-        amountPaid,
-        amountRemaining,
-        partial: /\*/.test(firstAmt),
+        invoiceDate: dateMatch ? toIsoDate(dateMatch[1]) : null,
+        description: desc.replace(/\s+/g, " ").trim(),
+        amountPaid: parseAmount(paidTok),
+        amountRemaining: parseAmount(remainTok),
+        partial: /\*/.test(paidTok),
       });
     }
   }
