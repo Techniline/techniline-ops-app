@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { runPoll } from "@/lib/amazon-ingest/poll";
-import { isManager } from "@/lib/permissions";
+import { hasCapability, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ async function authorized(request: Request): Promise<boolean> {
   const svc = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
   const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === MARICEL_ID;
+  return isManager(profile) || profile.id === MARICEL_ID || hasCapability(profile, "finance");
 }
 
 /**

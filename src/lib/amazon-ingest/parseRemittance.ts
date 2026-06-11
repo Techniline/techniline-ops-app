@@ -35,6 +35,8 @@ export function parseRemittance(payload: IngestPayload): ParseResult {
       gross_amount_aed: gross ?? null,
       deductions_aed: deductions ?? null,
       payment_date: payload.receivedAt ? payload.receivedAt.slice(0, 10) : null,
+      // Keep the raw body so the line parser can be diagnosed/improved without re-fetching.
+      raw_body: payload.bodyText ? payload.bodyText.slice(0, 20000) : null,
     };
     operations.push({
       table: "remittances",

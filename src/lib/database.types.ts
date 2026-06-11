@@ -1415,6 +1415,7 @@ export type Database = {
           match_status: string | null
           net_paid_aed: number | null
           payment_date: string | null
+          raw_body: string | null
           reconciled: boolean | null
           remittance_ref: string
           shortage_deductions_aed: number | null
@@ -1426,6 +1427,7 @@ export type Database = {
           damage_deductions_aed?: number | null
           deductions_aed?: number | null
           dispute_credits_aed?: number | null
+          raw_body?: string | null
           expected_action_id?: string | null
           explained_by?: string | null
           gap_aed?: number | null
