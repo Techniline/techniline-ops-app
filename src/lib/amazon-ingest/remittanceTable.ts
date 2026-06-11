@@ -58,9 +58,12 @@ function stripTags(html: string): string {
     .trim();
 }
 
-// A real invoice number is short and alphanumeric, e.g. "6000141979", "WS2601079".
+// An invoice / claim reference: alphanumeric, may have leading AND trailing
+// letters (e.g. "6000141979", "WS2601079", "7500582589R1", "WS2502533SCRSC").
+// Must contain at least 4 digits; the valid-date check on the next cell is the
+// primary guard against non-invoice rows.
 function looksLikeInvoice(s: string): boolean {
-  return /^[A-Za-z]{0,4}\d{4,}$/.test(s) && s.length <= 24;
+  return /^[A-Za-z0-9-]{5,30}$/.test(s) && (s.match(/\d/g)?.length ?? 0) >= 4;
 }
 
 /** Parse the remittance email HTML (or plain text fallback) into header + lines. */
