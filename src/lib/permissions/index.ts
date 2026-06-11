@@ -55,6 +55,17 @@ export function canViewLpTracker(profile: ProfileArg): boolean {
   return hasCapability(profile, "lp_tracker");
 }
 
+/** Logistics portal: the dedicated logistics user (role) OR a manager OR a holder
+ *  of the logistics capability. */
+export function canViewLogistics(profile: ProfileArg): boolean {
+  return isManager(profile) || profile?.role === "logistics" || hasCapability(profile, "logistics");
+}
+
+/** A dedicated logistics user who must ONLY see the Logistics portal (not a manager). */
+export function isLogisticsOnly(profile: ProfileArg): boolean {
+  return profile?.role === "logistics" && !isManager(profile);
+}
+
 /**
  * Whether `profile` is allowed to see data belonging to `targetUserId`.
  * Users may always view their own data; managers (role === "manager") may view

@@ -1936,28 +1936,476 @@ export type Database = {
       }
       users: {
         Row: {
+          active: boolean
           avatar_initials: string | null
           created_at: string | null
           email: string
           full_name: string
           id: string
+          portal_access: string[] | null
           role: string
         }
         Insert: {
+          active?: boolean
           avatar_initials?: string | null
           created_at?: string | null
           email: string
           full_name: string
           id: string
+          portal_access?: string[] | null
           role: string
         }
         Update: {
+          active?: boolean
           avatar_initials?: string | null
           created_at?: string | null
           email?: string
           full_name?: string
           id?: string
+          portal_access?: string[] | null
           role?: string
+        }
+        Relationships: []
+      }
+      shopify_orders: {
+        Row: {
+          created_at: string
+          currency: string | null
+          customer_name: string | null
+          delivery_address: string | null
+          document_status: string | null
+          email: string | null
+          financial_status: string | null
+          fulfillment_status: string | null
+          id: string
+          logistics_status: string
+          order_number: string | null
+          order_value: number | null
+          payment_method: string | null
+          raw: Json | null
+          shipping_city: string | null
+          shipping_method: string | null
+          shipping_phone: string | null
+          shopify_created_at: string | null
+          shopify_order_id: string
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          customer_name?: string | null
+          delivery_address?: string | null
+          document_status?: string | null
+          email?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          id?: string
+          logistics_status?: string
+          order_number?: string | null
+          order_value?: number | null
+          payment_method?: string | null
+          raw?: Json | null
+          shipping_city?: string | null
+          shipping_method?: string | null
+          shipping_phone?: string | null
+          shopify_created_at?: string | null
+          shopify_order_id: string
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          customer_name?: string | null
+          delivery_address?: string | null
+          document_status?: string | null
+          email?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          id?: string
+          logistics_status?: string
+          order_number?: string | null
+          order_value?: number | null
+          payment_method?: string | null
+          raw?: Json | null
+          shipping_city?: string | null
+          shipping_method?: string | null
+          shipping_phone?: string | null
+          shopify_created_at?: string | null
+          shopify_order_id?: string
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shopify_order_items: {
+        Row: {
+          brand: string | null
+          created_at: string
+          fulfilled_qty: number | null
+          id: string
+          order_id: string
+          packed: boolean
+          picked: boolean
+          picking_status: string
+          qty_ordered: number | null
+          shopify_line_id: string | null
+          sku: string | null
+          source_location: string
+          title: string | null
+          total_price: number | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          fulfilled_qty?: number | null
+          id?: string
+          order_id: string
+          packed?: boolean
+          picked?: boolean
+          picking_status?: string
+          qty_ordered?: number | null
+          shopify_line_id?: string | null
+          sku?: string | null
+          source_location?: string
+          title?: string | null
+          total_price?: number | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          fulfilled_qty?: number | null
+          id?: string
+          order_id?: string
+          packed?: boolean
+          picked?: boolean
+          picking_status?: string
+          qty_ordered?: number | null
+          shopify_line_id?: string | null
+          sku?: string | null
+          source_location?: string
+          title?: string | null
+          total_price?: number | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tracking_updates: {
+        Row: {
+          courier: string | null
+          created_at: string
+          created_by: string | null
+          dispatch_date: string | null
+          delivery_notes: string | null
+          id: string
+          order_id: string
+          pushed_to_shopify: boolean
+          shopify_error: string | null
+          tracking_number: string | null
+          tracking_url: string | null
+        }
+        Insert: {
+          courier?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispatch_date?: string | null
+          delivery_notes?: string | null
+          id?: string
+          order_id: string
+          pushed_to_shopify?: boolean
+          shopify_error?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+        }
+        Update: {
+          courier?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispatch_date?: string | null
+          delivery_notes?: string | null
+          id?: string
+          order_id?: string
+          pushed_to_shopify?: boolean
+          shopify_error?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracking_updates_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prt_requests: {
+        Row: {
+          brand: string | null
+          created_at: string
+          customer_name: string | null
+          from_location: string | null
+          id: string
+          notes: string | null
+          order_id: string | null
+          order_number: string | null
+          qty: number | null
+          required_date: string | null
+          requested_by: string | null
+          sku: string | null
+          status: string
+          title: string | null
+          to_location: string | null
+          updated_at: string
+          urgency: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          customer_name?: string | null
+          from_location?: string | null
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          order_number?: string | null
+          qty?: number | null
+          required_date?: string | null
+          requested_by?: string | null
+          sku?: string | null
+          status?: string
+          title?: string | null
+          to_location?: string | null
+          updated_at?: string
+          urgency?: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          customer_name?: string | null
+          from_location?: string | null
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          order_number?: string | null
+          qty?: number | null
+          required_date?: string | null
+          requested_by?: string | null
+          sku?: string | null
+          status?: string
+          title?: string | null
+          to_location?: string | null
+          updated_at?: string
+          urgency?: string
+        }
+        Relationships: []
+      }
+      reseller_deliveries: {
+        Row: {
+          city: string | null
+          contact_person: string | null
+          courier: string | null
+          created_at: string
+          created_by: string | null
+          delivery_address: string | null
+          dispatch_date: string | null
+          id: string
+          items_summary: string | null
+          notes: string | null
+          payment_method: string | null
+          phone: string | null
+          reference_no: string | null
+          reseller_name: string | null
+          status: string
+          total_value: number | null
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          contact_person?: string | null
+          courier?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_address?: string | null
+          dispatch_date?: string | null
+          id?: string
+          items_summary?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          phone?: string | null
+          reference_no?: string | null
+          reseller_name?: string | null
+          status?: string
+          total_value?: number | null
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          contact_person?: string | null
+          courier?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_address?: string | null
+          dispatch_date?: string | null
+          id?: string
+          items_summary?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          phone?: string | null
+          reference_no?: string | null
+          reseller_name?: string | null
+          status?: string
+          total_value?: number | null
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cargo_deliveries: {
+        Row: {
+          awb_number: string | null
+          cargo_company: string | null
+          cartons: number | null
+          consignee_name: string | null
+          contact_person: string | null
+          created_at: string
+          created_by: string | null
+          delivery_address: string | null
+          destination: string | null
+          dimensions: string | null
+          dispatch_date: string | null
+          id: string
+          items_summary: string | null
+          notes: string | null
+          phone: string | null
+          reference_no: string | null
+          status: string
+          updated_at: string
+          weight_kg: number | null
+        }
+        Insert: {
+          awb_number?: string | null
+          cargo_company?: string | null
+          cartons?: number | null
+          consignee_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_address?: string | null
+          destination?: string | null
+          dimensions?: string | null
+          dispatch_date?: string | null
+          id?: string
+          items_summary?: string | null
+          notes?: string | null
+          phone?: string | null
+          reference_no?: string | null
+          status?: string
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          awb_number?: string | null
+          cargo_company?: string | null
+          cartons?: number | null
+          consignee_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivery_address?: string | null
+          destination?: string | null
+          dimensions?: string | null
+          dispatch_date?: string | null
+          id?: string
+          items_summary?: string | null
+          notes?: string | null
+          phone?: string | null
+          reference_no?: string | null
+          status?: string
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Relationships: []
+      }
+      logistics_activity_logs: {
+        Row: {
+          action: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          new_value: string | null
+          notes: string | null
+          old_value: string | null
+          order_number: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          order_number?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          order_number?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      logistics_api_error_logs: {
+        Row: {
+          context: string | null
+          created_at: string
+          id: string
+          message: string | null
+          payload: Json | null
+          source: string | null
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          source?: string | null
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          source?: string | null
         }
         Relationships: []
       }

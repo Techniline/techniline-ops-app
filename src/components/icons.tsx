@@ -95,6 +95,17 @@ export function ReturnsIcon(props: IconProps) {
   );
 }
 
+export function LogisticsIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M3 6h11v9H3z" />
+      <path d="M14 9h4l3 3v3h-7z" />
+      <circle cx="7" cy="18" r="1.6" />
+      <circle cx="17" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
 export function DisputesIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>

@@ -11,7 +11,9 @@ import {
   canViewChecklist,
   canViewCocoblu,
   canViewFinance,
+  canViewLogistics,
   canViewLpTracker,
+  isLogisticsOnly,
   isManager,
 } from "@/lib/permissions";
 
@@ -25,6 +27,7 @@ import {
   DashboardIcon,
   Logo,
   LogoutIcon,
+  LogisticsIcon,
   LpTrackerIcon,
   PrioritiesIcon,
   ReturnsIcon,
@@ -38,6 +41,8 @@ interface NavItem {
   icon: IconType;
   show: boolean;
   disabled?: boolean;
+  /** Marks an item as part of the Logistics portal (shown to logistics-only users). */
+  portal?: "logistics";
 }
 
 function initialsFrom(name: string): string {
@@ -71,6 +76,9 @@ export function Sidebar({
   // `collapsed` is a desktop-only rail — express it with `lg:` utilities so the
   // mobile drawer always shows full labels.
   const labelHidden = collapsed ? "lg:hidden" : "";
+
+  // A dedicated logistics user sees ONLY the Logistics portal — nothing else.
+  const logisticsOnly = isLogisticsOnly(profile);
 
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
@@ -121,6 +129,13 @@ export function Sidebar({
       label: "Analytics",
       icon: AnalyticsIcon,
       show: isManager(profile),
+    },
+    {
+      href: "/logistics",
+      label: "Logistics",
+      icon: LogisticsIcon,
+      show: canViewLogistics(profile),
+      portal: "logistics",
     },
   ];
 
@@ -185,7 +200,7 @@ export function Sidebar({
           Menu
         </p>
         {navItems
-          .filter((item) => item.show)
+          .filter((item) => item.show && (!logisticsOnly || item.portal === "logistics"))
           .map((item) => {
             const Icon = item.icon;
             const active =

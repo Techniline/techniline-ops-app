@@ -3,10 +3,10 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/app/providers/AuthProvider";
-import { hasCapability } from "@/lib/permissions";
+import { canViewLogistics, hasCapability, isLogisticsOnly } from "@/lib/permissions";
 import type { Capability } from "@/lib/types";
 
 import { LoadingScreen } from "./LoadingScreen";
@@ -19,20 +19,37 @@ interface RouteGuardProps {
    * module routes (Checklist, Cocoblu, Finance) once they exist.
    */
   requireCapability?: Capability;
+  /**
+   * When true, the page belongs to the Logistics portal. Only logistics-capable
+   * users (the dedicated logistics user or a manager) may view it; everyone else
+   * is redirected to /dashboard.
+   */
+  requireLogistics?: boolean;
 }
 
 /**
  * Wraps a protected page. Redirects unauthenticated users to /login and,
  * optionally, users lacking a required capability back to /dashboard.
+ *
+ * Central portal isolation: a dedicated logistics user (role === "logistics",
+ * not a manager) is confined to /logistics/* — any other route redirects them
+ * to /logistics. This enforces the access rule at the routing layer, not just
+ * by hiding sidebar items.
  */
-export function RouteGuard({ children, requireCapability }: RouteGuardProps) {
+export function RouteGuard({ children, requireCapability, requireLogistics }: RouteGuardProps) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const onLogisticsRoute = pathname?.startsWith("/logistics") ?? false;
 
   const authorized =
     !!user &&
     !!profile &&
-    (!requireCapability || hasCapability(profile, requireCapability));
+    (!requireCapability || hasCapability(profile, requireCapability)) &&
+    (!requireLogistics || canViewLogistics(profile)) &&
+    // A logistics-only user may never view a non-logistics route.
+    (!isLogisticsOnly(profile) || onLogisticsRoute);
 
   useEffect(() => {
     if (loading) return;
@@ -42,10 +59,21 @@ export function RouteGuard({ children, requireCapability }: RouteGuardProps) {
       return;
     }
 
+    // Logistics-only users are confined to the Logistics portal.
+    if (isLogisticsOnly(profile) && !onLogisticsRoute) {
+      router.replace("/logistics");
+      return;
+    }
+
+    if (requireLogistics && !canViewLogistics(profile)) {
+      router.replace("/dashboard");
+      return;
+    }
+
     if (requireCapability && !hasCapability(profile, requireCapability)) {
       router.replace("/dashboard");
     }
-  }, [loading, user, profile, requireCapability, router]);
+  }, [loading, user, profile, requireCapability, requireLogistics, onLogisticsRoute, router]);
 
   if (loading) {
     return <LoadingScreen message="Checking your session…" />;
