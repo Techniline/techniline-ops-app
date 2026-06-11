@@ -145,7 +145,9 @@ export interface UnifiedReturn {
  */
 export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
   const [emailRes, dedRes] = await Promise.all([
-    supabase.from("returns").select("*").order("date_received", { ascending: false }).limit(500),
+    // Only manually-logged returns — the legacy v1 email-imported rows (junk like
+    // "is"/"for"/"type_a") are excluded so the list is clean and actionable.
+    supabase.from("returns").select("*").eq("source", "manual").order("date_received", { ascending: false }).limit(500),
     supabase
       .from("remittance_deductions")
       .select("*")

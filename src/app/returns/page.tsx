@@ -131,7 +131,7 @@ function ReturnsContent() {
     <div>
       <PageHeader
         title="Returns"
-        subtitle="Vendor returns this month — from Amazon notifications and from remittance return/dispute deductions."
+        subtitle="Returns this month — manually logged (+ Add return) and remittance deductions categorised as return / dispute / shortage."
         actions={
           <div className="flex items-center gap-2">
             <input
