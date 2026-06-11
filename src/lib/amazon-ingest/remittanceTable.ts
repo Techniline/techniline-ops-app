@@ -118,9 +118,10 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
       const invoiceDate = toIsoDate(dateMatch[1]);
       if (!invoiceDate) continue;
       const amts = line.match(amountRe) ?? [];
-      if (amts.length === 0) continue;
-      const amountPaid = parseAmount(amts[0]);
-      const amountRemaining = amts.length > 1 ? parseAmount(amts[amts.length - 1]) : null;
+      const firstAmt = amts[0];
+      if (!firstAmt) continue;
+      const amountPaid = parseAmount(firstAmt);
+      const amountRemaining = amts.length > 1 ? parseAmount(amts[amts.length - 1] ?? "") : null;
       // Description = text between the date and the first amount token.
       const afterDate = line.slice(dateMatch.index + dateMatch[1].length);
       const firstAmtIdx = afterDate.search(amountRe);
@@ -131,7 +132,7 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
         description,
         amountPaid,
         amountRemaining,
-        partial: /\*/.test(amts[0]),
+        partial: /\*/.test(firstAmt),
       });
     }
   }
