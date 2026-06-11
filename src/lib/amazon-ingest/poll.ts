@@ -90,6 +90,7 @@ export async function runPoll(opts: {
   dryRun: boolean;
   lookbackHours: number;
   force?: boolean;
+  subjectIncludes?: string;
 }): Promise<PollSummary> {
   const sinceIso = new Date(
     Date.now() - opts.lookbackHours * 3_600_000
@@ -131,14 +132,22 @@ export async function runPoll(opts: {
     }
   }
 
+  // Optional subject scope (e.g. only "remittance") — keeps a forced wide-window
+  // re-ingest fast by downloading bodies for just the relevant emails.
+  const scoped = opts.subjectIncludes
+    ? candidates.filter((c) =>
+        (c.msg.subject ?? "").toLowerCase().includes(opts.subjectIncludes!.toLowerCase())
+      )
+    : candidates;
+
   // 2) Decide which candidates still need processing. `force` reprocesses even
   //    already-ingested emails (re-parse with the current parser; writes are
   //    idempotent by natural key).
-  let toProcess = candidates;
+  let toProcess = scoped;
   if (!opts.dryRun && !opts.force) {
-    const processed = await alreadyProcessed(candidates.map((c) => c.messageId));
+    const processed = await alreadyProcessed(scoped.map((c) => c.messageId));
     toProcess = [];
-    for (const c of candidates) {
+    for (const c of scoped) {
       if (processed.has(c.messageId)) {
         skipped += 1;
         items.push({

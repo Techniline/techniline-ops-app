@@ -37,7 +37,8 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
   try {
-    const summary = await runPoll({ dryRun: false, lookbackHours: 720, force: true });
+    // Only reprocess remittance emails (one/day) so a 30-day window stays fast.
+    const summary = await runPoll({ dryRun: false, lookbackHours: 720, force: true, subjectIncludes: "remittance" });
     return Response.json({ ok: true, ...summary });
   } catch (e) {
     return Response.json(
