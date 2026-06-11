@@ -131,19 +131,24 @@ export const REMITTANCE_START = "2026-06-10";
 
 /** Ingested remittance payments still needing review (from the Amazon-actions feed). */
 export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]> {
-  const { data, error } = await supabase
-    .from("expected_actions")
-    .select("id, ref_number, aed_amount, email_received_at, email_subject, status, type")
-    .eq("type", "remittance")
-    .order("email_received_at", { ascending: false });
+  // Reviewed payments are tracked on remittances.reconciled (isolated per payment),
+  // NOT on expected_actions.status — so reviewing one never affects others.
+  const [{ data, error }, reconciledRes] = await Promise.all([
+    supabase
+      .from("expected_actions")
+      .select("id, ref_number, aed_amount, email_received_at, email_subject, status, type")
+      .eq("type", "remittance")
+      .order("email_received_at", { ascending: false }),
+    supabase.from("remittances").select("remittance_ref").eq("reconciled", true),
+  ]);
   if (error || !data) return [];
+  const reviewed = new Set((reconciledRes.data ?? []).map((r) => r.remittance_ref));
   return data
     .filter(
       (r) =>
-        r.status !== "resolved" &&
-        r.status !== "actioned" && // reviewed remittances drop off the list
         r.ref_number &&
-        /^\d{6,}$/.test(r.ref_number) // real Amazon payment numbers only (drops "Payment Advice")
+        /^\d{6,}$/.test(r.ref_number) && // real Amazon payment numbers only (drops "Payment Advice")
+        !reviewed.has(r.ref_number) // hide only payments explicitly marked reviewed
     )
     .map((r) => ({
       id: r.id as string,
@@ -261,10 +266,14 @@ export async function emailReconciliation(args: { to: string; cc: string; subjec
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
 }
 
-/** Mark a remittance payment reviewed. Uses 'actioned' — a valid expected_actions
- *  status (the check constraint rejects 'resolved', which is a workflow status). */
-export async function markRemittanceReviewed(expectedActionId: string): Promise<void> {
-  const { error } = await supabase.from("expected_actions").update({ status: "actioned" }).eq("id", expectedActionId);
+/** Mark a remittance payment reviewed — isolated flag on the remittances row for
+ *  THIS payment ref only (never touches expected_actions or other payments). */
+export async function markRemittanceReviewed(remittanceRef: string): Promise<void> {
+  if (!remittanceRef) throw new Error("Missing payment reference.");
+  const { error } = await supabase
+    .from("remittances")
+    .update({ reconciled: true })
+    .eq("remittance_ref", remittanceRef);
   if (error) throw new Error(error.message);
 }
 

@@ -337,7 +337,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   }
   async function reviewed(p: RemittancePayment): Promise<void> {
     setErr(null);
-    try { await markRemittanceReviewed(p.id); await load(); } catch (e) { setErr(errMsg(e)); }
+    try { await markRemittanceReviewed(p.ref); await load(); } catch (e) { setErr(errMsg(e)); }
   }
   async function remove(id: string): Promise<void> { try { await deleteDeduction(id); await load(); } catch (e) { setErr(errMsg(e)); } }
   async function reopen(id: string): Promise<void> { try { await reopenDeduction(id); await load(); } catch (e) { setErr(errMsg(e)); } }
