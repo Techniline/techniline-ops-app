@@ -1,5 +1,5 @@
 import { fetchBody, fetchMessages, type GraphMessage } from "./graph";
-import { alreadyProcessed, recordProcessedMessages } from "./ingestLog";
+import { alreadyProcessed, recordProcessedMessages, recordRunHeartbeat } from "./ingestLog";
 import { parseEmail } from "./parseEmail";
 import { executePlan } from "./upsert";
 
@@ -228,6 +228,7 @@ export async function runPoll(opts: {
       }
     }
     await recordProcessedMessages(toRecord);
+    await recordRunHeartbeat({ written, skipped, errors });
   }
 
   return {

@@ -19,6 +19,24 @@ function client(): SupabaseClient<Database> {
   return cached;
 }
 
+/** Record that an ingest run happened (heartbeat) so we can see the cron is alive. */
+export async function recordRunHeartbeat(summary: { written: number; skipped: number; errors: number }): Promise<void> {
+  try {
+    await client()
+      .from("app_settings")
+      .upsert(
+        {
+          key: "last_ingest_run",
+          value: JSON.stringify({ at: new Date().toISOString(), ...summary }),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+  } catch {
+    /* heartbeat is best-effort */
+  }
+}
+
 /** True if this email's message id has already been ingested. */
 export async function hasProcessedMessage(messageId: string): Promise<boolean> {
   const { data, error } = await client()
