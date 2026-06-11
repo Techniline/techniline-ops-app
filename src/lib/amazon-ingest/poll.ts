@@ -109,7 +109,7 @@ export async function runPoll(opts: {
   const candidates: Candidate[] = [];
   const seenIds = new Set<string>();
   for (const mailbox of boxes) {
-    const headers = await fetchMessages(mailbox, sinceIso);
+    const headers = await fetchMessages(mailbox, sinceIso, undefined, opts.subjectIncludes);
     fetched += headers.length;
     for (const msg of headers) {
       if (!isAmazonEmail(msg)) continue;

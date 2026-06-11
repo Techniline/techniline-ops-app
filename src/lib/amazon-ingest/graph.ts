@@ -81,15 +81,25 @@ interface GraphListResponse {
 export async function fetchMessages(
   mailbox: string,
   sinceIso: string,
-  cap = Number(process.env.INGEST_FETCH_CAP ?? "1000") || 1000
+  cap = Number(process.env.INGEST_FETCH_CAP ?? "1000") || 1000,
+  search?: string
 ): Promise<GraphMessage[]> {
   const token = await getGraphToken();
 
   const params = new URLSearchParams();
   params.set("$select", "id,internetMessageId,subject,from,receivedDateTime");
   params.set("$top", "50");
-  params.set("$orderby", "receivedDateTime desc");
-  params.set("$filter", `receivedDateTime ge ${sinceIso}`);
+  const reqHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (search) {
+    // Server-side search returns ONLY matching emails (e.g. "remittance"), so a
+    // wide window stays fast. $search can't combine with $filter/$orderby — we
+    // filter by date client-side below.
+    params.set("$search", `"${search}"`);
+    reqHeaders["ConsistencyLevel"] = "eventual";
+  } else {
+    params.set("$orderby", "receivedDateTime desc");
+    params.set("$filter", `receivedDateTime ge ${sinceIso}`);
+  }
 
   let url:
     | string
@@ -99,9 +109,7 @@ export async function fetchMessages(
 
   const out: GraphMessage[] = [];
   while (url && out.length < cap) {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(url, { headers: reqHeaders });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(
@@ -121,7 +129,8 @@ export async function fetchMessages(
     }
     url = json["@odata.nextLink"];
   }
-  return out;
+  // $search ignores the date filter — apply it here.
+  return search ? out.filter((m) => (m.receivedDateTime ?? "") >= sinceIso) : out;
 }
 
 /**
