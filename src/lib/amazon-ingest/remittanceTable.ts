@@ -101,5 +101,40 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
     });
   }
 
+  // Fallback: Graph often returns the body as PLAIN TEXT (tab/space-separated),
+  // where each invoice row looks like:
+  //   6000141979   05-JUN-2026   Co-op-...   *(448.37)   (11,398.37)
+  // Detect a row by: starts with an invoice number, contains a DD-MON-YYYY date,
+  // and has amount tokens. Robust to tabs or runs of spaces.
+  if (out.lines.length === 0) {
+    const amountRe = /\*?\(?-?[\d,]+\.\d{2}\)?/g;
+    for (const rawLine of html.split(/\r?\n/)) {
+      const line = rawLine.replace(/&nbsp;/gi, " ").trim();
+      if (!line) continue;
+      const dateMatch = line.match(/\b(\d{1,2}-[A-Za-z]{3}-\d{4})\b/);
+      if (!dateMatch || dateMatch.index == null) continue;
+      const firstTok = line.split(/\s+/)[0];
+      if (!looksLikeInvoice(firstTok)) continue;
+      const invoiceDate = toIsoDate(dateMatch[1]);
+      if (!invoiceDate) continue;
+      const amts = line.match(amountRe) ?? [];
+      if (amts.length === 0) continue;
+      const amountPaid = parseAmount(amts[0]);
+      const amountRemaining = amts.length > 1 ? parseAmount(amts[amts.length - 1]) : null;
+      // Description = text between the date and the first amount token.
+      const afterDate = line.slice(dateMatch.index + dateMatch[1].length);
+      const firstAmtIdx = afterDate.search(amountRe);
+      const description = (firstAmtIdx > 0 ? afterDate.slice(0, firstAmtIdx) : "").replace(/\s+/g, " ").trim();
+      out.lines.push({
+        invoiceNumber: firstTok,
+        invoiceDate,
+        description,
+        amountPaid,
+        amountRemaining,
+        partial: /\*/.test(amts[0]),
+      });
+    }
+  }
+
   return out;
 }
