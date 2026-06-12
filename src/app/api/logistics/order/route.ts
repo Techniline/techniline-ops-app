@@ -102,6 +102,127 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: true });
   }
 
+  if (action === "save_invoice") {
+    const orderId = typeof b.orderId === "string" ? b.orderId : "";
+    const tle = typeof b.tleInvoiceNumber === "string" ? b.tleInvoiceNumber.trim() : "";
+    const invoiceValue = typeof b.invoiceValue === "number" ? b.invoiceValue : null;
+    const invoicedSkus = typeof b.invoicedSkus === "string" ? b.invoicedSkus.trim() : "";
+    const remarks = typeof b.remarks === "string" ? b.remarks.trim() : "";
+    if (!orderId) return Response.json({ ok: false, error: "Missing order." }, { status: 400 });
+    if (!tle) return Response.json({ ok: false, error: "A TLE invoice number is required." }, { status: 400 });
+
+    const { data: order, error } = await svc
+      .from("shopify_orders")
+      .select("id, order_number, order_value")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error || !order) return Response.json({ ok: false, error: "Order not found." }, { status: 404 });
+
+    const { data: items } = await svc.from("shopify_order_items").select("sku").eq("order_id", orderId);
+    const orderSkus = new Set(
+      (items ?? []).map((i) => (i.sku ?? "").trim().toUpperCase()).filter(Boolean)
+    );
+
+    const orderValue = (order as { order_value: number | null }).order_value;
+    const valueMismatch =
+      invoiceValue != null && orderValue != null && Math.abs(invoiceValue - orderValue) > 0.01;
+
+    let skuMismatch = false;
+    const missingSkus: string[] = []; // in order, not invoiced
+    const extraSkus: string[] = []; // invoiced, not in order
+    if (invoicedSkus) {
+      const invSet = new Set(
+        invoicedSkus
+          .split(/[\s,;]+/)
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+      );
+      for (const s of orderSkus) if (!invSet.has(s)) missingSkus.push(s);
+      for (const s of invSet) if (!orderSkus.has(s)) extraSkus.push(s);
+      skuMismatch = missingSkus.length > 0 || extraSkus.length > 0;
+    }
+
+    if ((valueMismatch || skuMismatch) && !remarks) {
+      return Response.json(
+        {
+          ok: false,
+          error: "Mismatch detected — remarks are mandatory to complete this record.",
+          valueMismatch,
+          skuMismatch,
+          missingSkus,
+          extraSkus,
+          orderValue,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { error: uErr } = await svc
+      .from("shopify_orders")
+      .update({
+        tle_invoice_number: tle,
+        invoice_value: invoiceValue,
+        invoiced_skus: invoicedSkus || null,
+        invoice_remarks: remarks || null,
+        invoice_verified: true,
+        invoice_checked_by: auth.uid,
+        invoice_checked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+    if (uErr) return Response.json({ ok: false, error: uErr.message }, { status: 500 });
+
+    await svc.from("logistics_activity_logs").insert({
+      entity_type: "order",
+      entity_id: orderId,
+      order_number: (order as { order_number: string | null }).order_number,
+      action: "invoice_verified",
+      new_value: tle,
+      notes:
+        valueMismatch || skuMismatch
+          ? `Mismatch acknowledged — ${remarks}`
+          : "Invoice matched order.",
+      user_id: auth.uid,
+    });
+    return Response.json({ ok: true, valueMismatch, skuMismatch, missingSkus, extraSkus });
+  }
+
+  if (action === "close_cancellation") {
+    const orderId = typeof b.orderId === "string" ? b.orderId : "";
+    const srt = typeof b.srtNumber === "string" ? b.srtNumber.trim() : "";
+    const prt = typeof b.prtNumber === "string" ? b.prtNumber.trim() : "";
+    if (!orderId) return Response.json({ ok: false, error: "Missing order." }, { status: 400 });
+    if (!srt || !prt) {
+      return Response.json(
+        { ok: false, error: "Both SRT and PRT document numbers are required to close a cancelled order." },
+        { status: 400 }
+      );
+    }
+    const { data: order, error } = await svc
+      .from("shopify_orders")
+      .select("id, order_number, logistics_status")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error || !order) return Response.json({ ok: false, error: "Order not found." }, { status: 404 });
+
+    const { error: uErr } = await svc
+      .from("shopify_orders")
+      .update({ srt_number: srt, prt_number: prt, cancellation_closed: true, updated_at: new Date().toISOString() })
+      .eq("id", orderId);
+    if (uErr) return Response.json({ ok: false, error: uErr.message }, { status: 500 });
+
+    await svc.from("logistics_activity_logs").insert({
+      entity_type: "order",
+      entity_id: orderId,
+      order_number: (order as { order_number: string | null }).order_number,
+      action: "cancellation_closed",
+      new_value: `SRT ${srt} / PRT ${prt}`,
+      notes: "Cancelled order closed with SRT & PRT document numbers.",
+      user_id: auth.uid,
+    });
+    return Response.json({ ok: true });
+  }
+
   if (action === "update_item") {
     const itemId = typeof b.itemId === "string" ? b.itemId : "";
     if (!itemId) return Response.json({ ok: false, error: "Missing item." }, { status: 400 });

@@ -1988,6 +1988,16 @@ export type Database = {
           shipping_phone: string | null
           shopify_created_at: string | null
           shopify_order_id: string
+          tle_invoice_number: string | null
+          invoice_value: number | null
+          invoiced_skus: string | null
+          invoice_remarks: string | null
+          invoice_verified: boolean
+          invoice_checked_by: string | null
+          invoice_checked_at: string | null
+          srt_number: string | null
+          prt_number: string | null
+          cancellation_closed: boolean
           tracking_number: string | null
           updated_at: string
         }
@@ -2011,6 +2021,16 @@ export type Database = {
           shipping_phone?: string | null
           shopify_created_at?: string | null
           shopify_order_id: string
+          tle_invoice_number?: string | null
+          invoice_value?: number | null
+          invoiced_skus?: string | null
+          invoice_remarks?: string | null
+          invoice_verified?: boolean
+          invoice_checked_by?: string | null
+          invoice_checked_at?: string | null
+          srt_number?: string | null
+          prt_number?: string | null
+          cancellation_closed?: boolean
           tracking_number?: string | null
           updated_at?: string
         }
@@ -2034,8 +2054,39 @@ export type Database = {
           shipping_phone?: string | null
           shopify_created_at?: string | null
           shopify_order_id?: string
+          tle_invoice_number?: string | null
+          invoice_value?: number | null
+          invoiced_skus?: string | null
+          invoice_remarks?: string | null
+          invoice_verified?: boolean
+          invoice_checked_by?: string | null
+          invoice_checked_at?: string | null
+          srt_number?: string | null
+          prt_number?: string | null
+          cancellation_closed?: boolean
           tracking_number?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_prefs: {
+        Row: {
+          key: string
+          updated_at: string
+          user_id: string
+          value: Json | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          user_id: string
+          value?: Json | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json | null
         }
         Relationships: []
       }

@@ -10,6 +10,7 @@ export interface LogisticsKpis {
   delayed24: number;
   delayed48: number;
   onHold: number;
+  missingInvoice: number;
   resellerPending: number;
   resellerDueToday: number;
   resellerDelayed: number;
@@ -28,6 +29,7 @@ const EMPTY: LogisticsKpis = {
   delayed24: 0,
   delayed48: 0,
   onHold: 0,
+  missingInvoice: 0,
   resellerPending: 0,
   resellerDueToday: 0,
   resellerDelayed: 0,
@@ -78,6 +80,7 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       deliveredToday,
       delayed24,
       delayed48,
+      missingInvoice,
       prtRequested,
       resellerPending,
       resellerDueToday,
@@ -92,6 +95,7 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       take(orders().eq("logistics_status", "delivered").gte("updated_at", todayIso)),
       take(orders().in("logistics_status", PENDING_STATUSES).lt("shopify_created_at", ago24)),
       take(orders().in("logistics_status", PENDING_STATUSES).lt("shopify_created_at", ago48)),
+      take(orders().is("tle_invoice_number", null).neq("logistics_status", "cancelled")),
       take(
         supabase
           .from("prt_requests")
@@ -119,6 +123,7 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       delayed24: delayed24.n,
       delayed48: delayed48.n,
       onHold: onHold.n,
+      missingInvoice: missingInvoice.n,
       resellerPending: resellerPending.n,
       resellerDueToday: resellerDueToday.n,
       resellerDelayed: resellerDelayed.n,

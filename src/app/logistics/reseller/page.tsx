@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { CustomizableTable } from "@/components/logistics/CustomizableTable";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
-import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { RESELLER_STATUS } from "@/lib/logistics/constants";
 import {
   deleteReseller,
@@ -159,74 +160,69 @@ export default function ResellerDeliveriesPage() {
         </div>
       ) : null}
 
-      <div className={tableWrap}>
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr>
-              <th className={thCell}>Reseller</th>
-              <th className={thCell}>Ref</th>
-              <th className={thCell}>City</th>
-              <th className={thCell}>Items</th>
-              <th className={thCell}>Value</th>
-              <th className={thCell}>Scheduled</th>
-              <th className={thCell}>Status</th>
-              <th className={thCell}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td className={tdCell} colSpan={8}>No reseller deliveries yet.</td></tr>
-            ) : (
-              rows.map((r) => {
-                const od = overdueDays(r);
-                return (
-                  <tr key={r.id} className={od > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40"}>
-                    <td className={tdCell}>{r.reseller_name ?? "—"}</td>
-                    <td className={tdCell}>{r.reference_no ?? "—"}</td>
-                    <td className={tdCell}>{r.city ?? "—"}</td>
-                    <td className={tdCell}>{r.items_summary ?? "—"}</td>
-                    <td className={`${tdCell} tabular-nums`}>{r.total_value != null ? r.total_value.toFixed(2) : "—"}</td>
-                    <td className={tdCell}>
-                      {r.scheduled_date ? (
-                        <div className="flex flex-col">
-                          <span>{r.scheduled_date}</span>
-                          {od > 0 ? (
-                            <span className="text-[11px] font-semibold text-rose-600">{od}d late</span>
-                          ) : null}
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className={tdCell}>
-                      <select
-                        value={r.status}
-                        disabled={busy}
-                        onChange={(e) => changeStatus(r.id, e.target.value)}
-                        className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                      >
-                        {RESELLER_STATUS.map((s) => (
-                          <option key={s.value} value={s.value}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className={tdCell}>
-                      <div className="flex gap-2">
-                        <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
-                        <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CustomizableTable<ResellerRow>
+        viewKey="logistics_reseller_view"
+        rows={rows}
+        loading={loading}
+        emptyText="No reseller deliveries yet."
+        rowClassName={(r) =>
+          overdueDays(r) > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
+        }
+        columns={[
+          { id: "reseller", label: "Reseller", cell: (r) => r.reseller_name ?? "—" },
+          { id: "ref", label: "Ref", cell: (r) => r.reference_no ?? "—" },
+          { id: "city", label: "City", cell: (r) => r.city ?? "—" },
+          { id: "items", label: "Items", cell: (r) => r.items_summary ?? "—" },
+          { id: "value", label: "Value", className: "tabular-nums", cell: (r) => (r.total_value != null ? r.total_value.toFixed(2) : "—") },
+          {
+            id: "scheduled",
+            label: "Scheduled",
+            cell: (r) => {
+              const od = overdueDays(r);
+              return r.scheduled_date ? (
+                <div className="flex flex-col">
+                  <span>{r.scheduled_date}</span>
+                  {od > 0 ? <span className="text-[11px] font-semibold text-rose-600">{od}d late</span> : null}
+                </div>
+              ) : (
+                "—"
+              );
+            },
+          },
+          {
+            id: "status",
+            label: "Status",
+            cell: (r) => (
+              <select
+                value={r.status}
+                disabled={busy}
+                onChange={(e) => changeStatus(r.id, e.target.value)}
+                className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+              >
+                {RESELLER_STATUS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            ),
+          },
+          {
+            id: "actions",
+            label: "",
+            cell: (r) => (
+              <div className="flex gap-2">
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>
+                  Edit
+                </button>
+                <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>
+                  Delete
+                </button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </LogisticsShell>
   );
 }

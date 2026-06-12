@@ -12,6 +12,8 @@ import {
   fetchOrderFacets,
   fetchOrders,
   lastSyncTime,
+  loadUserView,
+  saveUserView,
   syncOrders,
   type OrderFilters,
   type ShopifyOrderRow,
@@ -72,6 +74,16 @@ const COLUMNS: Column[] = [
   { id: "method", label: "Method", cell: (o) => o.shipping_method ?? "—" },
   { id: "city", label: "City", cell: (o) => o.shipping_city ?? "—" },
   { id: "tracking", label: "Tracking", cell: (o) => o.tracking_number ?? "—" },
+  {
+    id: "invoice",
+    label: "TLE Invoice",
+    cell: (o) =>
+      o.tle_invoice_number ? (
+        <span className={o.invoice_verified ? "text-emerald-700" : "text-slate-700"}>{o.tle_invoice_number}</span>
+      ) : (
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Missing</span>
+      ),
+  },
   { id: "updated", label: "Updated", cell: (o) => fmtDate(o.updated_at) },
 ];
 
@@ -109,28 +121,40 @@ export default function LogisticsOrdersPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  // Load saved view once profile is known.
+  // Apply a saved view, reconciled against the current column set (new columns
+  // appear at the end, removed columns drop out).
+  const applyView = useCallback((v: SavedView | null) => {
+    if (!v || !Array.isArray(v.order)) return;
+    const known = v.order.filter((id) => COL_BY_ID.has(id));
+    const missing = DEFAULT_ORDER.filter((id) => !known.includes(id));
+    setColOrder([...known, ...missing]);
+    setHidden(new Set((v.hidden ?? []).filter((id) => COL_BY_ID.has(id))));
+  }, []);
+
+  // Load saved view: localStorage first (instant), then the server copy (wins,
+  // so the layout follows the user across devices).
   useEffect(() => {
-    if (typeof window === "undefined" || !profile?.id) return;
-    try {
-      const raw = window.localStorage.getItem(viewKey);
-      if (raw) {
-        const v = JSON.parse(raw) as SavedView;
-        // Merge with current column set so new columns appear and removed ones drop.
-        const known = v.order.filter((id) => COL_BY_ID.has(id));
-        const missing = DEFAULT_ORDER.filter((id) => !known.includes(id));
-        setColOrder([...known, ...missing]);
-        setHidden(new Set((v.hidden ?? []).filter((id) => COL_BY_ID.has(id))));
+    if (!profile?.id) return;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(viewKey);
+        if (raw) applyView(JSON.parse(raw) as SavedView);
+      } catch {
+        /* ignore malformed cache */
       }
-    } catch {
-      /* ignore malformed saved view */
     }
-  }, [profile?.id, viewKey]);
+    void loadUserView<SavedView>("logistics_orders_view").then((v) => {
+      if (v) applyView(v);
+    });
+  }, [profile?.id, viewKey, applyView]);
 
   const persist = useCallback(
     (order: string[], hide: Set<string>) => {
-      if (typeof window === "undefined") return;
-      window.localStorage.setItem(viewKey, JSON.stringify({ order, hidden: [...hide] }));
+      const payload: SavedView = { order, hidden: [...hide] };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(viewKey, JSON.stringify(payload));
+      }
+      void saveUserView("logistics_orders_view", payload);
     },
     [viewKey]
   );

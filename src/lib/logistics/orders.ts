@@ -169,6 +169,55 @@ export async function setOrderStatus(orderId: string, status: string, note?: str
   await post("/api/logistics/order", { action: "set_status", orderId, status, note });
 }
 
+export interface InvoiceInput {
+  orderId: string;
+  tleInvoiceNumber: string;
+  invoiceValue: number | null;
+  invoicedSkus: string;
+  remarks: string;
+}
+
+export interface InvoiceResult {
+  /** true if the record was saved; false means remarks are required first. */
+  completed: boolean;
+  valueMismatch: boolean;
+  skuMismatch: boolean;
+  missingSkus: string[];
+  extraSkus: string[];
+  message?: string;
+}
+
+/**
+ * Save + verify the TLE invoice. If the value or SKUs don't match and no remarks
+ * were given, the server returns 400 with the mismatch detail — we surface that
+ * as { completed:false } so the UI can show the mismatch and require remarks,
+ * rather than throwing.
+ */
+export async function saveInvoice(input: InvoiceInput): Promise<InvoiceResult> {
+  const res = await fetch("/api/logistics/order", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await token()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "save_invoice", ...input }),
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const detail = {
+    valueMismatch: !!j.valueMismatch,
+    skuMismatch: !!j.skuMismatch,
+    missingSkus: (j.missingSkus as string[]) ?? [],
+    extraSkus: (j.extraSkus as string[]) ?? [],
+  };
+  if (res.ok && j.ok === true) return { completed: true, ...detail };
+  // Mismatch needing remarks is a soft failure, not a hard error.
+  if (res.status === 400 && (detail.valueMismatch || detail.skuMismatch)) {
+    return { completed: false, ...detail, message: (j.error as string) ?? "Mismatch detected." };
+  }
+  throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+}
+
+export async function closeCancellation(orderId: string, srtNumber: string, prtNumber: string): Promise<void> {
+  await post("/api/logistics/order", { action: "close_cancellation", orderId, srtNumber, prtNumber });
+}
+
 export async function updateItem(
   itemId: string,
   patch: { picked?: boolean; packed?: boolean; picking_status?: string; source_location?: string }
@@ -188,6 +237,32 @@ export interface FulfillInput {
 
 export async function fulfillOrder(input: FulfillInput): Promise<void> {
   await post("/api/logistics/fulfill", input);
+}
+
+// ── Per-user saved table views (server-side, follows the user) ───────────────
+
+export async function loadUserView<T = unknown>(key: string): Promise<T | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("user_prefs")
+    .select("value")
+    .eq("user_id", user.id)
+    .eq("key", key)
+    .maybeSingle();
+  return ((data as { value?: T } | null)?.value ?? null) as T | null;
+}
+
+export async function saveUserView(key: string, value: unknown): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase
+    .from("user_prefs")
+    .upsert({ user_id: user.id, key, value: value as never, updated_at: new Date().toISOString() });
 }
 
 export async function lastSyncTime(): Promise<string | null> {

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { CustomizableTable } from "@/components/logistics/CustomizableTable";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
-import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { labelFor, PRT_STATUS, PRT_URGENCY, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
 import {
   buildPrtEmail,
@@ -190,58 +191,56 @@ export default function PrtRequestsPage() {
         </div>
       ) : null}
 
-      <div className={tableWrap}>
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr>
-              <th className={thCell}>Order</th>
-              <th className={thCell}>SKU</th>
-              <th className={thCell}>Product</th>
-              <th className={thCell}>Qty</th>
-              <th className={thCell}>From → To</th>
-              <th className={thCell}>Urgency</th>
-              <th className={thCell}>Status</th>
-              <th className={thCell}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td className={tdCell} colSpan={8}>No PRT requests yet.</td></tr>
-            ) : (
-              rows.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className={tdCell}>{p.order_number ?? "—"}</td>
-                  <td className={tdCell}>{p.sku ?? "—"}</td>
-                  <td className={tdCell}>{p.title ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>{p.qty ?? 1}</td>
-                  <td className={tdCell}>
-                    {labelFor(SOURCE_LOCATIONS, p.from_location)} → {labelFor(SOURCE_LOCATIONS, p.to_location)}
-                  </td>
-                  <td className={tdCell}>{labelFor(PRT_URGENCY, p.urgency)}</td>
-                  <td className={tdCell}>
-                    <select
-                      value={p.status}
-                      disabled={busy}
-                      onChange={(e) => changeStatus(p.id, e.target.value)}
-                      className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      {PRT_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
-                  </td>
-                  <td className={tdCell}>
-                    <div className="flex gap-2">
-                      <button type="button" className="text-indigo-600 hover:underline" onClick={() => openEmail(p)}>Email</button>
-                      <button type="button" className="text-slate-600 hover:underline" onClick={() => setDraft(p)}>Edit</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CustomizableTable<PrtRow>
+        viewKey="logistics_prt_view"
+        rows={rows}
+        loading={loading}
+        emptyText="No PRT requests yet."
+        columns={[
+          { id: "order", label: "Order", cell: (p) => p.order_number ?? "—" },
+          { id: "sku", label: "SKU", cell: (p) => p.sku ?? "—" },
+          { id: "product", label: "Product", cell: (p) => p.title ?? "—" },
+          { id: "qty", label: "Qty", className: "tabular-nums", cell: (p) => p.qty ?? 1 },
+          {
+            id: "route",
+            label: "From → To",
+            cell: (p) => `${labelFor(SOURCE_LOCATIONS, p.from_location)} → ${labelFor(SOURCE_LOCATIONS, p.to_location)}`,
+          },
+          { id: "urgency", label: "Urgency", cell: (p) => labelFor(PRT_URGENCY, p.urgency) },
+          {
+            id: "status",
+            label: "Status",
+            cell: (p) => (
+              <select
+                value={p.status}
+                disabled={busy}
+                onChange={(e) => changeStatus(p.id, e.target.value)}
+                className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+              >
+                {PRT_STATUS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            ),
+          },
+          {
+            id: "actions",
+            label: "",
+            cell: (p) => (
+              <div className="flex gap-2">
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => openEmail(p)}>
+                  Email
+                </button>
+                <button type="button" className="text-slate-600 hover:underline" onClick={() => setDraft(p)}>
+                  Edit
+                </button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </LogisticsShell>
   );
 }

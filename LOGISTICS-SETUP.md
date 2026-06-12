@@ -265,6 +265,41 @@ alter table public.reseller_deliveries add column if not exists requested_by uui
 
 ---
 
+## Step 1d — TLE invoice + cancellation closure + saved views (run once)
+
+Adds per-order TLE invoice verification, SRT/PRT closure for cancelled orders,
+and a generic per-user table-view preference store. Idempotent.
+
+```sql
+-- TLE invoice verification + cancellation closure on each order
+alter table public.shopify_orders add column if not exists tle_invoice_number text;
+alter table public.shopify_orders add column if not exists invoice_value numeric;
+alter table public.shopify_orders add column if not exists invoiced_skus text;
+alter table public.shopify_orders add column if not exists invoice_remarks text;
+alter table public.shopify_orders add column if not exists invoice_verified boolean not null default false;
+alter table public.shopify_orders add column if not exists invoice_checked_by uuid references public.users(id);
+alter table public.shopify_orders add column if not exists invoice_checked_at timestamptz;
+alter table public.shopify_orders add column if not exists srt_number text;
+alter table public.shopify_orders add column if not exists prt_number text;
+alter table public.shopify_orders add column if not exists cancellation_closed boolean not null default false;
+
+-- Per-user saved table views (column order / hidden columns), follows the user
+-- across devices. A user may only read/write their own rows.
+create table if not exists public.user_prefs (
+  user_id uuid not null references public.users(id) on delete cascade,
+  key     text not null,
+  value   jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+alter table public.user_prefs enable row level security;
+drop policy if exists user_prefs_own on public.user_prefs;
+create policy user_prefs_own on public.user_prefs for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

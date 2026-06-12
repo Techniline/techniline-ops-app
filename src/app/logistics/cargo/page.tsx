@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { CustomizableTable } from "@/components/logistics/CustomizableTable";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
-import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { CARGO_STATUS, labelFor } from "@/lib/logistics/constants";
 import { deleteCargo, fetchCargo, saveCargo, type CargoRow } from "@/lib/logistics/manual";
 
@@ -121,49 +122,36 @@ export default function CargoDeliveriesPage() {
         </div>
       ) : null}
 
-      <div className={tableWrap}>
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr>
-              <th className={thCell}>Consignee</th>
-              <th className={thCell}>Ref</th>
-              <th className={thCell}>Destination</th>
-              <th className={thCell}>Cartons</th>
-              <th className={thCell}>Weight</th>
-              <th className={thCell}>AWB</th>
-              <th className={thCell}>Company</th>
-              <th className={thCell}>Status</th>
-              <th className={thCell}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className={tdCell} colSpan={9}>Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td className={tdCell} colSpan={9}>No cargo deliveries yet.</td></tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className={tdCell}>{r.consignee_name ?? "—"}</td>
-                  <td className={tdCell}>{r.reference_no ?? "—"}</td>
-                  <td className={tdCell}>{r.destination ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>{r.cartons ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>{r.weight_kg != null ? `${r.weight_kg} kg` : "—"}</td>
-                  <td className={tdCell}>{r.awb_number ?? "—"}</td>
-                  <td className={tdCell}>{r.cargo_company ?? "—"}</td>
-                  <td className={tdCell}>{labelFor(CARGO_STATUS, r.status)}</td>
-                  <td className={tdCell}>
-                    <div className="flex gap-2">
-                      <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
-                      <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CustomizableTable<CargoRow>
+        viewKey="logistics_cargo_view"
+        rows={rows}
+        loading={loading}
+        emptyText="No cargo deliveries yet."
+        columns={[
+          { id: "consignee", label: "Consignee", cell: (r) => r.consignee_name ?? "—" },
+          { id: "ref", label: "Ref", cell: (r) => r.reference_no ?? "—" },
+          { id: "destination", label: "Destination", cell: (r) => r.destination ?? "—" },
+          { id: "cartons", label: "Cartons", className: "tabular-nums", cell: (r) => r.cartons ?? "—" },
+          { id: "weight", label: "Weight", className: "tabular-nums", cell: (r) => (r.weight_kg != null ? `${r.weight_kg} kg` : "—") },
+          { id: "awb", label: "AWB", cell: (r) => r.awb_number ?? "—" },
+          { id: "company", label: "Company", cell: (r) => r.cargo_company ?? "—" },
+          { id: "status", label: "Status", cell: (r) => labelFor(CARGO_STATUS, r.status) },
+          {
+            id: "actions",
+            label: "",
+            cell: (r) => (
+              <div className="flex gap-2">
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>
+                  Edit
+                </button>
+                <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>
+                  Delete
+                </button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </LogisticsShell>
   );
 }

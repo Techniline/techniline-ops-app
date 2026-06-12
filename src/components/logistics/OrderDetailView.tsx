@@ -12,10 +12,13 @@ import {
   SOURCE_LOCATIONS,
 } from "@/lib/logistics/constants";
 import {
+  closeCancellation,
   fetchOrderDetail,
   fulfillOrder,
+  saveInvoice,
   setOrderStatus,
   updateItem,
+  type InvoiceResult,
   type OrderDetail,
 } from "@/lib/logistics/orders";
 
@@ -54,6 +57,15 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [notify, setNotify] = useState(true);
 
+  // TLE invoice + cancellation closure
+  const [invNo, setInvNo] = useState("");
+  const [invValue, setInvValue] = useState("");
+  const [invSkus, setInvSkus] = useState("");
+  const [invRemarks, setInvRemarks] = useState("");
+  const [mismatch, setMismatch] = useState<InvoiceResult | null>(null);
+  const [srt, setSrt] = useState("");
+  const [prt, setPrt] = useState("");
+
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -67,6 +79,18 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Sync invoice/closure fields whenever the order reloads.
+  useEffect(() => {
+    if (!detail) return;
+    const o = detail.order;
+    setInvNo(o.tle_invoice_number ?? "");
+    setInvValue(o.invoice_value != null ? String(o.invoice_value) : "");
+    setInvSkus(o.invoiced_skus ?? "");
+    setInvRemarks(o.invoice_remarks ?? "");
+    setSrt(o.srt_number ?? "");
+    setPrt(o.prt_number ?? "");
+  }, [detail]);
 
   const allReady = !!detail && detail.items.length > 0 && detail.items.every((li) => li.picked && li.packed);
   const isPickup = NO_TRACKING_COURIERS.has(courier);
@@ -88,6 +112,33 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
     }
   }
 
+  async function handleSaveInvoice(orderId: string) {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await saveInvoice({
+        orderId,
+        tleInvoiceNumber: invNo.trim(),
+        invoiceValue: invValue ? Number(invValue) : null,
+        invoicedSkus: invSkus.trim(),
+        remarks: invRemarks.trim(),
+      });
+      if (!r.completed) {
+        setMismatch(r); // mismatch detected, remarks required
+      } else {
+        setMismatch(r.valueMismatch || r.skuMismatch ? r : null);
+        setMsg("Invoice saved.");
+        await load();
+        onChanged?.();
+      }
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) {
     return <div className={`${surface} p-5 text-sm text-slate-500`}>Loading…</div>;
   }
@@ -96,6 +147,9 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   }
 
   const { order, items, tracking } = detail;
+  const invoiceMissing = !order.tle_invoice_number;
+  const needsClosure = order.logistics_status === "cancelled" && !order.cancellation_closed;
+  const remarksRequired = !!mismatch && (mismatch.valueMismatch || mismatch.skuMismatch);
 
   return (
     <div>
@@ -106,6 +160,42 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
       ) : null}
       {err ? (
         <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div>
+      ) : null}
+
+      {invoiceMissing ? (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+          ⚠️ Missing TLE invoice — record the invoice number below before completing this order.
+        </div>
+      ) : null}
+
+      {/* Cancelled order: SRT/PRT closure required (evidence logged) */}
+      {needsClosure ? (
+        <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-800 dark:bg-rose-950/30">
+          <h2 className="text-sm font-semibold text-rose-800 dark:text-rose-200">
+            Order cancelled — closure required
+          </h2>
+          <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
+            Enter the SRT and PRT document numbers to close this cancelled order. Both are
+            mandatory; the closure is written to the activity log as evidence.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <input className={inputClass} placeholder="SRT number" value={srt} onChange={(e) => setSrt(e.target.value)} />
+            <input className={inputClass} placeholder="PRT number" value={prt} onChange={(e) => setPrt(e.target.value)} />
+            <button
+              type="button"
+              disabled={busy || !srt.trim() || !prt.trim()}
+              onClick={() => guarded(() => closeCancellation(order.id, srt.trim(), prt.trim()), "Cancellation closed.")}
+              className={`${btnPrimary} disabled:opacity-50`}
+            >
+              Close cancelled order
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {order.logistics_status === "cancelled" && order.cancellation_closed ? (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900">
+          Cancelled & closed — SRT {order.srt_number ?? "—"} / PRT {order.prt_number ?? "—"}.
+        </div>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -239,6 +329,74 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
         </table>
       </div>
 
+      {/* TLE invoice verification */}
+      <div className={`${surface} mt-4 p-4`}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">TLE Invoice</h2>
+          {order.invoice_verified ? (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+              Verified
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              Not verified
+            </span>
+          )}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <input
+            value={invNo}
+            onChange={(e) => setInvNo(e.target.value)}
+            placeholder="TLE invoice number"
+            className={inputClass}
+          />
+          <input
+            value={invValue}
+            onChange={(e) => setInvValue(e.target.value)}
+            type="number"
+            placeholder={`Invoice value (order: ${order.order_value != null ? order.order_value.toFixed(2) : "—"})`}
+            className={inputClass}
+          />
+          <input
+            value={invSkus}
+            onChange={(e) => setInvSkus(e.target.value)}
+            placeholder="Invoiced SKUs (comma separated)"
+            className={`${inputClass} sm:col-span-2 lg:col-span-1`}
+          />
+        </div>
+
+        {mismatch && (mismatch.valueMismatch || mismatch.skuMismatch) ? (
+          <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            <p className="font-semibold">Mismatch detected — remarks are mandatory to complete.</p>
+            <ul className="mt-1 list-inside list-disc text-xs">
+              {mismatch.valueMismatch ? (
+                <li>
+                  Invoice value ≠ order value ({order.order_value != null ? order.order_value.toFixed(2) : "—"}).
+                </li>
+              ) : null}
+              {mismatch.missingSkus.length ? <li>In order but not invoiced: {mismatch.missingSkus.join(", ")}</li> : null}
+              {mismatch.extraSkus.length ? <li>Invoiced but not in order: {mismatch.extraSkus.join(", ")}</li> : null}
+            </ul>
+          </div>
+        ) : null}
+
+        <textarea
+          value={invRemarks}
+          onChange={(e) => setInvRemarks(e.target.value)}
+          placeholder={remarksRequired ? "Remarks (required — explain the mismatch)" : "Remarks (optional)"}
+          className={`${inputClass} mt-2 h-20 ${remarksRequired && !invRemarks.trim() ? "ring-1 ring-rose-300" : ""}`}
+        />
+        <button
+          type="button"
+          disabled={busy || !invNo.trim() || (remarksRequired && !invRemarks.trim())}
+          onClick={() => handleSaveInvoice(order.id)}
+          className={`${btnPrimary} mt-2 disabled:opacity-50`}
+        >
+          {busy ? "Saving…" : order.invoice_verified ? "Update invoice" : "Save & verify invoice"}
+        </button>
+      </div>
+
+      {/* Tracking & fulfillment */}
       <div className={`${surface} mt-4 p-4`}>
         <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Tracking & Shopify fulfillment</h2>
         {!allReady ? (
