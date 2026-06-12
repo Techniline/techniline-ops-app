@@ -191,24 +191,43 @@ export async function POST(request: Request): Promise<Response> {
     const orderId = typeof b.orderId === "string" ? b.orderId : "";
     const srt = typeof b.srtNumber === "string" ? b.srtNumber.trim() : "";
     const prt = typeof b.prtNumber === "string" ? b.prtNumber.trim() : "";
+    const reason = typeof b.reason === "string" ? b.reason.trim() : "";
     if (!orderId) return Response.json({ ok: false, error: "Missing order." }, { status: 400 });
-    if (!srt || !prt) {
-      return Response.json(
-        { ok: false, error: "Both SRT and PRT document numbers are required to close a cancelled order." },
-        { status: 400 }
-      );
-    }
+
     const { data: order, error } = await svc
       .from("shopify_orders")
-      .select("id, order_number, logistics_status")
+      .select("id, order_number, logistics_status, tle_invoice_number")
       .eq("id", orderId)
       .maybeSingle();
     if (error || !order) return Response.json({ ok: false, error: "Order not found." }, { status: 404 });
 
-    const { error: uErr } = await svc
-      .from("shopify_orders")
-      .update({ srt_number: srt, prt_number: prt, cancellation_closed: true, updated_at: new Date().toISOString() })
-      .eq("id", orderId);
+    // If the order was invoiced, returns apply → SRT & PRT are mandatory.
+    // If cancelled before any invoice, no return docs exist → a reason/remark is
+    // enough to close it.
+    const wasInvoiced = !!(order as { tle_invoice_number: string | null }).tle_invoice_number;
+    if (wasInvoiced) {
+      if (!srt || !prt) {
+        return Response.json(
+          { ok: false, error: "This order was invoiced — both SRT and PRT document numbers are required to close it." },
+          { status: 400 }
+        );
+      }
+    } else if (!reason) {
+      return Response.json(
+        { ok: false, error: "Order was cancelled before invoicing — add a reason/remark to mark it closed." },
+        { status: 400 }
+      );
+    }
+
+    const update: Record<string, unknown> = {
+      cancellation_closed: true,
+      updated_at: new Date().toISOString(),
+    };
+    if (srt) update.srt_number = srt;
+    if (prt) update.prt_number = prt;
+    if (reason) update.invoice_remarks = reason;
+
+    const { error: uErr } = await svc.from("shopify_orders").update(update).eq("id", orderId);
     if (uErr) return Response.json({ ok: false, error: uErr.message }, { status: 500 });
 
     await svc.from("logistics_activity_logs").insert({
@@ -216,8 +235,8 @@ export async function POST(request: Request): Promise<Response> {
       entity_id: orderId,
       order_number: (order as { order_number: string | null }).order_number,
       action: "cancellation_closed",
-      new_value: `SRT ${srt} / PRT ${prt}`,
-      notes: "Cancelled order closed with SRT & PRT document numbers.",
+      new_value: wasInvoiced ? `SRT ${srt} / PRT ${prt}` : "Cancelled before invoice",
+      notes: wasInvoiced ? "Cancelled order closed with SRT & PRT document numbers." : `Closed (no invoice): ${reason}`,
       user_id: auth.uid,
     });
     return Response.json({ ok: true });

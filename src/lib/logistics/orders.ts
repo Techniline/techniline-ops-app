@@ -227,8 +227,13 @@ export async function saveInvoice(input: InvoiceInput): Promise<InvoiceResult> {
   throw new Error((j.error as string) ?? `HTTP ${res.status}`);
 }
 
-export async function closeCancellation(orderId: string, srtNumber: string, prtNumber: string): Promise<void> {
-  await post("/api/logistics/order", { action: "close_cancellation", orderId, srtNumber, prtNumber });
+export async function closeCancellation(
+  orderId: string,
+  srtNumber: string,
+  prtNumber: string,
+  reason?: string
+): Promise<void> {
+  await post("/api/logistics/order", { action: "close_cancellation", orderId, srtNumber, prtNumber, reason });
 }
 
 export interface InvoiceDraft {

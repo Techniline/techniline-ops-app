@@ -67,6 +67,7 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   const [parsing, setParsing] = useState(false);
   const [srt, setSrt] = useState("");
   const [prt, setPrt] = useState("");
+  const [closeReason, setCloseReason] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -210,29 +211,59 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
         </div>
       ) : null}
 
-      {/* Cancelled order: SRT/PRT closure required (evidence logged) */}
+      {/* Cancelled order closure (evidence logged). If invoiced, SRT & PRT are
+          required (returns apply); if cancelled before invoicing, a reason/remark
+          is enough. */}
       {needsClosure ? (
-        <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-800 dark:bg-rose-950/30">
-          <h2 className="text-sm font-semibold text-rose-800 dark:text-rose-200">
-            Order cancelled — closure required
-          </h2>
-          <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
-            Enter the SRT and PRT document numbers to close this cancelled order. Both are
-            mandatory; the closure is written to the activity log as evidence.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <input className={inputClass} placeholder="SRT number" value={srt} onChange={(e) => setSrt(e.target.value)} />
-            <input className={inputClass} placeholder="PRT number" value={prt} onChange={(e) => setPrt(e.target.value)} />
-            <button
-              type="button"
-              disabled={busy || !srt.trim() || !prt.trim()}
-              onClick={() => guarded(() => closeCancellation(order.id, srt.trim(), prt.trim()), "Cancellation closed.")}
-              className={`${btnPrimary} disabled:opacity-50`}
-            >
-              Close cancelled order
-            </button>
+        order.tle_invoice_number ? (
+          <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-800 dark:bg-rose-950/30">
+            <h2 className="text-sm font-semibold text-rose-800 dark:text-rose-200">Order cancelled — closure required</h2>
+            <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
+              This order was invoiced. Enter the SRT and PRT document numbers to close it. Both are
+              mandatory; the closure is written to the activity log as evidence.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <input className={inputClass} placeholder="SRT number" value={srt} onChange={(e) => setSrt(e.target.value)} />
+              <input className={inputClass} placeholder="PRT number" value={prt} onChange={(e) => setPrt(e.target.value)} />
+              <button
+                type="button"
+                disabled={busy || !srt.trim() || !prt.trim()}
+                onClick={() => guarded(() => closeCancellation(order.id, srt.trim(), prt.trim()), "Cancellation closed.")}
+                className={`${btnPrimary} disabled:opacity-50`}
+              >
+                Close cancelled order
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+            <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+              Order cancelled before invoicing — no SRT/PRT needed
+            </h2>
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+              No invoice was raised, so there are no return documents. Add a reason/remark to mark it
+              closed; it&apos;s written to the activity log as evidence.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <input
+                className={`${inputClass} sm:col-span-2`}
+                placeholder="Reason / remark (e.g. customer cancelled before dispatch)"
+                value={closeReason}
+                onChange={(e) => setCloseReason(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={busy || !closeReason.trim()}
+                onClick={() =>
+                  guarded(() => closeCancellation(order.id, "", "", closeReason.trim()), "Cancellation closed.")
+                }
+                className={`${btnPrimary} disabled:opacity-50`}
+              >
+                Mark closed
+              </button>
+            </div>
+          </div>
+        )
       ) : null}
       {order.logistics_status === "cancelled" && order.cancellation_closed ? (
         <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900">
