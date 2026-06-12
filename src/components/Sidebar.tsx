@@ -12,9 +12,11 @@ import {
   canViewCocoblu,
   canViewFinance,
   canViewLogistics,
+  canViewLogisticsPage,
   canViewLpTracker,
   isLogisticsOnly,
   isManager,
+  type LogisticsPage,
 } from "@/lib/permissions";
 
 import {
@@ -100,47 +102,50 @@ export function Sidebar({
   ].filter((i) => i.show);
 
   // Logistics portal — categorized into channels / deliveries / operations /
-  // marketplace, shown in the sidebar for logistics-capable users.
-  const logisticsSections: NavSection[] = [
-    { items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon }] },
+  // marketplace. Each item is filtered by the user's per-page grant so partial-
+  // access staff (e.g. Maricel: reseller/PRT/reports, Aaron: orders) see only
+  // their pages.
+  const can = (page: LogisticsPage) => canViewLogisticsPage(profile, page);
+  const logisticsSectionsRaw: NavSection[] = [
+    { heading: "Logistics", items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon, show: can("dashboard") }] },
     {
       heading: "Channels",
-      items: [{ href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon }],
+      items: [{ href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon, show: can("orders") }],
     },
     {
       heading: "Deliveries",
       items: [
-        { href: "/logistics/reseller", label: "Reseller Deliveries", icon: ResellerIcon },
-        { href: "/logistics/cargo", label: "Cargo Deliveries", icon: CargoIcon },
+        { href: "/logistics/reseller", label: "Reseller Deliveries", icon: ResellerIcon, show: can("reseller") },
+        { href: "/logistics/cargo", label: "Cargo Deliveries", icon: CargoIcon, show: can("cargo") },
       ],
     },
     {
       heading: "Operations",
       items: [
-        { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon },
-        { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon },
+        { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon, show: can("prt") },
+        { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon, show: can("reports") },
       ],
     },
     {
       heading: "Marketplace",
       items: [
-        { href: "/logistics/amazon-vendor", label: "Amazon Vendor", icon: CocobluIcon, comingSoon: true },
-        { href: "/logistics/amazon-df", label: "Amazon DF", icon: CocobluIcon, comingSoon: true },
-        { href: "/logistics/amazon-seller", label: "Amazon Seller / Flex", icon: CocobluIcon, comingSoon: true },
-        { href: "/logistics/noon", label: "Noon", icon: CocobluIcon, comingSoon: true },
+        { href: "/logistics/amazon-vendor", label: "Amazon Vendor", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
+        { href: "/logistics/amazon-df", label: "Amazon DF", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
+        { href: "/logistics/amazon-seller", label: "Amazon Seller / Flex", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
+        { href: "/logistics/noon", label: "Noon", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
       ],
     },
   ];
 
+  // Drop items the user can't access, then drop sections left empty.
+  const logisticsSections: NavSection[] = logisticsSectionsRaw
+    .map((s) => ({ ...s, items: s.items.filter((i) => i.show !== false) }))
+    .filter((s) => s.items.length > 0);
+
   // Assemble the sections to render.
   const sections: NavSection[] = logisticsOnly
-    ? [{ heading: "Logistics", items: logisticsSections[0].items }, ...logisticsSections.slice(1)]
-    : [
-        { heading: "Menu", items: generalItems },
-        ...(canViewLogistics(profile)
-          ? [{ heading: "Logistics", items: logisticsSections[0].items }, ...logisticsSections.slice(1)]
-          : []),
-      ];
+    ? logisticsSections
+    : [{ heading: "Menu", items: generalItems }, ...(canViewLogistics(profile) ? logisticsSections : [])];
 
   async function handleSignOut() {
     setSigningOut(true);

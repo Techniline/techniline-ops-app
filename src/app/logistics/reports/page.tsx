@@ -50,7 +50,7 @@ export default function DeliveryReportsPage() {
   }, [load]);
 
   return (
-    <LogisticsShell title="Delivery Reports" subtitle="Delay, branch support, courier and audit logs.">
+    <LogisticsShell title="Delivery Reports" subtitle="Delay, branch support, courier and audit logs." page="reports">
       <div className="mb-4 flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button key={t.key} type="button" className={tab === t.key ? btnPrimary : btnSecondary} onClick={() => setTab(t.key)}>

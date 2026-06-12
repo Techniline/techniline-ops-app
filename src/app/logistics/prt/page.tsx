@@ -117,6 +117,7 @@ export default function PrtRequestsPage() {
     <LogisticsShell
       title="Product Transfer Requests (PRT)"
       subtitle="Branch-to-branch stock transfer requests."
+      page="prt"
       actions={
         <button type="button" className={btnPrimary} onClick={() => setDraft({ ...EMPTY })}>
           + New PRT

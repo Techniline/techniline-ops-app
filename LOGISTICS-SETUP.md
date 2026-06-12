@@ -223,6 +223,36 @@ end $$;
 
 ---
 
+## Step 1b — Per-page access for Maricel & Aaron (optional grants)
+
+Maricel (Reseller / PRT / Reports) and Aaron (Shopify orders) are `staff`, so the
+RLS policies above would block them. Re-run this to let those two specific users
+through at the database layer (the app still limits each to their granted pages).
+Safe to re-run; uses their fixed Supabase UIDs.
+
+```sql
+do $$
+declare
+  t text;
+  cond constant text :=
+    '(public.current_user_role() in (''manager'',''admin'',''logistics'') '
+    || 'or auth.uid() in (''227fdb27-80b5-4040-ab14-4bb945068af7'',''cbb81b27-8756-4f2d-bfe0-04211c27092c''))';
+begin
+  foreach t in array array[
+    'shopify_orders','shopify_order_items','tracking_updates','prt_requests',
+    'reseller_deliveries','cargo_deliveries','logistics_activity_logs','logistics_api_error_logs'
+  ] loop
+    execute format('drop policy if exists %I on public.%I', t || '_logistics_rw', t);
+    execute format(
+      'create policy %I on public.%I for all to authenticated using %s with check %s',
+      t || '_logistics_rw', t, cond, cond
+    );
+  end loop;
+end $$;
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

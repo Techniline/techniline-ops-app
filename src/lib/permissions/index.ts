@@ -55,10 +55,46 @@ export function canViewLpTracker(profile: ProfileArg): boolean {
   return hasCapability(profile, "lp_tracker");
 }
 
-/** Logistics portal: the dedicated logistics user (role) OR a manager OR a holder
- *  of the logistics capability. */
+/**
+ * Logistics page keys. Full-access users (logistics role / manager / logistics
+ * capability) see every page; specific staff can be granted individual pages by
+ * user id below (e.g. Maricel handles reseller/PRT/reports, Aaron handles the
+ * Shopify order channel) without giving them the whole portal.
+ */
+export type LogisticsPage =
+  | "dashboard"
+  | "orders"
+  | "reseller"
+  | "cargo"
+  | "prt"
+  | "reports"
+  | "marketplace";
+
+const LOGISTICS_PAGE_GRANTS: Readonly<Record<string, readonly LogisticsPage[]>> = {
+  // Maricel
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports"],
+  // Aaron
+  "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["orders"],
+};
+
+/** Which logistics pages a profile may access — "all" or an explicit list. */
+export function logisticsPages(profile: ProfileArg): "all" | readonly LogisticsPage[] {
+  if (isManager(profile) || profile?.role === "logistics" || hasCapability(profile, "logistics")) {
+    return "all";
+  }
+  return LOGISTICS_PAGE_GRANTS[profile?.id ?? ""] ?? [];
+}
+
+/** May the user see the Logistics portal at all (full access OR any page grant)? */
 export function canViewLogistics(profile: ProfileArg): boolean {
-  return isManager(profile) || profile?.role === "logistics" || hasCapability(profile, "logistics");
+  const pages = logisticsPages(profile);
+  return pages === "all" || pages.length > 0;
+}
+
+/** May the user access a specific logistics page? */
+export function canViewLogisticsPage(profile: ProfileArg, page: LogisticsPage): boolean {
+  const pages = logisticsPages(profile);
+  return pages === "all" || pages.includes(page);
 }
 
 /** A dedicated logistics user who must ONLY see the Logistics portal (not a manager). */

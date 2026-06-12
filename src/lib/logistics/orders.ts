@@ -24,53 +24,91 @@ async function token(): Promise<string> {
   return t;
 }
 
-/** List orders with search + filters (newest first). */
+/** Escape PostgREST `or()` reserved chars in a user term (commas, parens, *). */
+function sanitize(term: string): string {
+  return term.replace(/[(),*\\]/g, " ").trim();
+}
+
+/** Apply the structured (non-text) filters to an orders query. */
+function applyFilters<T>(q: T, filters: OrderFilters): T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let r: any = q;
+  if (filters.logisticsStatus) r = r.eq("logistics_status", filters.logisticsStatus);
+  if (filters.fulfillmentStatus) r = r.eq("fulfillment_status", filters.fulfillmentStatus);
+  if (filters.city) r = r.eq("shipping_city", filters.city);
+  if (filters.shippingMethod) r = r.eq("shipping_method", filters.shippingMethod);
+  if (filters.from) r = r.gte("shopify_created_at", filters.from);
+  if (filters.to) r = r.lte("shopify_created_at", filters.to);
+  return r as T;
+}
+
+/**
+ * Premium search across header fields (order #, name, phone, email) AND line
+ * items (SKU, product title, brand), merged into one result set. Phone matching
+ * is format-insensitive: a typed number is reduced to digits and also matched on
+ * its last 9 digits, so "+971 50 123 4567", "0501234567" and "501234567" all hit.
+ */
 export async function fetchOrders(filters: OrderFilters = {}): Promise<ShopifyOrderRow[]> {
-  let q = supabase.from("shopify_orders").select("*").order("shopify_created_at", { ascending: false }).limit(500);
+  const s = sanitize(filters.search ?? "");
 
-  if (filters.logisticsStatus) q = q.eq("logistics_status", filters.logisticsStatus);
-  if (filters.fulfillmentStatus) q = q.eq("fulfillment_status", filters.fulfillmentStatus);
-  if (filters.city) q = q.eq("shipping_city", filters.city);
-  if (filters.shippingMethod) q = q.eq("shipping_method", filters.shippingMethod);
-  if (filters.from) q = q.gte("shopify_created_at", filters.from);
-  if (filters.to) q = q.lte("shopify_created_at", filters.to);
-
-  const s = filters.search?.trim();
-  if (s) {
-    const like = `%${s}%`;
-    q = q.or(
-      [
-        `order_number.ilike.${like}`,
-        `customer_name.ilike.${like}`,
-        `shipping_phone.ilike.${like}`,
-        `email.ilike.${like}`,
-      ].join(",")
-    );
-  }
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  let rows = data ?? [];
-
-  // SKU search needs a join on items — filter client-side if nothing matched the
-  // header fields but the term could be a SKU.
-  if (s && rows.length === 0) {
-    const { data: items } = await supabase
-      .from("shopify_order_items")
-      .select("order_id")
-      .ilike("sku", `%${s}%`)
+  // No search term → straight filtered list.
+  if (!s) {
+    const { data, error } = await applyFilters(
+      supabase.from("shopify_orders").select("*"),
+      filters
+    )
+      .order("shopify_created_at", { ascending: false })
       .limit(500);
-    const ids = [...new Set((items ?? []).map((i) => i.order_id))];
-    if (ids.length) {
-      const { data: bySku } = await supabase
-        .from("shopify_orders")
-        .select("*")
-        .in("id", ids)
-        .order("shopify_created_at", { ascending: false });
-      rows = bySku ?? [];
-    }
+    if (error) throw new Error(error.message);
+    return data ?? [];
   }
-  return rows;
+
+  const like = `%${s}%`;
+  const digits = s.replace(/\D/g, "");
+  const orParts = [
+    `order_number.ilike.${like}`,
+    `customer_name.ilike.${like}`,
+    `email.ilike.${like}`,
+    `shipping_phone.ilike.${like}`,
+  ];
+  if (digits) {
+    orParts.push(`shipping_phone.ilike.%${digits}%`);
+    if (digits.length >= 9) orParts.push(`shipping_phone.ilike.%${digits.slice(-9)}%`);
+  }
+
+  // 1) Header matches.
+  const headerQ = applyFilters(supabase.from("shopify_orders").select("*"), filters)
+    .or(orParts.join(","))
+    .order("shopify_created_at", { ascending: false })
+    .limit(500);
+
+  // 2) Line-item matches (SKU / title / brand) → order ids.
+  const itemQ = supabase
+    .from("shopify_order_items")
+    .select("order_id")
+    .or([`sku.ilike.${like}`, `title.ilike.${like}`, `brand.ilike.${like}`].join(","))
+    .limit(1000);
+
+  const [{ data: headerRows, error: hErr }, { data: itemRows }] = await Promise.all([headerQ, itemQ]);
+  if (hErr) throw new Error(hErr.message);
+
+  const byId = new Map<string, ShopifyOrderRow>();
+  for (const r of headerRows ?? []) byId.set(r.id, r);
+
+  const itemIds = [...new Set((itemRows ?? []).map((i) => i.order_id))].filter((id) => !byId.has(id));
+  if (itemIds.length) {
+    const { data: itemOrders } = await applyFilters(
+      supabase.from("shopify_orders").select("*").in("id", itemIds),
+      filters
+    ).limit(500);
+    for (const r of itemOrders ?? []) byId.set(r.id, r);
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    const ta = a.shopify_created_at ? Date.parse(a.shopify_created_at) : 0;
+    const tb = b.shopify_created_at ? Date.parse(b.shopify_created_at) : 0;
+    return tb - ta;
+  });
 }
 
 export interface OrderDetail {

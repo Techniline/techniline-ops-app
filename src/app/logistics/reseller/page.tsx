@@ -71,6 +71,7 @@ export default function ResellerDeliveriesPage() {
     <LogisticsShell
       title="Reseller Deliveries"
       subtitle="Manual reseller delivery tracking."
+      page="reseller"
       actions={
         <button type="button" className={btnPrimary} onClick={() => setDraft({ ...EMPTY })}>
           + New delivery

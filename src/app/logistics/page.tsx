@@ -153,6 +153,7 @@ export default function LogisticsDashboardPage() {
     <LogisticsShell
       title="Logistics Dashboard"
       subtitle="Live operational snapshot across all delivery channels."
+      page="dashboard"
     >
       {kpis?.notSetUp ? (
         <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">

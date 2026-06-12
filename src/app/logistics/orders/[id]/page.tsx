@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
 
   if (loading) {
     return (
-      <LogisticsShell title="Order" subtitle="Loading…">
+      <LogisticsShell title="Order" subtitle="Loading…" page="orders">
         <div className={`${surface} p-5 text-sm text-slate-500`}>Loading…</div>
       </LogisticsShell>
     );
@@ -100,7 +100,7 @@ export default function OrderDetailPage() {
 
   if (!detail) {
     return (
-      <LogisticsShell title="Order not found">
+      <LogisticsShell title="Order not found" page="orders">
         <div className={`${surface} p-5 text-sm text-slate-500`}>
           This order doesn&apos;t exist.{" "}
           <Link href="/logistics/orders" className="text-indigo-600 hover:underline">
@@ -117,6 +117,7 @@ export default function OrderDetailPage() {
     <LogisticsShell
       title={order.order_number ?? order.shopify_order_id}
       subtitle="Order detail, picking & fulfillment."
+      page="orders"
       actions={
         <Link href="/logistics/orders" className={btnSecondary}>
           ← All orders

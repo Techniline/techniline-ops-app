@@ -110,6 +110,7 @@ export default function LogisticsOrdersPage() {
     <LogisticsShell
       title="Shopify / MusicMajlis Orders"
       subtitle="Sync, track and fulfill MusicMajlis orders."
+      page="orders"
       actions={
         <div className="flex items-center gap-2">
           {lastSync ? (
@@ -130,14 +131,41 @@ export default function LogisticsOrdersPage() {
         <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div>
       ) : null}
 
+      {/* Premium search */}
+      <div className="mb-3">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3-3" strokeLinecap="round" />
+            </svg>
+          </span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by order number, customer name, mobile, email, SKU or product…"
+            className={`${inputClass} h-11 w-full rounded-xl pl-9 pr-9 text-[15px]`}
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+        {search ? (
+          <p className="mt-1 px-1 text-xs text-slate-400">
+            Matching across orders and product lines. Phone matches ignore spaces and country code.
+          </p>
+        ) : null}
+      </div>
+
       {/* Filters */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search order / name / phone / email / SKU"
-          className={`${inputClass} col-span-2 lg:col-span-2`}
-        />
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <select value={logisticsStatus} onChange={(e) => setLogisticsStatus(e.target.value)} className={inputClass}>
           <option value="">All statuses</option>
           {LOGISTICS_STATUS.map((s) => (

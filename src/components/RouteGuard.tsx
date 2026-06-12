@@ -6,7 +6,13 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/app/providers/AuthProvider";
-import { canViewLogistics, hasCapability, isLogisticsOnly } from "@/lib/permissions";
+import {
+  canViewLogistics,
+  canViewLogisticsPage,
+  hasCapability,
+  isLogisticsOnly,
+  type LogisticsPage,
+} from "@/lib/permissions";
 import type { Capability } from "@/lib/types";
 
 import { LoadingScreen } from "./LoadingScreen";
@@ -25,6 +31,11 @@ interface RouteGuardProps {
    * is redirected to /dashboard.
    */
   requireLogistics?: boolean;
+  /**
+   * The specific logistics page being guarded. When set, the user must hold a
+   * grant for this page (full-access users always do); otherwise redirected.
+   */
+  logisticsPage?: LogisticsPage;
 }
 
 /**
@@ -36,7 +47,7 @@ interface RouteGuardProps {
  * to /logistics. This enforces the access rule at the routing layer, not just
  * by hiding sidebar items.
  */
-export function RouteGuard({ children, requireCapability, requireLogistics }: RouteGuardProps) {
+export function RouteGuard({ children, requireCapability, requireLogistics, logisticsPage }: RouteGuardProps) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -48,6 +59,7 @@ export function RouteGuard({ children, requireCapability, requireLogistics }: Ro
     !!profile &&
     (!requireCapability || hasCapability(profile, requireCapability)) &&
     (!requireLogistics || canViewLogistics(profile)) &&
+    (!logisticsPage || canViewLogisticsPage(profile, logisticsPage)) &&
     // A logistics-only user may never view a non-logistics route.
     (!isLogisticsOnly(profile) || onLogisticsRoute);
 
@@ -70,10 +82,15 @@ export function RouteGuard({ children, requireCapability, requireLogistics }: Ro
       return;
     }
 
+    if (logisticsPage && !canViewLogisticsPage(profile, logisticsPage)) {
+      router.replace("/dashboard");
+      return;
+    }
+
     if (requireCapability && !hasCapability(profile, requireCapability)) {
       router.replace("/dashboard");
     }
-  }, [loading, user, profile, requireCapability, requireLogistics, onLogisticsRoute, router]);
+  }, [loading, user, profile, requireCapability, requireLogistics, logisticsPage, onLogisticsRoute, router]);
 
   if (loading) {
     return <LoadingScreen message="Checking your session…" />;

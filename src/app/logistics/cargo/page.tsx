@@ -71,6 +71,7 @@ export default function CargoDeliveriesPage() {
     <LogisticsShell
       title="Cargo Deliveries"
       subtitle="Manual cargo / freight tracking."
+      page="cargo"
       actions={
         <button type="button" className={btnPrimary} onClick={() => setDraft({ ...EMPTY })}>
           + New cargo
