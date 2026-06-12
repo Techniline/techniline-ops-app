@@ -261,7 +261,7 @@ export async function fetchOrdersForSync(sinceIso: string): Promise<SyncOrder[]>
   let url: string | null =
     `/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(sinceIso)}`;
   let pages = 0;
-  while (url && pages < 40) {
+  while (url && pages < 120) {
     const res: Response = await shopGet(url);
     if (!res.ok) throw new Error(`Shopify orders ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const json = (await res.json()) as { orders?: RawFullOrder[] };

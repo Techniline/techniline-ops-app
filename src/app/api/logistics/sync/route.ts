@@ -3,6 +3,7 @@ import { authorizeLogistics } from "@/lib/logistics/serverAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const LAST_SYNC_KEY = "logistics_shopify_last_sync";
 const DEFAULT_LOOKBACK_DAYS = 30;
@@ -16,15 +17,21 @@ export async function POST(request: Request): Promise<Response> {
   }
   const svc = auth.serviceClient;
 
-  // Window: from the last successful sync (minus a small overlap), else lookback.
+  // Window: an explicit ?since=YYYY-MM-DD (one-time historical backfill) wins;
+  // otherwise from the last successful sync (minus a small overlap), else lookback.
+  const sinceParam = new URL(request.url).searchParams.get("since");
   let sinceIso: string;
-  const { data: setting } = await svc.from("app_settings").select("value").eq("key", LAST_SYNC_KEY).maybeSingle();
-  const last = (setting as { value?: string | null } | null)?.value ?? null;
-  if (last) {
-    // Re-fetch a 6h overlap so edits near the boundary aren't missed.
-    sinceIso = new Date(new Date(last).getTime() - 6 * 3600 * 1000).toISOString();
+  if (sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)) {
+    sinceIso = new Date(`${sinceParam}T00:00:00Z`).toISOString();
   } else {
-    sinceIso = new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
+    const { data: setting } = await svc.from("app_settings").select("value").eq("key", LAST_SYNC_KEY).maybeSingle();
+    const last = (setting as { value?: string | null } | null)?.value ?? null;
+    if (last) {
+      // Re-fetch a 6h overlap so edits near the boundary aren't missed.
+      sinceIso = new Date(new Date(last).getTime() - 6 * 3600 * 1000).toISOString();
+    } else {
+      sinceIso = new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
+    }
   }
 
   let orders: SyncOrder[];

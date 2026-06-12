@@ -206,13 +206,17 @@ export default function LogisticsOrdersPage() {
     void fetchOrderFacets().then(setFacets).catch(() => {});
   }, []);
 
-  async function handleSync() {
+  async function handleSync(since?: string) {
     setSyncing(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await syncOrders();
-      setMsg(`Synced ${r.ordersUpserted} order(s), ${r.itemsUpserted} item(s)${r.errors ? `, ${r.errors} error(s)` : ""}.`);
+      const r = await syncOrders(since);
+      setMsg(
+        `${since ? "Historical backfill" : "Synced"}: ${r.ordersUpserted} order(s), ${r.itemsUpserted} item(s)${
+          r.errors ? `, ${r.errors} error(s)` : ""
+        }.`
+      );
       setLastSync(r.lastSync);
       await load();
       void fetchOrderFacets().then(setFacets).catch(() => {});
@@ -220,6 +224,12 @@ export default function LogisticsOrdersPage() {
       setErr(errMsg(e));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  function handleBackfill() {
+    if (window.confirm("Pull all MusicMajlis orders from 1 Jan 2025 to now? This is a one-time historical sync and may take a minute.")) {
+      void handleSync("2025-01-01");
     }
   }
 
@@ -321,6 +331,11 @@ export default function LogisticsOrdersPage() {
             ) : null}
           </div>
           {canImport ? (
+            <button type="button" onClick={handleBackfill} disabled={syncing} className={btnSecondary}>
+              {syncing ? "Working…" : "Backfill 2025→now"}
+            </button>
+          ) : null}
+          {canImport ? (
             <label
               className={`${ledgerBusy ? "pointer-events-none opacity-60" : ""} ${btnSecondary} cursor-pointer`}
             >
@@ -338,7 +353,7 @@ export default function LogisticsOrdersPage() {
               />
             </label>
           ) : null}
-          <button type="button" onClick={handleSync} disabled={syncing} className={btnPrimary}>
+          <button type="button" onClick={() => handleSync()} disabled={syncing} className={btnPrimary}>
             {syncing ? "Syncing…" : "Sync now"}
           </button>
         </div>

@@ -160,8 +160,10 @@ export interface SyncResult {
   lastSync: string;
 }
 
-export async function syncOrders(): Promise<SyncResult> {
-  const j = await post("/api/logistics/sync", {});
+/** Sync orders. Pass `since` (YYYY-MM-DD) for a one-time historical backfill. */
+export async function syncOrders(since?: string): Promise<SyncResult> {
+  const path = since ? `/api/logistics/sync?since=${encodeURIComponent(since)}` : "/api/logistics/sync";
+  const j = await post(path, {});
   return j as unknown as SyncResult;
 }
 
