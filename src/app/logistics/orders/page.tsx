@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import Link from "next/link";
-
+import { useAuth } from "@/app/providers/AuthProvider";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
-import { btnPrimary, inputClass, tableWrap, tdCell, thCell } from "@/components/ui";
+import { OrderDetailView } from "@/components/logistics/OrderDetailView";
+import { btnPrimary, btnSecondary, inputClass, tableWrap, tdCell } from "@/components/ui";
 import { labelFor, LOGISTICS_STATUS } from "@/lib/logistics/constants";
 import {
   fetchOrderFacets,
@@ -39,7 +40,53 @@ function StatusBadge({ value }: { value: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
 }
 
+interface Column {
+  id: string;
+  label: string;
+  cell: (o: ShopifyOrderRow, open: (id: string) => void) => ReactNode;
+  className?: string;
+}
+
+const COLUMNS: Column[] = [
+  {
+    id: "order",
+    label: "Order",
+    cell: (o, open) => (
+      <button type="button" onClick={() => open(o.id)} className="font-semibold text-indigo-600 hover:underline">
+        {o.order_number ?? o.shopify_order_id}
+      </button>
+    ),
+  },
+  { id: "created", label: "Created", cell: (o) => fmtDate(o.shopify_created_at) },
+  { id: "fulfillment", label: "Fulfillment", cell: (o) => o.fulfillment_status ?? "—" },
+  { id: "logistics", label: "Logistics", cell: (o) => <StatusBadge value={o.logistics_status} /> },
+  { id: "customer", label: "Customer", cell: (o) => o.customer_name ?? "—" },
+  {
+    id: "value",
+    label: "Value",
+    className: "tabular-nums",
+    cell: (o) => (o.order_value != null ? `${o.currency ?? "AED"} ${o.order_value.toFixed(2)}` : "—"),
+  },
+  { id: "payment", label: "Payment", cell: (o) => o.payment_method ?? "—" },
+  { id: "phone", label: "Phone", cell: (o) => o.shipping_phone ?? "—" },
+  { id: "method", label: "Method", cell: (o) => o.shipping_method ?? "—" },
+  { id: "city", label: "City", cell: (o) => o.shipping_city ?? "—" },
+  { id: "tracking", label: "Tracking", cell: (o) => o.tracking_number ?? "—" },
+  { id: "updated", label: "Updated", cell: (o) => fmtDate(o.updated_at) },
+];
+
+const DEFAULT_ORDER = COLUMNS.map((c) => c.id);
+const COL_BY_ID = new Map(COLUMNS.map((c) => [c.id, c]));
+
+interface SavedView {
+  order: string[];
+  hidden: string[];
+}
+
 export default function LogisticsOrdersPage() {
+  const { profile } = useAuth();
+  const viewKey = `logistics.orders.view.${profile?.id ?? "anon"}`;
+
   const [rows, setRows] = useState<ShopifyOrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -47,6 +94,13 @@ export default function LogisticsOrdersPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [facets, setFacets] = useState<{ cities: string[]; methods: string[] }>({ cities: [], methods: [] });
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  // Column view (order + hidden), persisted per user.
+  const [colOrder, setColOrder] = useState<string[]>(DEFAULT_ORDER);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [colMenu, setColMenu] = useState(false);
+  const dragId = useRef<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [logisticsStatus, setLogisticsStatus] = useState("");
@@ -54,6 +108,37 @@ export default function LogisticsOrdersPage() {
   const [shippingMethod, setShippingMethod] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  // Load saved view once profile is known.
+  useEffect(() => {
+    if (typeof window === "undefined" || !profile?.id) return;
+    try {
+      const raw = window.localStorage.getItem(viewKey);
+      if (raw) {
+        const v = JSON.parse(raw) as SavedView;
+        // Merge with current column set so new columns appear and removed ones drop.
+        const known = v.order.filter((id) => COL_BY_ID.has(id));
+        const missing = DEFAULT_ORDER.filter((id) => !known.includes(id));
+        setColOrder([...known, ...missing]);
+        setHidden(new Set((v.hidden ?? []).filter((id) => COL_BY_ID.has(id))));
+      }
+    } catch {
+      /* ignore malformed saved view */
+    }
+  }, [profile?.id, viewKey]);
+
+  const persist = useCallback(
+    (order: string[], hide: Set<string>) => {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(viewKey, JSON.stringify({ order, hidden: [...hide] }));
+    },
+    [viewKey]
+  );
+
+  const visibleColumns = useMemo(
+    () => colOrder.map((id) => COL_BY_ID.get(id)).filter((c): c is Column => !!c && !hidden.has(c.id)),
+    [colOrder, hidden]
+  );
 
   const filters: OrderFilters = useMemo(
     () => ({
@@ -71,8 +156,7 @@ export default function LogisticsOrdersPage() {
     setLoading(true);
     setErr(null);
     try {
-      const data = await fetchOrders(filters);
-      setRows(data);
+      setRows(await fetchOrders(filters));
     } catch (e) {
       setErr(errMsg(e));
     } finally {
@@ -106,6 +190,33 @@ export default function LogisticsOrdersPage() {
     }
   }
 
+  // Column drag-reorder.
+  function onDrop(targetId: string) {
+    const src = dragId.current;
+    dragId.current = null;
+    if (!src || src === targetId) return;
+    const next = colOrder.filter((id) => id !== src);
+    const at = next.indexOf(targetId);
+    next.splice(at, 0, src);
+    setColOrder(next);
+    persist(next, hidden);
+  }
+
+  function toggleColumn(id: string) {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setHidden(next);
+    persist(colOrder, next);
+  }
+
+  function resetView() {
+    setColOrder(DEFAULT_ORDER);
+    setHidden(new Set());
+    persist(DEFAULT_ORDER, new Set());
+    setColMenu(false);
+  }
+
   return (
     <LogisticsShell
       title="Shopify / MusicMajlis Orders"
@@ -113,9 +224,37 @@ export default function LogisticsOrdersPage() {
       page="orders"
       actions={
         <div className="flex items-center gap-2">
-          {lastSync ? (
-            <span className="text-xs text-slate-500">Last sync: {fmtDate(lastSync)}</span>
-          ) : null}
+          {lastSync ? <span className="text-xs text-slate-500">Last sync: {fmtDate(lastSync)}</span> : null}
+          <div className="relative">
+            <button type="button" onClick={() => setColMenu((v) => !v)} className={btnSecondary}>
+              Columns ▾
+            </button>
+            {colMenu ? (
+              <div className="absolute right-0 z-30 mt-1 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <p className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Show columns
+                </p>
+                <div className="max-h-64 overflow-y-auto">
+                  {colOrder.map((id) => {
+                    const col = COL_BY_ID.get(id);
+                    if (!col) return null;
+                    return (
+                      <label key={id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <input type="checkbox" checked={!hidden.has(id)} onChange={() => toggleColumn(id)} className="h-4 w-4" />
+                        {col.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-1 flex justify-between border-t border-slate-100 px-1 pt-2 dark:border-slate-800">
+                  <button type="button" onClick={resetView} className="text-xs text-slate-500 hover:underline">
+                    Reset
+                  </button>
+                  <span className="text-[11px] text-slate-400">Saved automatically</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button type="button" onClick={handleSync} disabled={syncing} className={btnPrimary}>
             {syncing ? "Syncing…" : "Sync now"}
           </button>
@@ -123,9 +262,7 @@ export default function LogisticsOrdersPage() {
       }
     >
       {msg ? (
-        <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {msg}
-        </div>
+        <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div>
       ) : null}
       {err ? (
         <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div>
@@ -157,11 +294,6 @@ export default function LogisticsOrdersPage() {
             </button>
           ) : null}
         </div>
-        {search ? (
-          <p className="mt-1 px-1 text-xs text-slate-400">
-            Matching across orders and product lines. Phone matches ignore spaces and country code.
-          </p>
-        ) : null}
       </div>
 
       {/* Filters */}
@@ -196,66 +328,88 @@ export default function LogisticsOrdersPage() {
         </div>
       </div>
 
-      <div className={tableWrap}>
+      {/* Scrollable table with sticky header + draggable, hideable columns */}
+      <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
         <table className="min-w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr>
-              <th className={thCell}>Order</th>
-              <th className={thCell}>Created</th>
-              <th className={thCell}>Fulfillment</th>
-              <th className={thCell}>Logistics</th>
-              <th className={thCell}>Customer</th>
-              <th className={thCell}>Value</th>
-              <th className={thCell}>Payment</th>
-              <th className={thCell}>Phone</th>
-              <th className={thCell}>Method</th>
-              <th className={thCell}>City</th>
-              <th className={thCell}>Tracking</th>
-              <th className={thCell}>Updated</th>
+              {visibleColumns.map((col) => (
+                <th
+                  key={col.id}
+                  draggable
+                  onDragStart={() => (dragId.current = col.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onDrop(col.id)}
+                  className="cursor-grab select-none whitespace-nowrap border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800"
+                  title="Drag to reorder"
+                >
+                  {col.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td className={tdCell} colSpan={12}>
+                <td className={tdCell} colSpan={visibleColumns.length || 1}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td className={tdCell} colSpan={12}>
+                <td className={tdCell} colSpan={visibleColumns.length || 1}>
                   No orders. Click <strong>Sync now</strong> to pull MusicMajlis orders from Shopify.
                 </td>
               </tr>
             ) : (
               rows.map((o) => (
-                <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className={tdCell}>
-                    <Link href={`/logistics/orders/${o.id}`} className="font-semibold text-indigo-600 hover:underline">
-                      {o.order_number ?? o.shopify_order_id}
-                    </Link>
-                  </td>
-                  <td className={tdCell}>{fmtDate(o.shopify_created_at)}</td>
-                  <td className={tdCell}>{o.fulfillment_status ?? "—"}</td>
-                  <td className={tdCell}>
-                    <StatusBadge value={o.logistics_status} />
-                  </td>
-                  <td className={tdCell}>{o.customer_name ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>
-                    {o.order_value != null ? `${o.currency ?? "AED"} ${o.order_value.toFixed(2)}` : "—"}
-                  </td>
-                  <td className={tdCell}>{o.payment_method ?? "—"}</td>
-                  <td className={tdCell}>{o.shipping_phone ?? "—"}</td>
-                  <td className={tdCell}>{o.shipping_method ?? "—"}</td>
-                  <td className={tdCell}>{o.shipping_city ?? "—"}</td>
-                  <td className={tdCell}>{o.tracking_number ?? "—"}</td>
-                  <td className={tdCell}>{fmtDate(o.updated_at)}</td>
+                <tr
+                  key={o.id}
+                  onClick={() => setOpenId(o.id)}
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                >
+                  {visibleColumns.map((col) => (
+                    <td
+                      key={col.id}
+                      className={`${tdCell} whitespace-nowrap ${col.className ?? ""}`}
+                      onClick={col.id === "order" ? (e) => e.stopPropagation() : undefined}
+                    >
+                      {col.cell(o, setOpenId)}
+                    </td>
+                  ))}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      <p className="mt-2 text-xs text-slate-400">
+        Drag a column header to reorder · use <strong>Columns ▾</strong> to show/hide · click a row to open the order.
+      </p>
+
+      {/* Order detail modal */}
+      {openId ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setOpenId(null)}>
+          <div
+            className="my-4 w-full max-w-5xl rounded-2xl bg-slate-50 p-4 shadow-2xl dark:bg-slate-950"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Order detail</h2>
+              <button
+                type="button"
+                onClick={() => setOpenId(null)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <OrderDetailView id={openId} onChanged={load} />
+          </div>
+        </div>
+      ) : null}
     </LogisticsShell>
   );
 }
