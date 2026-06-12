@@ -1,4 +1,5 @@
 import { pushFulfillment, shopifyConfigured } from "@/lib/shopify/client";
+import { NO_TRACKING_COURIERS } from "@/lib/logistics/constants";
 import { authorizeLogistics } from "@/lib/logistics/serverAuth";
 
 export const runtime = "nodejs";
@@ -30,8 +31,9 @@ export async function POST(request: Request): Promise<Response> {
   const deliveryNotes = typeof b.deliveryNotes === "string" ? b.deliveryNotes.trim() || null : null;
   const notify = b.notify === true;
 
+  const pickup = courier ? NO_TRACKING_COURIERS.has(courier) : false;
   if (!orderId) return Response.json({ ok: false, error: "Missing order." }, { status: 400 });
-  if (!trackingNumber) {
+  if (!trackingNumber && !pickup) {
     return Response.json({ ok: false, error: "A tracking number is required before fulfilling." }, { status: 400 });
   }
 
@@ -72,7 +74,7 @@ export async function POST(request: Request): Promise<Response> {
     .insert({
       order_id: orderId,
       courier,
-      tracking_number: trackingNumber,
+      tracking_number: trackingNumber || (pickup ? "In-Store Pickup" : null),
       tracking_url: trackingUrl,
       dispatch_date: dispatchDate,
       delivery_notes: deliveryNotes,
@@ -85,7 +87,7 @@ export async function POST(request: Request): Promise<Response> {
 
   // Push to Shopify.
   const result = await pushFulfillment(shopifyOrderId, {
-    number: trackingNumber,
+    number: trackingNumber || null,
     url: trackingUrl,
     company: courier,
     notify,
@@ -98,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
     // Keep internal record; mark order as tracking_updated (saved, not yet in Shopify).
     await svc
       .from("shopify_orders")
-      .update({ tracking_number: trackingNumber, logistics_status: "tracking_updated", updated_at: nowIso })
+      .update({ tracking_number: trackingNumber || (pickup ? "In-Store Pickup" : null), logistics_status: "tracking_updated", updated_at: nowIso })
       .eq("id", orderId);
     await svc.from("logistics_api_error_logs").insert({
       source: "shopify_fulfillment",
@@ -127,7 +129,7 @@ export async function POST(request: Request): Promise<Response> {
   await svc
     .from("shopify_orders")
     .update({
-      tracking_number: trackingNumber,
+      tracking_number: trackingNumber || (pickup ? "In-Store Pickup" : null),
       fulfillment_status: "fulfilled",
       logistics_status: "fulfilled_shopify",
       updated_at: nowIso,

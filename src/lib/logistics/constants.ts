@@ -40,8 +40,12 @@ export const COURIERS: { value: string; label: string }[] = [
   { value: "jeebly", label: "Jeebly" },
   { value: "team", label: "Team Delivery" },
   { value: "cargo", label: "Cargo" },
+  { value: "in_store_pickup", label: "In-Store Pickup" },
   { value: "other", label: "Other" },
 ];
+
+/** Couriers that don't carry a tracking number (e.g. customer collects in store). */
+export const NO_TRACKING_COURIERS = new Set(["in_store_pickup"]);
 
 export const PRT_STATUS: { value: string; label: string }[] = [
   { value: "requested", label: "Requested" },

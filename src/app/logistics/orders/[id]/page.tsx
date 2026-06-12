@@ -11,6 +11,7 @@ import {
   COURIERS,
   labelFor,
   LOGISTICS_STATUS,
+  NO_TRACKING_COURIERS,
   PICKING_STATUS,
   SOURCE_LOCATIONS,
 } from "@/lib/logistics/constants";
@@ -71,6 +72,8 @@ export default function OrderDetailPage() {
 
   const allReady =
     !!detail && detail.items.length > 0 && detail.items.every((li) => li.picked && li.packed);
+  const isPickup = NO_TRACKING_COURIERS.has(courier);
+  const canFulfill = allReady && (isPickup || !!trackingNumber.trim());
 
   async function guarded(fn: () => Promise<void>, ok?: string) {
     setBusy(true);
@@ -286,8 +289,9 @@ export default function OrderDetailPage() {
           <input
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="Tracking number"
-            className={inputClass}
+            placeholder={isPickup ? "Tracking number (not needed for pickup)" : "Tracking number"}
+            disabled={isPickup}
+            className={`${inputClass} disabled:opacity-50`}
           />
           <input
             value={trackingUrl}
@@ -309,7 +313,7 @@ export default function OrderDetailPage() {
         </label>
         <button
           type="button"
-          disabled={busy || !allReady || !trackingNumber.trim()}
+          disabled={busy || !canFulfill}
           onClick={() =>
             guarded(
               () =>
@@ -322,12 +326,12 @@ export default function OrderDetailPage() {
                   deliveryNotes: deliveryNotes.trim() || null,
                   notify,
                 }),
-              "Fulfillment pushed to Shopify."
+              isPickup ? "Marked fulfilled (In-Store Pickup) in Shopify." : "Fulfillment pushed to Shopify."
             )
           }
           className={`${btnPrimary} mt-3 disabled:opacity-50`}
         >
-          {busy ? "Working…" : "Fulfill & push tracking to Shopify"}
+          {busy ? "Working…" : isPickup ? "Mark fulfilled (In-Store Pickup)" : "Fulfill & push tracking to Shopify"}
         </button>
 
         {tracking.length > 0 ? (

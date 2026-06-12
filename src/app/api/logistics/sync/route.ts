@@ -81,6 +81,17 @@ export async function POST(request: Request): Promise<Response> {
     upserted += 1;
     const orderId = (row as { id: string }).id;
 
+    // Bidirectional: if Shopify already marks the order fulfilled, reflect that
+    // internally — unless it has moved further along (out for delivery/delivered)
+    // or been cancelled. Never downgrade a more advanced internal status.
+    if ((o.fulfillmentStatus ?? "").toLowerCase() === "fulfilled") {
+      await svc
+        .from("shopify_orders")
+        .update({ logistics_status: "fulfilled_shopify", updated_at: new Date().toISOString() })
+        .eq("id", orderId)
+        .not("logistics_status", "in", "(fulfilled_shopify,out_for_delivery,delivered,cancelled)");
+    }
+
     if (o.items.length) {
       // Upsert line items on shopify_line_id; omit picked/packed/picking_status/
       // source_location so internal state is preserved.
