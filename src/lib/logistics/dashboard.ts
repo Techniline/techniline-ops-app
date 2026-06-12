@@ -11,6 +11,8 @@ export interface LogisticsKpis {
   delayed48: number;
   onHold: number;
   resellerPending: number;
+  resellerDueToday: number;
+  resellerDelayed: number;
   cargoPending: number;
   /** Set when the logistics tables aren't created yet, so the UI can prompt setup. */
   notSetUp: boolean;
@@ -27,9 +29,13 @@ const EMPTY: LogisticsKpis = {
   delayed48: 0,
   onHold: 0,
   resellerPending: 0,
+  resellerDueToday: 0,
+  resellerDelayed: 0,
   cargoPending: 0,
   notSetUp: false,
 };
+
+const OPEN_RESELLER = "(delivered,cancelled)";
 
 const PENDING_STATUSES = [
   "new_order",
@@ -54,10 +60,13 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
   const startToday = new Date(now);
   startToday.setHours(0, 0, 0, 0);
   const todayIso = startToday.toISOString();
+  const todayDate = todayIso.slice(0, 10);
   const ago24 = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
   const ago48 = new Date(now.getTime() - 48 * 3600 * 1000).toISOString();
 
   const orders = () => supabase.from("shopify_orders").select("*", { count: "exact", head: true });
+  const reseller = () =>
+    supabase.from("reseller_deliveries").select("*", { count: "exact", head: true }).not("status", "in", OPEN_RESELLER);
 
   try {
     const [
@@ -71,6 +80,8 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       delayed48,
       prtRequested,
       resellerPending,
+      resellerDueToday,
+      resellerDelayed,
       cargoPending,
     ] = await Promise.all([
       take(orders().gte("shopify_created_at", todayIso)),
@@ -87,12 +98,9 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
           .select("*", { count: "exact", head: true })
           .eq("status", "requested"),
       ),
-      take(
-        supabase
-          .from("reseller_deliveries")
-          .select("*", { count: "exact", head: true })
-          .not("status", "in", "(delivered,cancelled)"),
-      ),
+      take(reseller()),
+      take(reseller().eq("scheduled_date", todayDate)),
+      take(reseller().lt("scheduled_date", todayDate)),
       take(
         supabase
           .from("cargo_deliveries")
@@ -112,6 +120,8 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       delayed48: delayed48.n,
       onHold: onHold.n,
       resellerPending: resellerPending.n,
+      resellerDueToday: resellerDueToday.n,
+      resellerDelayed: resellerDelayed.n,
       cargoPending: cargoPending.n,
       notSetUp: shopifyToday.missing,
     };

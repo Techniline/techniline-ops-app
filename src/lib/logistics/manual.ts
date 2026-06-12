@@ -27,12 +27,24 @@ export async function fetchResellers(): Promise<ResellerRow[]> {
 }
 
 export async function saveReseller(row: Partial<ResellerRow> & { id?: string }): Promise<void> {
+  const uid = row.id ? undefined : await currentUserId();
   const payload: TablesInsert<"reseller_deliveries"> = {
     ...row,
-    created_by: row.id ? undefined : await currentUserId(),
+    // On create, stamp who raised the request (and the legacy created_by).
+    created_by: uid,
+    requested_by: row.id ? row.requested_by ?? undefined : uid,
     updated_at: new Date().toISOString(),
   } as TablesInsert<"reseller_deliveries">;
   const { error } = await supabase.from("reseller_deliveries").upsert(payload);
+  if (error) throw new Error(error.message);
+}
+
+/** Quick status change (used by the warehouse to action a request). */
+export async function setResellerStatus(id: string, status: string): Promise<void> {
+  const { error } = await supabase
+    .from("reseller_deliveries")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", id);
   if (error) throw new Error(error.message);
 }
 

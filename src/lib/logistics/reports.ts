@@ -11,6 +11,7 @@ const PENDING = [
 
 export interface DelayRow {
   id: string;
+  kind: "Order" | "Reseller";
   orderNumber: string | null;
   customer: string | null;
   status: string;
@@ -19,20 +20,37 @@ export interface DelayRow {
   hoursOpen: number;
 }
 
-/** Orders still in a pending logistics state, oldest first, with hours open. */
+const OPEN_RESELLER = ["new", "preparing", "ready", "out_for_delivery", "issue"];
+
+/**
+ * Pending Shopify orders (delay from creation) + reseller deliveries overdue
+ * against their scheduled date (delay from the scheduled date). Sorted by the
+ * longest delay first.
+ */
 export async function delayReport(): Promise<DelayRow[]> {
-  const { data, error } = await supabase
-    .from("shopify_orders")
-    .select("id, order_number, customer_name, logistics_status, shipping_city, shopify_created_at")
-    .in("logistics_status", PENDING)
-    .order("shopify_created_at", { ascending: true })
-    .limit(500);
-  if (error) throw new Error(error.message);
   const now = Date.now();
-  return (data ?? []).map((o) => {
+  const todayDate = new Date(now).toISOString().slice(0, 10);
+
+  const [{ data: orders, error }, { data: resellers }] = await Promise.all([
+    supabase
+      .from("shopify_orders")
+      .select("id, order_number, customer_name, logistics_status, shipping_city, shopify_created_at")
+      .in("logistics_status", PENDING)
+      .limit(500),
+    supabase
+      .from("reseller_deliveries")
+      .select("id, reseller_name, reference_no, status, city, scheduled_date")
+      .in("status", OPEN_RESELLER)
+      .lt("scheduled_date", todayDate)
+      .limit(500),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const orderRows: DelayRow[] = (orders ?? []).map((o) => {
     const created = o.shopify_created_at ? new Date(o.shopify_created_at).getTime() : now;
     return {
       id: o.id,
+      kind: "Order",
       orderNumber: o.order_number,
       customer: o.customer_name,
       status: o.logistics_status,
@@ -41,6 +59,22 @@ export async function delayReport(): Promise<DelayRow[]> {
       hoursOpen: Math.round((now - created) / 3600000),
     };
   });
+
+  const resellerRows: DelayRow[] = (resellers ?? []).map((r) => {
+    const due = r.scheduled_date ? new Date(r.scheduled_date).getTime() : now;
+    return {
+      id: r.id,
+      kind: "Reseller",
+      orderNumber: r.reference_no ?? r.reseller_name,
+      customer: r.reseller_name,
+      status: r.status,
+      city: r.city,
+      createdAt: r.scheduled_date,
+      hoursOpen: Math.round((now - due) / 3600000),
+    };
+  });
+
+  return [...orderRows, ...resellerRows].sort((a, b) => b.hoursOpen - a.hoursOpen);
 }
 
 export interface BranchRow {

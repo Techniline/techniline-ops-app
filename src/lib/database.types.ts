@@ -2229,7 +2229,9 @@ export type Database = {
           payment_method: string | null
           phone: string | null
           reference_no: string | null
+          requested_by: string | null
           reseller_name: string | null
+          scheduled_date: string | null
           status: string
           total_value: number | null
           tracking_number: string | null
@@ -2249,7 +2251,9 @@ export type Database = {
           payment_method?: string | null
           phone?: string | null
           reference_no?: string | null
+          requested_by?: string | null
           reseller_name?: string | null
+          scheduled_date?: string | null
           status?: string
           total_value?: number | null
           tracking_number?: string | null
@@ -2269,7 +2273,9 @@ export type Database = {
           payment_method?: string | null
           phone?: string | null
           reference_no?: string | null
+          requested_by?: string | null
           reseller_name?: string | null
+          scheduled_date?: string | null
           status?: string
           total_value?: number | null
           tracking_number?: string | null

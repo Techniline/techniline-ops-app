@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { btnPrimary, btnSecondary, surface, tableWrap, tdCell, thCell } from "@/components/ui";
-import { labelFor, LOGISTICS_STATUS, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
+import { labelFor, LOGISTICS_STATUS, RESELLER_STATUS, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
 import { fetchActivity, fetchApiErrors, type ActivityRow, type ApiErrorRow } from "@/lib/logistics/manual";
 import { branchSupportReport, courierReport, delayReport, type BranchRow, type CourierRow, type DelayRow } from "@/lib/logistics/reports";
 
@@ -64,17 +64,20 @@ export default function DeliveryReportsPage() {
           <div className="p-5 text-sm text-slate-500">Loading…</div>
         ) : tab === "delay" ? (
           <table className="min-w-full text-sm">
-            <thead><tr><th className={thCell}>Order</th><th className={thCell}>Customer</th><th className={thCell}>Status</th><th className={thCell}>City</th><th className={thCell}>Created</th><th className={thCell}>Hours open</th></tr></thead>
+            <thead><tr><th className={thCell}>Type</th><th className={thCell}>Ref</th><th className={thCell}>Customer</th><th className={thCell}>Status</th><th className={thCell}>City</th><th className={thCell}>Since</th><th className={thCell}>Delay</th></tr></thead>
             <tbody>
-              {delay.length === 0 ? <tr><td className={tdCell} colSpan={6}>No pending orders.</td></tr> :
+              {delay.length === 0 ? <tr><td className={tdCell} colSpan={7}>Nothing delayed.</td></tr> :
                 delay.map((r) => (
-                  <tr key={r.id} className={r.hoursOpen >= 48 ? "bg-rose-50" : r.hoursOpen >= 24 ? "bg-amber-50" : ""}>
+                  <tr key={`${r.kind}-${r.id}`} className={r.hoursOpen >= 48 ? "bg-rose-50" : r.hoursOpen >= 24 ? "bg-amber-50" : ""}>
+                    <td className={tdCell}>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.kind === "Reseller" ? "bg-fuchsia-100 text-fuchsia-700" : "bg-slate-100 text-slate-600"}`}>{r.kind}</span>
+                    </td>
                     <td className={tdCell}>{r.orderNumber ?? "—"}</td>
                     <td className={tdCell}>{r.customer ?? "—"}</td>
-                    <td className={tdCell}>{labelFor(LOGISTICS_STATUS, r.status)}</td>
+                    <td className={tdCell}>{r.kind === "Reseller" ? labelFor(RESELLER_STATUS, r.status) : labelFor(LOGISTICS_STATUS, r.status)}</td>
                     <td className={tdCell}>{r.city ?? "—"}</td>
                     <td className={tdCell}>{fmt(r.createdAt)}</td>
-                    <td className={`${tdCell} tabular-nums font-semibold`}>{r.hoursOpen}h</td>
+                    <td className={`${tdCell} tabular-nums font-semibold`}>{r.hoursOpen >= 48 ? `${Math.round(r.hoursOpen / 24)}d` : `${r.hoursOpen}h`}</td>
                   </tr>
                 ))}
             </tbody>

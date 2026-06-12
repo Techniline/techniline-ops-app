@@ -253,6 +253,18 @@ end $$;
 
 ---
 
+## Step 1c — Reseller scheduled-delivery date (run once)
+
+Adds the requested/scheduled delivery date (delay is counted from this) and the
+requester reference. Idempotent.
+
+```sql
+alter table public.reseller_deliveries add column if not exists scheduled_date date;
+alter table public.reseller_deliveries add column if not exists requested_by uuid references public.users(id);
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

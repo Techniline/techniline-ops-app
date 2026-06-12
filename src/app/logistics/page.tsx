@@ -35,6 +35,8 @@ const KPIS: Kpi[] = [
   { key: "delayed48", label: "Delayed > 48h", accent: "from-rose-50 to-white text-rose-700" },
   { key: "onHold", label: "On hold", accent: "from-red-50 to-white text-red-700" },
   { key: "resellerPending", label: "Reseller pending", accent: "from-fuchsia-50 to-white text-fuchsia-700" },
+  { key: "resellerDueToday", label: "Reseller due today", accent: "from-pink-50 to-white text-pink-700" },
+  { key: "resellerDelayed", label: "Reseller delayed", accent: "from-rose-50 to-white text-rose-700" },
   { key: "cargoPending", label: "Cargo pending", accent: "from-cyan-50 to-white text-cyan-700" },
 ];
 

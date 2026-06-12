@@ -4,11 +4,30 @@ import { useCallback, useEffect, useState } from "react";
 
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
-import { labelFor, RESELLER_STATUS } from "@/lib/logistics/constants";
-import { deleteReseller, fetchResellers, saveReseller, type ResellerRow } from "@/lib/logistics/manual";
+import { RESELLER_STATUS } from "@/lib/logistics/constants";
+import {
+  deleteReseller,
+  fetchResellers,
+  saveReseller,
+  setResellerStatus,
+  type ResellerRow,
+} from "@/lib/logistics/manual";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
+}
+
+const OPEN_RESELLER = new Set(["new", "preparing", "ready", "out_for_delivery", "issue"]);
+
+/** Days a delivery is overdue against its scheduled date (0 if not overdue / no date). */
+function overdueDays(row: ResellerRow): number {
+  if (!row.scheduled_date || !OPEN_RESELLER.has(row.status)) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(row.scheduled_date);
+  due.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - due.getTime()) / 86400000);
+  return diff > 0 ? diff : 0;
 }
 
 type Draft = Partial<ResellerRow>;
@@ -65,6 +84,19 @@ export default function ResellerDeliveriesPage() {
     }
   }
 
+  async function changeStatus(id: string, status: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await setResellerStatus(id, status);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const set = (k: keyof ResellerRow, v: unknown) => setDraft((d) => ({ ...(d ?? {}), [k]: v }));
 
   return (
@@ -99,7 +131,14 @@ export default function ResellerDeliveriesPage() {
             <input className={inputClass} type="number" placeholder="Total value" value={draft.total_value ?? ""} onChange={(e) => set("total_value", e.target.value ? Number(e.target.value) : null)} />
             <input className={inputClass} placeholder="Courier" value={draft.courier ?? ""} onChange={(e) => set("courier", e.target.value)} />
             <input className={inputClass} placeholder="Tracking number" value={draft.tracking_number ?? ""} onChange={(e) => set("tracking_number", e.target.value)} />
-            <input className={inputClass} type="date" value={draft.dispatch_date ?? ""} onChange={(e) => set("dispatch_date", e.target.value || null)} />
+            <label className="flex flex-col gap-1 text-xs text-slate-500">
+              Scheduled delivery date
+              <input className={inputClass} type="date" value={draft.scheduled_date ?? ""} onChange={(e) => set("scheduled_date", e.target.value || null)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-slate-500">
+              Dispatch date
+              <input className={inputClass} type="date" value={draft.dispatch_date ?? ""} onChange={(e) => set("dispatch_date", e.target.value || null)} />
+            </label>
             <select className={inputClass} value={draft.status ?? "new"} onChange={(e) => set("status", e.target.value)}>
               {RESELLER_STATUS.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -129,36 +168,61 @@ export default function ResellerDeliveriesPage() {
               <th className={thCell}>City</th>
               <th className={thCell}>Items</th>
               <th className={thCell}>Value</th>
-              <th className={thCell}>Courier</th>
-              <th className={thCell}>Tracking</th>
+              <th className={thCell}>Scheduled</th>
               <th className={thCell}>Status</th>
               <th className={thCell}></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className={tdCell} colSpan={9}>Loading…</td></tr>
+              <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td className={tdCell} colSpan={9}>No reseller deliveries yet.</td></tr>
+              <tr><td className={tdCell} colSpan={8}>No reseller deliveries yet.</td></tr>
             ) : (
-              rows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className={tdCell}>{r.reseller_name ?? "—"}</td>
-                  <td className={tdCell}>{r.reference_no ?? "—"}</td>
-                  <td className={tdCell}>{r.city ?? "—"}</td>
-                  <td className={tdCell}>{r.items_summary ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>{r.total_value != null ? r.total_value.toFixed(2) : "—"}</td>
-                  <td className={tdCell}>{r.courier ?? "—"}</td>
-                  <td className={tdCell}>{r.tracking_number ?? "—"}</td>
-                  <td className={tdCell}>{labelFor(RESELLER_STATUS, r.status)}</td>
-                  <td className={tdCell}>
-                    <div className="flex gap-2">
-                      <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
-                      <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              rows.map((r) => {
+                const od = overdueDays(r);
+                return (
+                  <tr key={r.id} className={od > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40"}>
+                    <td className={tdCell}>{r.reseller_name ?? "—"}</td>
+                    <td className={tdCell}>{r.reference_no ?? "—"}</td>
+                    <td className={tdCell}>{r.city ?? "—"}</td>
+                    <td className={tdCell}>{r.items_summary ?? "—"}</td>
+                    <td className={`${tdCell} tabular-nums`}>{r.total_value != null ? r.total_value.toFixed(2) : "—"}</td>
+                    <td className={tdCell}>
+                      {r.scheduled_date ? (
+                        <div className="flex flex-col">
+                          <span>{r.scheduled_date}</span>
+                          {od > 0 ? (
+                            <span className="text-[11px] font-semibold text-rose-600">{od}d late</span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className={tdCell}>
+                      <select
+                        value={r.status}
+                        disabled={busy}
+                        onChange={(e) => changeStatus(r.id, e.target.value)}
+                        className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        {RESELLER_STATUS.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className={tdCell}>
+                      <div className="flex gap-2">
+                        <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
+                        <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
