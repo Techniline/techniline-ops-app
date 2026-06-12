@@ -187,8 +187,10 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   }
 
   const { order, items, tracking } = detail;
-  const invoiceMissing = !order.tle_invoice_number;
-  const needsClosure = order.logistics_status === "cancelled" && !order.cancellation_closed;
+  const isCancelled = order.logistics_status === "cancelled";
+  // Cancelled orders don't need a TLE invoice — their requirement is SRT/PRT closure.
+  const invoiceMissing = !order.tle_invoice_number && !isCancelled;
+  const needsClosure = isCancelled && !order.cancellation_closed;
   const remarksRequired = !!mismatch && (mismatch.valueMismatch || mismatch.skuMismatch);
 
   return (
@@ -391,6 +393,10 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
             {order.invoice_verified ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                 Verified
+              </span>
+            ) : isCancelled ? (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                Not required (cancelled)
               </span>
             ) : (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
