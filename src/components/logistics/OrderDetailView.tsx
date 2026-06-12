@@ -123,11 +123,28 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
       if (d.invoiceNumber) setInvNo(d.invoiceNumber);
       if (d.invoiceValue != null) setInvValue(String(d.invoiceValue));
       if (d.skus.length) setInvSkus(d.skus.join(", "));
-      setMsg(
-        d.engine === "basic"
-          ? "Captured from PDF (basic) — please review the fields before saving."
-          : "Captured from PDF — please review the fields, then Save & verify."
+
+      // Auto-match against the order immediately (before save).
+      const o = detail?.order;
+      const orderSkus = new Set(
+        (detail?.items ?? []).map((li) => (li.sku ?? "").trim().toUpperCase()).filter(Boolean)
       );
+      const invSet = new Set(d.skus.map((s) => s.trim().toUpperCase()).filter(Boolean));
+      const valueMismatch =
+        d.invoiceValue != null && o?.order_value != null && Math.abs(d.invoiceValue - o.order_value) > 0.01;
+      const missingSkus = invSet.size ? [...orderSkus].filter((s) => !invSet.has(s)) : [];
+      const extraSkus = invSet.size ? [...invSet].filter((s) => !orderSkus.has(s)) : [];
+      const skuMismatch = missingSkus.length > 0 || extraSkus.length > 0;
+
+      if (valueMismatch || skuMismatch) {
+        setMismatch({ completed: false, valueMismatch, skuMismatch, missingSkus, extraSkus });
+        setMsg(null);
+      } else {
+        setMismatch(null);
+        setMsg(
+          `Captured from PDF${d.engine === "basic" ? " (basic)" : ""} — matches the order. Review, then Save & verify.`
+        );
+      }
     } catch (e) {
       setErr(errMsg(e));
     } finally {
