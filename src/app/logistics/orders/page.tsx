@@ -8,13 +8,16 @@ import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { OrderDetailView } from "@/components/logistics/OrderDetailView";
 import { btnPrimary, btnSecondary, inputClass, tableWrap, tdCell } from "@/components/ui";
 import { labelFor, LOGISTICS_STATUS } from "@/lib/logistics/constants";
+import { isManager } from "@/lib/permissions";
 import {
   fetchOrderFacets,
   fetchOrders,
+  importLedger,
   lastSyncTime,
   loadUserView,
   saveUserView,
   syncOrders,
+  type LedgerImportSummary,
   type OrderFilters,
   type ShopifyOrderRow,
 } from "@/lib/logistics/orders";
@@ -107,6 +110,12 @@ export default function LogisticsOrdersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [facets, setFacets] = useState<{ cities: string[]; methods: string[] }>({ cities: [], methods: [] });
   const [openId, setOpenId] = useState<string | null>(null);
+
+  // Ledger backfill (manager only)
+  const [ledgerFile, setLedgerFile] = useState<File | null>(null);
+  const [ledgerSummary, setLedgerSummary] = useState<LedgerImportSummary | null>(null);
+  const [ledgerBusy, setLedgerBusy] = useState(false);
+  const canImport = isManager(profile);
 
   // Column view (order + hidden), persisted per user.
   const [colOrder, setColOrder] = useState<string[]>(DEFAULT_ORDER);
@@ -214,6 +223,38 @@ export default function LogisticsOrdersPage() {
     }
   }
 
+  async function previewLedger(file: File) {
+    setLedgerBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await importLedger(file, false);
+      setLedgerFile(file);
+      setLedgerSummary(r.summary);
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setLedgerBusy(false);
+    }
+  }
+
+  async function applyLedger() {
+    if (!ledgerFile) return;
+    setLedgerBusy(true);
+    setErr(null);
+    try {
+      const r = await importLedger(ledgerFile, true);
+      setMsg(`Backfilled ${r.filled ?? 0} invoice(s) from the ledger.`);
+      setLedgerFile(null);
+      setLedgerSummary(null);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setLedgerBusy(false);
+    }
+  }
+
   // Column drag-reorder.
   function onDrop(targetId: string) {
     const src = dragId.current;
@@ -279,6 +320,24 @@ export default function LogisticsOrdersPage() {
               </div>
             ) : null}
           </div>
+          {canImport ? (
+            <label
+              className={`${ledgerBusy ? "pointer-events-none opacity-60" : ""} ${btnSecondary} cursor-pointer`}
+            >
+              {ledgerBusy ? "Reading…" : "Import ledger"}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                disabled={ledgerBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void previewLedger(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ) : null}
           <button type="button" onClick={handleSync} disabled={syncing} className={btnPrimary}>
             {syncing ? "Syncing…" : "Sync now"}
           </button>
@@ -412,6 +471,50 @@ export default function LogisticsOrdersPage() {
         Drag a column header to reorder · use <strong>Columns ▾</strong> to show/hide · click a row to open the order.
       </p>
 
+      {/* Ledger import preview */}
+      {ledgerSummary ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => !ledgerBusy && setLedgerSummary(null)}>
+          <div className="my-8 w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Import sales ledger — preview</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Backfills the TLE invoice number + value for past orders that don&apos;t have one yet,
+              matched by the S-number in the ledger&apos;s Comment.
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <Stat label="Ledger rows" value={ledgerSummary.ledgerRows} />
+              <Stat label="Orders in system" value={ledgerSummary.ordersInSystem} />
+              <Stat label="Will fill" value={ledgerSummary.willFill} tone="emerald" />
+              <Stat label="Already had invoice" value={ledgerSummary.alreadyHadInvoice} />
+              <Stat label="Unmatched ledger rows" value={ledgerSummary.unmatchedLedger} tone="amber" />
+              <Stat label="Value mismatches" value={ledgerSummary.valueMismatches} tone="rose" />
+            </dl>
+            {ledgerSummary.willFill === 0 ? (
+              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                No orders matched by S-number. Check that orders are synced and that their order number
+                contains the S-number (sample unmatched: {ledgerSummary.sampleUnmatched.join(", ") || "—"}).
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">
+                Value mismatches are filled but left unverified with a remark, so they surface for review.
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className={btnSecondary} onClick={() => setLedgerSummary(null)} disabled={ledgerBusy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={btnPrimary}
+                onClick={applyLedger}
+                disabled={ledgerBusy || ledgerSummary.willFill === 0}
+              >
+                {ledgerBusy ? "Applying…" : `Backfill ${ledgerSummary.willFill} order(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Order detail modal */}
       {openId ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => setOpenId(null)}>
@@ -435,5 +538,22 @@ export default function LogisticsOrdersPage() {
         </div>
       ) : null}
     </LogisticsShell>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "emerald" | "amber" | "rose" }) {
+  const color =
+    tone === "emerald"
+      ? "text-emerald-700"
+      : tone === "amber"
+        ? "text-amber-700"
+        : tone === "rose"
+          ? "text-rose-700"
+          : "text-slate-900 dark:text-slate-100";
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+      <dt className="text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className={`text-lg font-bold tabular-nums ${color}`}>{value}</dd>
+    </div>
   );
 }

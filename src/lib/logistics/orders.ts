@@ -286,6 +286,38 @@ export async function saveUserView(key: string, value: unknown): Promise<void> {
     .upsert({ user_id: user.id, key, value: value as never, updated_at: new Date().toISOString() });
 }
 
+export interface LedgerImportSummary {
+  ledgerRows: number;
+  ordersInSystem: number;
+  willFill: number;
+  alreadyHadInvoice: number;
+  unmatchedLedger: number;
+  valueMismatches: number;
+  sampleUnmatched: string[];
+  sampleFill: { snum: string; invoiceNo: string | null; netAmount: number | null; valueMatches: boolean }[];
+}
+
+/** Upload the sales ledger and either preview (apply=false) or backfill (apply=true). */
+export async function importLedger(
+  file: File,
+  apply: boolean
+): Promise<{ dryRun: boolean; filled?: number; summary: LedgerImportSummary }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/logistics/import-ledger?apply=${apply ? "1" : "0"}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await token()}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+  return {
+    dryRun: !!j.dryRun,
+    filled: j.filled as number | undefined,
+    summary: j.summary as LedgerImportSummary,
+  };
+}
+
 export async function lastSyncTime(): Promise<string | null> {
   const { data } = await supabase
     .from("app_settings")
