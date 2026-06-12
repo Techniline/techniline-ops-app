@@ -95,6 +95,35 @@ export function ReturnsIcon(props: IconProps) {
   );
 }
 
+export function ShopifyIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M6 7h12l-1 13H7L6 7Z" />
+      <path d="M9 7a3 3 0 0 1 6 0" />
+    </svg>
+  );
+}
+
+export function ResellerIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <path d="M3 9l9-5 9 5-9 5-9-5Z" />
+      <path d="M3 9v6l9 5 9-5V9" />
+    </svg>
+  );
+}
+
+export function CargoIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <rect x="3" y="8" width="13" height="9" rx="1" />
+      <path d="M16 11h3l2 2v4h-5z" />
+      <circle cx="7.5" cy="18.5" r="1.5" />
+      <circle cx="17.5" cy="18.5" r="1.5" />
+    </svg>
+  );
+}
+
 export function LogisticsIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>

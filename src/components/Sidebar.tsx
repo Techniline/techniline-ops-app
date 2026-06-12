@@ -27,10 +27,12 @@ import {
   DashboardIcon,
   Logo,
   LogoutIcon,
-  LogisticsIcon,
+  CargoIcon,
   LpTrackerIcon,
   PrioritiesIcon,
+  ResellerIcon,
   ReturnsIcon,
+  ShopifyIcon,
 } from "./icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -39,10 +41,14 @@ interface NavItem {
   href: string;
   label: string;
   icon: IconType;
-  show: boolean;
-  disabled?: boolean;
-  /** Marks an item as part of the Logistics portal (shown to logistics-only users). */
-  portal?: "logistics";
+  show?: boolean;
+  comingSoon?: boolean;
+}
+
+interface NavSection {
+  /** Optional heading shown above the group (uppercase eyebrow). */
+  heading?: string;
+  items: NavItem[];
 }
 
 function initialsFrom(name: string): string {
@@ -80,64 +86,61 @@ export function Sidebar({
   // A dedicated logistics user sees ONLY the Logistics portal — nothing else.
   const logisticsOnly = isLogisticsOnly(profile);
 
-  const navItems: NavItem[] = [
+  // General (non-logistics) items, gated by capability.
+  const generalItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
+    { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
+    { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
+    { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },
+    { href: "/cocoblu", label: "Cocoblu", icon: CocobluIcon, show: canViewCocoblu(profile) },
+    { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
+    { href: "/amazon-actions", label: "Amazon Actions", icon: ActionsIcon, show: canViewFinance(profile) },
+    { href: "/returns", label: "Returns", icon: ReturnsIcon, show: canViewFinance(profile) },
+    { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
+  ].filter((i) => i.show);
+
+  // Logistics portal — categorized into channels / deliveries / operations /
+  // marketplace, shown in the sidebar for logistics-capable users.
+  const logisticsSections: NavSection[] = [
+    { items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon }] },
     {
-      href: "/checklist",
-      label: "Checklist",
-      icon: ChecklistIcon,
-      show: canViewChecklist(profile),
+      heading: "Channels",
+      items: [{ href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon }],
     },
     {
-      href: "/priorities",
-      label: "Priorities",
-      icon: PrioritiesIcon,
-      show: true,
+      heading: "Deliveries",
+      items: [
+        { href: "/logistics/reseller", label: "Reseller Deliveries", icon: ResellerIcon },
+        { href: "/logistics/cargo", label: "Cargo Deliveries", icon: CargoIcon },
+      ],
     },
     {
-      href: "/blockers",
-      label: "Blockers",
-      icon: BlockerIcon,
-      show: true,
+      heading: "Operations",
+      items: [
+        { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon },
+        { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon },
+      ],
     },
     {
-      href: "/cocoblu",
-      label: "Cocoblu",
-      icon: CocobluIcon,
-      show: canViewCocoblu(profile),
-    },
-    {
-      href: "/lp",
-      label: "LP Tracker",
-      icon: LpTrackerIcon,
-      show: canViewLpTracker(profile),
-    },
-    {
-      href: "/amazon-actions",
-      label: "Amazon Actions",
-      icon: ActionsIcon,
-      show: canViewFinance(profile),
-    },
-    {
-      href: "/returns",
-      label: "Returns",
-      icon: ReturnsIcon,
-      show: canViewFinance(profile),
-    },
-    {
-      href: "/analytics",
-      label: "Analytics",
-      icon: AnalyticsIcon,
-      show: isManager(profile),
-    },
-    {
-      href: "/logistics",
-      label: "Logistics",
-      icon: LogisticsIcon,
-      show: canViewLogistics(profile),
-      portal: "logistics",
+      heading: "Marketplace",
+      items: [
+        { href: "/logistics/amazon-vendor", label: "Amazon Vendor", icon: CocobluIcon, comingSoon: true },
+        { href: "/logistics/amazon-df", label: "Amazon DF", icon: CocobluIcon, comingSoon: true },
+        { href: "/logistics/amazon-seller", label: "Amazon Seller / Flex", icon: CocobluIcon, comingSoon: true },
+        { href: "/logistics/noon", label: "Noon", icon: CocobluIcon, comingSoon: true },
+      ],
     },
   ];
+
+  // Assemble the sections to render.
+  const sections: NavSection[] = logisticsOnly
+    ? [{ heading: "Logistics", items: logisticsSections[0].items }, ...logisticsSections.slice(1)]
+    : [
+        { heading: "Menu", items: generalItems },
+        ...(canViewLogistics(profile)
+          ? [{ heading: "Logistics", items: logisticsSections[0].items }, ...logisticsSections.slice(1)]
+          : []),
+      ];
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -194,41 +197,54 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-        <p
-          className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 ${labelHidden}`}
-        >
-          Menu
-        </p>
-        {navItems
-          .filter((item) => item.show && (!logisticsOnly || item.portal === "logistics"))
-          .map((item) => {
-            const Icon = item.icon;
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                title={collapsed ? item.label : undefined}
-                className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-                  collapsed ? "lg:justify-center" : ""
-                } ${
-                  active
-                    ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                }`}
+        {sections.map((section, si) => (
+          <div key={section.heading ?? `section-${si}`} className={si > 0 ? "mt-2" : ""}>
+            {section.heading ? (
+              <p
+                className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 ${labelHidden}`}
               >
-                {active ? (
-                  <span className="absolute left-0 top-1/2 h-6 -translate-y-1/2 rounded-r-full bg-indigo-600 lg:w-1" />
-                ) : null}
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className={labelHidden}>{item.label}</span>
-              </Link>
-            );
-          })}
+                {section.heading}
+              </p>
+            ) : null}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const active =
+                item.href === "/logistics"
+                  ? pathname === "/logistics"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  title={collapsed ? item.label : undefined}
+                  className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                    collapsed ? "lg:justify-center" : ""
+                  } ${
+                    active
+                      ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  }`}
+                >
+                  {active ? (
+                    <span className="absolute left-0 top-1/2 h-6 -translate-y-1/2 rounded-r-full bg-indigo-600 lg:w-1" />
+                  ) : null}
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <span className={`flex-1 ${labelHidden}`}>{item.label}</span>
+                  {item.comingSoon ? (
+                    <span
+                      className={`rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ${labelHidden}`}
+                    >
+                      Soon
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User card + sign out */}

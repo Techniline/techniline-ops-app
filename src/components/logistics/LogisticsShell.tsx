@@ -6,11 +6,10 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 
-import { LogisticsNav } from "./LogisticsNav";
-
 /**
  * Wraps a Logistics portal page: route-level access control (logistics users
- * and managers only), the app chrome, the page header and the in-portal nav.
+ * and managers only), the app chrome and the page header. The categorized
+ * Logistics navigation lives in the left sidebar.
  */
 export function LogisticsShell({
   title,
@@ -27,7 +26,6 @@ export function LogisticsShell({
     <RouteGuard requireLogistics>
       <AppShell>
         <PageHeader title={title} subtitle={subtitle} actions={actions} />
-        <LogisticsNav />
         {children}
       </AppShell>
     </RouteGuard>
