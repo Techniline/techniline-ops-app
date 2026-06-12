@@ -52,7 +52,7 @@ create index if not exists shopify_orders_created_idx on public.shopify_orders (
 create table if not exists public.shopify_order_items (
   id                 uuid primary key default gen_random_uuid(),
   order_id           uuid not null references public.shopify_orders(id) on delete cascade,
-  shopify_line_id    text,
+  shopify_line_id    text unique,                -- dedupe key; preserves internal pick/pack state on re-sync
   title              text,
   sku                text,
   brand              text,
@@ -198,6 +198,27 @@ create index if not exists logistics_api_error_logs_created_idx on public.logist
 insert into public.app_settings (key, value)
 values ('logistics_shopify_last_sync', null)
 on conflict (key) do nothing;
+
+-- ============================================================
+-- ROW LEVEL SECURITY
+-- Only logistics-capable users (logistics role, manager, admin) may read/write.
+-- This blocks Aaron/Maricel from these tables at the database layer too.
+-- ============================================================
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'shopify_orders','shopify_order_items','tracking_updates','prt_requests',
+    'reseller_deliveries','cargo_deliveries','logistics_activity_logs','logistics_api_error_logs'
+  ] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_logistics_rw', t);
+    execute format(
+      'create policy %I on public.%I for all to authenticated using (public.current_user_role() in (''manager'',''admin'',''logistics'')) with check (public.current_user_role() in (''manager'',''admin'',''logistics''))',
+      t || '_logistics_rw', t
+    );
+  end loop;
+end $$;
 ```
 
 ---

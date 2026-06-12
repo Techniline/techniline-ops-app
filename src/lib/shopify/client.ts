@@ -29,6 +29,14 @@ async function shopGet(path: string): Promise<Response> {
   });
 }
 
+async function shopPost(path: string, body: unknown): Promise<Response> {
+  return fetch(`${base()}${path}`, {
+    method: "POST",
+    headers: { "X-Shopify-Access-Token": cfg().token, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 interface RawRefundLineItem {
   subtotal?: number | string | null;
 }
@@ -166,6 +174,197 @@ export async function fetchAbandonedCheckouts(fromIso: string, toIso: string): P
     pages += 1;
   }
   return out;
+}
+
+// ── Logistics: full order sync + fulfillment push ───────────────────────────
+
+export interface SyncLineItem {
+  shopifyLineId: string;
+  title: string | null;
+  sku: string | null;
+  brand: string | null; // Shopify "vendor"
+  qty: number;
+  unitPrice: number | null;
+  totalPrice: number | null;
+  fulfilledQty: number;
+}
+
+export interface SyncOrder {
+  shopifyOrderId: string;
+  orderNumber: string | null;
+  shopifyCreatedAt: string | null;
+  fulfillmentStatus: string | null;
+  financialStatus: string | null;
+  customerName: string | null;
+  orderValue: number | null;
+  currency: string | null;
+  paymentMethod: string | null;
+  shippingPhone: string | null;
+  shippingMethod: string | null;
+  shippingCity: string | null;
+  email: string | null;
+  deliveryAddress: string | null;
+  items: SyncLineItem[];
+  raw: unknown;
+}
+
+interface RawLineItem {
+  id?: number | string;
+  title?: string | null;
+  sku?: string | null;
+  vendor?: string | null;
+  quantity?: number | null;
+  fulfillable_quantity?: number | null;
+  price?: string | null;
+}
+interface RawShippingLine {
+  title?: string | null;
+}
+interface RawAddress {
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  country?: string | null;
+  phone?: string | null;
+}
+interface RawFullOrder {
+  id?: number | string;
+  name?: string | null;
+  created_at?: string | null;
+  fulfillment_status?: string | null;
+  financial_status?: string | null;
+  currency?: string | null;
+  total_price?: string | null;
+  current_total_price?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  payment_gateway_names?: string[] | null;
+  customer?: { first_name?: string | null; last_name?: string | null } | null;
+  shipping_address?: RawAddress | null;
+  shipping_lines?: RawShippingLine[] | null;
+  line_items?: RawLineItem[] | null;
+}
+
+function formatAddress(a: RawAddress | null | undefined): string | null {
+  if (!a) return null;
+  const parts = [a.address1, a.address2, a.city, a.province, a.country].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
+}
+
+/**
+ * Fetch full orders (with line items, customer, shipping) created on/after
+ * `sinceIso`, for syncing into the logistics tables. Paged via the Link header.
+ */
+export async function fetchOrdersForSync(sinceIso: string): Promise<SyncOrder[]> {
+  const out: SyncOrder[] = [];
+  let url: string | null =
+    `/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(sinceIso)}`;
+  let pages = 0;
+  while (url && pages < 40) {
+    const res: Response = await shopGet(url);
+    if (!res.ok) throw new Error(`Shopify orders ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const json = (await res.json()) as { orders?: RawFullOrder[] };
+    for (const o of json.orders ?? []) {
+      const name = [o.customer?.first_name, o.customer?.last_name].filter(Boolean).join(" ").trim();
+      const amt = Number(o.current_total_price ?? o.total_price ?? 0);
+      out.push({
+        shopifyOrderId: String(o.id ?? ""),
+        orderNumber: o.name ?? null,
+        shopifyCreatedAt: o.created_at ?? null,
+        fulfillmentStatus: o.fulfillment_status ?? "unfulfilled",
+        financialStatus: o.financial_status ?? null,
+        customerName: name || null,
+        orderValue: Number.isFinite(amt) ? amt : null,
+        currency: o.currency ?? "AED",
+        paymentMethod: (o.payment_gateway_names ?? []).join(", ") || null,
+        shippingPhone: o.shipping_address?.phone ?? o.phone ?? null,
+        shippingMethod: (o.shipping_lines ?? [])[0]?.title ?? null,
+        shippingCity: o.shipping_address?.city ?? null,
+        email: o.email ?? null,
+        deliveryAddress: formatAddress(o.shipping_address),
+        items: (o.line_items ?? []).map((li) => {
+          const price = Number(li.price ?? 0);
+          const qty = Number(li.quantity ?? 0);
+          const fulfillable = Number(li.fulfillable_quantity ?? qty);
+          return {
+            shopifyLineId: String(li.id ?? ""),
+            title: li.title ?? null,
+            sku: li.sku ?? null,
+            brand: li.vendor ?? null,
+            qty,
+            unitPrice: Number.isFinite(price) ? price : null,
+            totalPrice: Number.isFinite(price) ? Number((price * qty).toFixed(2)) : null,
+            fulfilledQty: Math.max(0, qty - fulfillable),
+          };
+        }),
+        raw: o,
+      });
+    }
+    const link = res.headers.get("link") || res.headers.get("Link");
+    const next = link?.split(",").find((p) => p.includes('rel="next"'));
+    const m = next?.match(/<[^>]*\/admin\/api\/[^>]*(\/orders\.json[^>]*)>/);
+    url = m ? m[1] : null;
+    pages += 1;
+  }
+  return out;
+}
+
+export type FulfillmentResult =
+  | { ok: true; fulfillmentId: string }
+  | { ok: false; message: string };
+
+interface RawFulfillmentOrder {
+  id?: number | string;
+  status?: string | null;
+  line_items?: { id?: number | string }[] | null;
+}
+
+/**
+ * Push a fulfillment + tracking to Shopify for an order. Uses the modern
+ * fulfillment-orders flow (REST 2024-10): list open fulfillment orders, then
+ * create a fulfillment across them with tracking info. Returns a structured
+ * result so callers can keep the internal record + retry on failure.
+ */
+export async function pushFulfillment(
+  shopifyOrderId: string,
+  tracking: { number: string | null; url: string | null; company: string | null; notify: boolean }
+): Promise<FulfillmentResult> {
+  try {
+    const foRes = await shopGet(`/orders/${shopifyOrderId}/fulfillment_orders.json`);
+    if (!foRes.ok) {
+      return { ok: false, message: `Shopify fulfillment_orders ${foRes.status}: ${(await foRes.text()).slice(0, 160)}` };
+    }
+    const foJson = (await foRes.json()) as { fulfillment_orders?: RawFulfillmentOrder[] };
+    const open = (foJson.fulfillment_orders ?? []).filter(
+      (fo) => fo.status === "open" || fo.status === "in_progress" || fo.status === "scheduled"
+    );
+    if (open.length === 0) {
+      return { ok: false, message: "No open fulfillment orders (already fulfilled or unfulfillable)." };
+    }
+    const line_items_by_fulfillment_order = open.map((fo) => ({
+      fulfillment_order_id: fo.id,
+    }));
+    const body = {
+      fulfillment: {
+        notify_customer: tracking.notify,
+        tracking_info: {
+          number: tracking.number ?? undefined,
+          url: tracking.url ?? undefined,
+          company: tracking.company ?? undefined,
+        },
+        line_items_by_fulfillment_order,
+      },
+    };
+    const res = await shopPost(`/fulfillments.json`, body);
+    if (!res.ok) {
+      return { ok: false, message: `Shopify fulfillment ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    }
+    const j = (await res.json()) as { fulfillment?: { id?: number | string } };
+    return { ok: true, fulfillmentId: String(j.fulfillment?.id ?? "") };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Shopify request failed." };
+  }
 }
 
 export type OrderValidation =
