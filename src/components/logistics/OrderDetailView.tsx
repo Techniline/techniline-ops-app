@@ -15,6 +15,7 @@ import {
   closeCancellation,
   fetchOrderDetail,
   fulfillOrder,
+  parseInvoicePdf,
   saveInvoice,
   setOrderStatus,
   updateItem,
@@ -63,6 +64,7 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   const [invSkus, setInvSkus] = useState("");
   const [invRemarks, setInvRemarks] = useState("");
   const [mismatch, setMismatch] = useState<InvoiceResult | null>(null);
+  const [parsing, setParsing] = useState(false);
   const [srt, setSrt] = useState("");
   const [prt, setPrt] = useState("");
 
@@ -109,6 +111,27 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
       setErr(errMsg(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleUploadInvoice(file: File) {
+    setParsing(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const d = await parseInvoicePdf(file);
+      if (d.invoiceNumber) setInvNo(d.invoiceNumber);
+      if (d.invoiceValue != null) setInvValue(String(d.invoiceValue));
+      if (d.skus.length) setInvSkus(d.skus.join(", "));
+      setMsg(
+        d.engine === "basic"
+          ? "Captured from PDF (basic) — please review the fields before saving."
+          : "Captured from PDF — please review the fields, then Save & verify."
+      );
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setParsing(false);
     }
   }
 
@@ -331,17 +354,33 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
 
       {/* TLE invoice verification */}
       <div className={`${surface} mt-4 p-4`}>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">TLE Invoice</h2>
-          {order.invoice_verified ? (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-              Verified
-            </span>
-          ) : (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-              Not verified
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <label className={`${busy || parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800`}>
+              {parsing ? "Reading PDF…" : "📎 Upload invoice PDF"}
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                disabled={busy || parsing}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleUploadInvoice(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {order.invoice_verified ? (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                Verified
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                Not verified
+              </span>
+            )}
+          </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <input

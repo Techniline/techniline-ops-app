@@ -218,6 +218,27 @@ export async function closeCancellation(orderId: string, srtNumber: string, prtN
   await post("/api/logistics/order", { action: "close_cancellation", orderId, srtNumber, prtNumber });
 }
 
+export interface InvoiceDraft {
+  invoiceNumber: string | null;
+  invoiceValue: number | null;
+  skus: string[];
+  engine: "ai" | "basic";
+}
+
+/** Upload a TLE invoice PDF and auto-extract number / value / SKUs (no DB write). */
+export async function parseInvoicePdf(file: File): Promise<InvoiceDraft> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/logistics/parse-invoice", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await token()}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: InvoiceDraft; error?: string };
+  if (!res.ok || !j.ok || !j.draft) throw new Error(j.error ?? `HTTP ${res.status}`);
+  return j.draft;
+}
+
 export async function updateItem(
   itemId: string,
   patch: { picked?: boolean; packed?: boolean; picking_status?: string; source_location?: string }
