@@ -204,6 +204,8 @@ export interface SyncOrder {
   shippingCity: string | null;
   email: string | null;
   deliveryAddress: string | null;
+  cancelledAt: string | null;
+  closedAt: string | null;
   items: SyncLineItem[];
   raw: unknown;
 }
@@ -232,6 +234,8 @@ interface RawFullOrder {
   id?: number | string;
   name?: string | null;
   created_at?: string | null;
+  cancelled_at?: string | null;
+  closed_at?: string | null;
   fulfillment_status?: string | null;
   financial_status?: string | null;
   currency?: string | null;
@@ -284,6 +288,8 @@ export async function fetchOrdersForSync(sinceIso: string, untilIso?: string): P
         shippingCity: o.shipping_address?.city ?? null,
         email: o.email ?? null,
         deliveryAddress: formatAddress(o.shipping_address),
+        cancelledAt: o.cancelled_at ?? null,
+        closedAt: o.closed_at ?? null,
         items: (o.line_items ?? []).map((li) => {
           const price = Number(li.price ?? 0);
           const qty = Number(li.quantity ?? 0);

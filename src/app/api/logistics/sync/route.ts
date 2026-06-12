@@ -109,12 +109,40 @@ export async function POST(request: Request): Promise<Response> {
     else itemsUpserted = itemRows.length;
   }
 
-  // 3) Bidirectional: orders Shopify reports fulfilled → fulfilled_shopify
-  // internally, in one update (never downgrading a more advanced status).
-  const fulfilledIds = valid
-    .filter((o) => (o.fulfillmentStatus ?? "").toLowerCase() === "fulfilled")
-    .map((o) => idByShopify.get(o.shopifyOrderId))
-    .filter((x): x is string => !!x);
+  // 3) Reflect Shopify's own order state automatically, in batched updates.
+  const ids = (pred: (o: SyncOrder) => boolean) =>
+    valid.filter(pred).map((o) => idByShopify.get(o.shopifyOrderId)).filter((x): x is string => !!x);
+
+  // a) Canceled or Voided in Shopify → cancelled internally (overrides open
+  //    states; this also triggers the SRT/PRT closure workflow). Skip ones
+  //    already cancelled.
+  const cancelledIds = ids(
+    (o) => !!o.cancelledAt || (o.financialStatus ?? "").toLowerCase() === "voided"
+  );
+  if (cancelledIds.length) {
+    await svc
+      .from("shopify_orders")
+      .update({ logistics_status: "cancelled", updated_at: nowIso })
+      .in("id", cancelledIds)
+      .neq("logistics_status", "cancelled");
+  }
+
+  // b) Archived/closed (and not cancelled) → treat as closed/fulfilled, never
+  //    downgrading a more advanced state.
+  const archivedIds = ids((o) => !!o.closedAt && !o.cancelledAt && (o.financialStatus ?? "").toLowerCase() !== "voided");
+  if (archivedIds.length) {
+    await svc
+      .from("shopify_orders")
+      .update({ logistics_status: "fulfilled_shopify", updated_at: nowIso })
+      .in("id", archivedIds)
+      .not("logistics_status", "in", "(fulfilled_shopify,out_for_delivery,delivered,cancelled)");
+  }
+
+  // c) Fulfilled in Shopify → fulfilled_shopify (not cancelled/closed already
+  //    handled above; never downgrade).
+  const fulfilledIds = ids(
+    (o) => (o.fulfillmentStatus ?? "").toLowerCase() === "fulfilled" && !o.cancelledAt
+  );
   if (fulfilledIds.length) {
     await svc
       .from("shopify_orders")

@@ -15,6 +15,14 @@ export interface OrderFilters {
   to?: string; // ISO date
 }
 
+// All columns except the heavy `raw` JSON payload — selecting `raw` for the
+// whole list transfers megabytes and can hit the statement timeout.
+const LIST_COLS =
+  "id, shopify_order_id, order_number, document_status, shopify_created_at, fulfillment_status, " +
+  "financial_status, customer_name, order_value, currency, payment_method, shipping_phone, " +
+  "shipping_method, shipping_city, email, delivery_address, logistics_status, tracking_number, " +
+  "tle_invoice_number, invoice_value, invoice_verified, srt_number, prt_number, cancellation_closed, updated_at";
+
 async function token(): Promise<string> {
   const {
     data: { session },
@@ -54,13 +62,13 @@ export async function fetchOrders(filters: OrderFilters = {}): Promise<ShopifyOr
   // No search term → straight filtered list.
   if (!s) {
     const { data, error } = await applyFilters(
-      supabase.from("shopify_orders").select("*"),
+      supabase.from("shopify_orders").select(LIST_COLS),
       filters
     )
       .order("shopify_created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return (data ?? []) as unknown as ShopifyOrderRow[];
   }
 
   const like = `%${s}%`;
@@ -77,7 +85,7 @@ export async function fetchOrders(filters: OrderFilters = {}): Promise<ShopifyOr
   }
 
   // 1) Header matches.
-  const headerQ = applyFilters(supabase.from("shopify_orders").select("*"), filters)
+  const headerQ = applyFilters(supabase.from("shopify_orders").select(LIST_COLS), filters)
     .or(orParts.join(","))
     .order("shopify_created_at", { ascending: false })
     .limit(500);
@@ -93,15 +101,15 @@ export async function fetchOrders(filters: OrderFilters = {}): Promise<ShopifyOr
   if (hErr) throw new Error(hErr.message);
 
   const byId = new Map<string, ShopifyOrderRow>();
-  for (const r of headerRows ?? []) byId.set(r.id, r);
+  for (const r of (headerRows ?? []) as unknown as ShopifyOrderRow[]) byId.set(r.id, r);
 
   const itemIds = [...new Set((itemRows ?? []).map((i) => i.order_id))].filter((id) => !byId.has(id));
   if (itemIds.length) {
     const { data: itemOrders } = await applyFilters(
-      supabase.from("shopify_orders").select("*").in("id", itemIds),
+      supabase.from("shopify_orders").select(LIST_COLS).in("id", itemIds),
       filters
     ).limit(500);
-    for (const r of itemOrders ?? []) byId.set(r.id, r);
+    for (const r of (itemOrders ?? []) as unknown as ShopifyOrderRow[]) byId.set(r.id, r);
   }
 
   return [...byId.values()].sort((a, b) => {
