@@ -17,116 +17,116 @@ export async function POST(request: Request): Promise<Response> {
   }
   const svc = auth.serviceClient;
 
-  // Window: an explicit ?since=YYYY-MM-DD (one-time historical backfill) wins;
-  // otherwise from the last successful sync (minus a small overlap), else lookback.
-  const sinceParam = new URL(request.url).searchParams.get("since");
+  // Window: explicit ?since / ?until (YYYY-MM-DD) drive a one-time historical
+  // backfill (the client chunks it by month). Otherwise incremental from the
+  // last successful sync (minus a small overlap), else a default lookback.
+  const params = new URL(request.url).searchParams;
+  const sinceParam = params.get("since");
+  const untilParam = params.get("until");
+  const windowed = !!sinceParam; // historical backfill — don't touch last-sync
   let sinceIso: string;
   if (sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)) {
     sinceIso = new Date(`${sinceParam}T00:00:00Z`).toISOString();
   } else {
     const { data: setting } = await svc.from("app_settings").select("value").eq("key", LAST_SYNC_KEY).maybeSingle();
     const last = (setting as { value?: string | null } | null)?.value ?? null;
-    if (last) {
-      // Re-fetch a 6h overlap so edits near the boundary aren't missed.
-      sinceIso = new Date(new Date(last).getTime() - 6 * 3600 * 1000).toISOString();
-    } else {
-      sinceIso = new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
-    }
+    sinceIso = last
+      ? new Date(new Date(last).getTime() - 6 * 3600 * 1000).toISOString()
+      : new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
   }
+  const untilIso =
+    untilParam && /^\d{4}-\d{2}-\d{2}$/.test(untilParam)
+      ? new Date(`${untilParam}T00:00:00Z`).toISOString()
+      : undefined;
 
   let orders: SyncOrder[];
   try {
-    orders = await fetchOrdersForSync(sinceIso);
+    orders = await fetchOrdersForSync(sinceIso, untilIso);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Shopify fetch failed.";
-    await svc.from("logistics_api_error_logs").insert({
-      source: "shopify_sync",
-      context: `since ${sinceIso}`,
-      message,
-    });
+    await svc.from("logistics_api_error_logs").insert({ source: "shopify_sync", context: `since ${sinceIso}`, message });
     return Response.json({ ok: false, error: message }, { status: 502 });
   }
 
-  let upserted = 0;
-  let itemsUpserted = 0;
+  const nowIso = new Date().toISOString();
+  const valid = orders.filter((o) => o.shopifyOrderId);
   const errors: string[] = [];
+  let itemsUpserted = 0;
 
-  for (const o of orders) {
-    if (!o.shopifyOrderId) continue;
-    // Upsert the order. logistics_status & tracking_number are intentionally
-    // omitted so internal workflow state survives re-syncs.
-    const { data: row, error: oErr } = await svc
+  // 1) Bulk upsert orders (one round-trip). logistics_status & tracking_number
+  // are omitted so internal workflow state survives re-syncs.
+  let idByShopify = new Map<string, string>();
+  if (valid.length) {
+    const orderRows = valid.map((o) => ({
+      shopify_order_id: o.shopifyOrderId,
+      order_number: o.orderNumber,
+      shopify_created_at: o.shopifyCreatedAt,
+      fulfillment_status: o.fulfillmentStatus,
+      financial_status: o.financialStatus,
+      customer_name: o.customerName,
+      order_value: o.orderValue,
+      currency: o.currency,
+      payment_method: o.paymentMethod,
+      shipping_phone: o.shippingPhone,
+      shipping_method: o.shippingMethod,
+      shipping_city: o.shippingCity,
+      email: o.email,
+      delivery_address: o.deliveryAddress,
+      raw: o.raw as never,
+      updated_at: nowIso,
+    }));
+    const { data: rows, error: oErr } = await svc
       .from("shopify_orders")
-      .upsert(
-        {
-          shopify_order_id: o.shopifyOrderId,
-          order_number: o.orderNumber,
-          shopify_created_at: o.shopifyCreatedAt,
-          fulfillment_status: o.fulfillmentStatus,
-          financial_status: o.financialStatus,
-          customer_name: o.customerName,
-          order_value: o.orderValue,
-          currency: o.currency,
-          payment_method: o.paymentMethod,
-          shipping_phone: o.shippingPhone,
-          shipping_method: o.shippingMethod,
-          shipping_city: o.shippingCity,
-          email: o.email,
-          delivery_address: o.deliveryAddress,
-          raw: o.raw as never,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "shopify_order_id" }
-      )
-      .select("id")
-      .maybeSingle();
-
-    if (oErr || !row) {
-      errors.push(`${o.orderNumber ?? o.shopifyOrderId}: ${oErr?.message ?? "no id returned"}`);
-      continue;
-    }
-    upserted += 1;
-    const orderId = (row as { id: string }).id;
-
-    // Bidirectional: if Shopify already marks the order fulfilled, reflect that
-    // internally — unless it has moved further along (out for delivery/delivered)
-    // or been cancelled. Never downgrade a more advanced internal status.
-    if ((o.fulfillmentStatus ?? "").toLowerCase() === "fulfilled") {
-      await svc
-        .from("shopify_orders")
-        .update({ logistics_status: "fulfilled_shopify", updated_at: new Date().toISOString() })
-        .eq("id", orderId)
-        .not("logistics_status", "in", "(fulfilled_shopify,out_for_delivery,delivered,cancelled)");
-    }
-
-    if (o.items.length) {
-      // Upsert line items on shopify_line_id; omit picked/packed/picking_status/
-      // source_location so internal state is preserved.
-      const itemRows = o.items
-        .filter((li) => li.shopifyLineId)
-        .map((li) => ({
-          order_id: orderId,
-          shopify_line_id: li.shopifyLineId,
-          title: li.title,
-          sku: li.sku,
-          brand: li.brand,
-          qty_ordered: li.qty,
-          unit_price: li.unitPrice,
-          total_price: li.totalPrice,
-          fulfilled_qty: li.fulfilledQty,
-          updated_at: new Date().toISOString(),
-        }));
-      const { error: iErr } = await svc
-        .from("shopify_order_items")
-        .upsert(itemRows, { onConflict: "shopify_line_id" });
-      if (iErr) errors.push(`${o.orderNumber ?? o.shopifyOrderId} items: ${iErr.message}`);
-      else itemsUpserted += itemRows.length;
-    }
+      .upsert(orderRows, { onConflict: "shopify_order_id" })
+      .select("id, shopify_order_id");
+    if (oErr) return Response.json({ ok: false, error: oErr.message }, { status: 500 });
+    idByShopify = new Map((rows ?? []).map((r) => [(r as { shopify_order_id: string }).shopify_order_id, r.id]));
   }
 
-  const now = new Date().toISOString();
-  await svc.from("app_settings").upsert({ key: LAST_SYNC_KEY, value: now }, { onConflict: "key" });
+  // 2) Bulk upsert all line items (one round-trip). Omit pick/pack/source so
+  // internal state is preserved on re-sync.
+  const itemRows = valid.flatMap((o) => {
+    const orderId = idByShopify.get(o.shopifyOrderId);
+    if (!orderId) return [];
+    return o.items
+      .filter((li) => li.shopifyLineId)
+      .map((li) => ({
+        order_id: orderId,
+        shopify_line_id: li.shopifyLineId,
+        title: li.title,
+        sku: li.sku,
+        brand: li.brand,
+        qty_ordered: li.qty,
+        unit_price: li.unitPrice,
+        total_price: li.totalPrice,
+        fulfilled_qty: li.fulfilledQty,
+        updated_at: nowIso,
+      }));
+  });
+  if (itemRows.length) {
+    const { error: iErr } = await svc.from("shopify_order_items").upsert(itemRows, { onConflict: "shopify_line_id" });
+    if (iErr) errors.push(`items: ${iErr.message}`);
+    else itemsUpserted = itemRows.length;
+  }
 
+  // 3) Bidirectional: orders Shopify reports fulfilled → fulfilled_shopify
+  // internally, in one update (never downgrading a more advanced status).
+  const fulfilledIds = valid
+    .filter((o) => (o.fulfillmentStatus ?? "").toLowerCase() === "fulfilled")
+    .map((o) => idByShopify.get(o.shopifyOrderId))
+    .filter((x): x is string => !!x);
+  if (fulfilledIds.length) {
+    await svc
+      .from("shopify_orders")
+      .update({ logistics_status: "fulfilled_shopify", updated_at: nowIso })
+      .in("id", fulfilledIds)
+      .not("logistics_status", "in", "(fulfilled_shopify,out_for_delivery,delivered,cancelled)");
+  }
+
+  // Incremental syncs advance the last-sync marker; historical windows don't.
+  if (!windowed) {
+    await svc.from("app_settings").upsert({ key: LAST_SYNC_KEY, value: nowIso }, { onConflict: "key" });
+  }
   if (errors.length) {
     await svc.from("logistics_api_error_logs").insert({
       source: "shopify_sync",
@@ -138,9 +138,9 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json({
     ok: true,
     fetched: orders.length,
-    ordersUpserted: upserted,
+    ordersUpserted: idByShopify.size,
     itemsUpserted,
     errors: errors.length,
-    lastSync: now,
+    lastSync: nowIso,
   });
 }

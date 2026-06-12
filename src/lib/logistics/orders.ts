@@ -160,9 +160,12 @@ export interface SyncResult {
   lastSync: string;
 }
 
-/** Sync orders. Pass `since` (YYYY-MM-DD) for a one-time historical backfill. */
-export async function syncOrders(since?: string): Promise<SyncResult> {
-  const path = since ? `/api/logistics/sync?since=${encodeURIComponent(since)}` : "/api/logistics/sync";
+/** Sync orders. Pass `since`/`until` (YYYY-MM-DD) for a bounded historical window. */
+export async function syncOrders(since?: string, until?: string): Promise<SyncResult> {
+  const qs = new URLSearchParams();
+  if (since) qs.set("since", since);
+  if (until) qs.set("until", until);
+  const path = qs.toString() ? `/api/logistics/sync?${qs}` : "/api/logistics/sync";
   const j = await post(path, {});
   return j as unknown as SyncResult;
 }

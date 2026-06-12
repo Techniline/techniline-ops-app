@@ -256,10 +256,11 @@ function formatAddress(a: RawAddress | null | undefined): string | null {
  * Fetch full orders (with line items, customer, shipping) created on/after
  * `sinceIso`, for syncing into the logistics tables. Paged via the Link header.
  */
-export async function fetchOrdersForSync(sinceIso: string): Promise<SyncOrder[]> {
+export async function fetchOrdersForSync(sinceIso: string, untilIso?: string): Promise<SyncOrder[]> {
   const out: SyncOrder[] = [];
   let url: string | null =
-    `/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(sinceIso)}`;
+    `/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(sinceIso)}` +
+    (untilIso ? `&created_at_max=${encodeURIComponent(untilIso)}` : "");
   let pages = 0;
   while (url && pages < 120) {
     const res: Response = await shopGet(url);

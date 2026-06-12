@@ -227,9 +227,42 @@ export default function LogisticsOrdersPage() {
     }
   }
 
-  function handleBackfill() {
-    if (window.confirm("Pull all MusicMajlis orders from 1 Jan 2025 to now? This is a one-time historical sync and may take a minute.")) {
-      void handleSync("2025-01-01");
+  async function handleBackfill() {
+    if (
+      !window.confirm(
+        "Pull all MusicMajlis orders from 1 Jan 2025 to now? This is a one-time historical sync, processed month by month."
+      )
+    )
+      return;
+    setSyncing(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      // Build month boundaries [2025-01-01 .. firstOfNextMonth].
+      const months: { from: string; to: string }[] = [];
+      const start = new Date(Date.UTC(2025, 0, 1));
+      const now = new Date();
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      for (let d = start; d < end; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
+        const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+        months.push({ from: d.toISOString().slice(0, 10), to: next.toISOString().slice(0, 10) });
+      }
+      let totalOrders = 0;
+      let totalItems = 0;
+      for (let i = 0; i < months.length; i++) {
+        const m = months[i];
+        setMsg(`Backfilling ${m.from.slice(0, 7)} (${i + 1}/${months.length})… ${totalOrders} orders so far.`);
+        const r = await syncOrders(m.from, m.to);
+        totalOrders += r.ordersUpserted;
+        totalItems += r.itemsUpserted;
+      }
+      setMsg(`Historical backfill complete: ${totalOrders} order(s), ${totalItems} item(s).`);
+      await load();
+      void fetchOrderFacets().then(setFacets).catch(() => {});
+    } catch (e) {
+      setErr(`Backfill stopped: ${errMsg(e)} — you can click Backfill again to resume.`);
+    } finally {
+      setSyncing(false);
     }
   }
 
