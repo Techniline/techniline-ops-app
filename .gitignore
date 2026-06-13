@@ -52,3 +52,6 @@ next-env.d.ts
 .vercel
 
 .claude/
+
+# local email drafts
+docs/*.eml
