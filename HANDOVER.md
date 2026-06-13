@@ -17,6 +17,7 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Live routes | `/login` · `/dashboard` (+ KPI strip) · `/checklist` · `/cocoblu` (+ PDF capture) · `/amazon-actions` · `/api/amazon-email-ingest` · `/api/amazon-ingest-poll` (401 w/o secret) · `/api/cocoblu/parse` (401 w/o auth) |
 | Amazon ingestion | **LIVE & writing.** Daily Vercel cron `0 9 * * *` (48h lookback). 14-day 2026 backfill complete (237 Amazon emails, 0 errors). |
 | Cocoblu PDF capture | **LIVE.** Free built-in parser by default; auto-upgrades to AI if `ANTHROPIC_API_KEY` set. |
+| Logistics module | **LIVE & verified** (all DB migrations applied, 14/14 checks). Role-gated `/logistics/*` portal: Shopify/MusicMajlis order fulfillment, TLE invoice verification, reseller (dual invoice+DO upload & storage) & cargo deliveries, PRT + branded email, delivery reports, manager-only master data. Doc parsing on the regex fallback (no `ANTHROPIC_API_KEY`). Full reference: **`LOGISTICS.md`**; setup SQL: **`LOGISTICS-SETUP.md`**. |
 
 **Bottom line:** The app and both automated/assisted data flows (Amazon email ingestion + Cocoblu invoice capture) are live in production.
 
