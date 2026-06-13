@@ -83,6 +83,8 @@ const COLUMNS: Column[] = [
     cell: (o) =>
       o.tle_invoice_number ? (
         <span className={o.invoice_verified ? "text-emerald-700" : "text-slate-700"}>{o.tle_invoice_number}</span>
+      ) : o.logistics_status === "cancelled" ? (
+        <span className="text-slate-400">—</span>
       ) : (
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Missing</span>
       ),

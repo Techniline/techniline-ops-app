@@ -95,7 +95,15 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       take(orders().eq("logistics_status", "delivered").gte("updated_at", todayIso)),
       take(orders().in("logistics_status", PENDING_STATUSES).lt("shopify_created_at", ago24)),
       take(orders().in("logistics_status", PENDING_STATUSES).lt("shopify_created_at", ago48)),
-      take(orders().is("tle_invoice_number", null).neq("logistics_status", "cancelled")),
+      // Missing invoice: never count cancelled/voided orders. Excludes both the
+      // internal cancelled status AND orders cancelled/voided in Shopify (read
+      // straight from the stored payload, so it's correct without a re-sync).
+      take(
+        orders()
+          .is("tle_invoice_number", null)
+          .neq("logistics_status", "cancelled")
+          .is("raw->>cancelled_at", null),
+      ),
       take(
         supabase
           .from("prt_requests")
