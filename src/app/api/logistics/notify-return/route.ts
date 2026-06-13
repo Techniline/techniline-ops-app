@@ -18,7 +18,11 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return Response.json({ ok: false, error: "Invalid JSON." }, { status: 400 });
   }
-  const summary = typeof b.summary === "string" ? b.summary : "";
+  const summary = (typeof b.summary === "string" ? b.summary : "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .slice(0, 300);
 
   // Look up Maricel's mailbox.
   const { data: row } = await auth.serviceClient.from("users").select("email").eq("id", MARICEL_ID).maybeSingle();

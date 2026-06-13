@@ -436,7 +436,7 @@ alter table public.marketplace_returns enable row level security;
 do $$
 declare cond constant text :=
   '(public.current_user_role() in (''manager'',''admin'',''logistics'') '
-  || 'or auth.uid() in (''227fdb27-80b5-4040-ab14-4bb945068af7'',''cbb81b27-8756-4f2d-bfe0-04211c27092c''))';
+  || 'or auth.uid() = ''227fdb27-80b5-4040-ab14-4bb945068af7'')';  -- + Maricel (docs); not Aaron
 begin
   drop policy if exists marketplace_returns_rw on public.marketplace_returns;
   execute format('create policy marketplace_returns_rw on public.marketplace_returns for all to authenticated using %s with check %s', cond, cond);
