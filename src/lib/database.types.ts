@@ -2285,6 +2285,8 @@ export type Database = {
           driver_phone: string | null
           do_number: string | null
           invoice_number: string | null
+          invoice_file: string | null
+          do_file: string | null
           vehicle_number: string | null
           reseller_name: string | null
           scheduled_date: string | null
@@ -2312,6 +2314,8 @@ export type Database = {
           driver_phone?: string | null
           do_number?: string | null
           invoice_number?: string | null
+          invoice_file?: string | null
+          do_file?: string | null
           vehicle_number?: string | null
           reseller_name?: string | null
           scheduled_date?: string | null
@@ -2339,6 +2343,8 @@ export type Database = {
           driver_phone?: string | null
           do_number?: string | null
           invoice_number?: string | null
+          invoice_file?: string | null
+          do_file?: string | null
           vehicle_number?: string | null
           reseller_name?: string | null
           scheduled_date?: string | null

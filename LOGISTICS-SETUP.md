@@ -374,6 +374,39 @@ end $$;
 
 ---
 
+## Step 1g — Store the invoice & DO files (run once)
+
+Adds a private storage bucket for the PDFs + two path columns on the delivery.
+The logistics team can upload/read; only manager/admin can delete.
+
+```sql
+alter table public.reseller_deliveries add column if not exists invoice_file text;
+alter table public.reseller_deliveries add column if not exists do_file text;
+
+insert into storage.buckets (id, name, public)
+values ('logistics-docs', 'logistics-docs', false)
+on conflict (id) do nothing;
+
+do $$
+declare
+  team constant text :=
+    '(bucket_id = ''logistics-docs'' and (public.current_user_role() in (''manager'',''admin'',''logistics'') '
+    || 'or auth.uid() in (''227fdb27-80b5-4040-ab14-4bb945068af7'',''cbb81b27-8756-4f2d-bfe0-04211c27092c'')))';
+  mgr constant text := '(bucket_id = ''logistics-docs'' and public.current_user_role() in (''manager'',''admin''))';
+begin
+  drop policy if exists logistics_docs_read on storage.objects;
+  drop policy if exists logistics_docs_insert on storage.objects;
+  drop policy if exists logistics_docs_update on storage.objects;
+  drop policy if exists logistics_docs_delete on storage.objects;
+  execute format('create policy logistics_docs_read on storage.objects for select to authenticated using %s', team);
+  execute format('create policy logistics_docs_insert on storage.objects for insert to authenticated with check %s', team);
+  execute format('create policy logistics_docs_update on storage.objects for update to authenticated using %s with check %s', team, team);
+  execute format('create policy logistics_docs_delete on storage.objects for delete to authenticated using %s', mgr);
+end $$;
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

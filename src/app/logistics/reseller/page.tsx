@@ -10,9 +10,11 @@ import {
   deleteReseller,
   fetchResellerSuggestions,
   fetchResellers,
+  fileUrl,
   parseDocPdf,
   saveReseller,
   setResellerStatus,
+  uploadDeliveryFile,
   type ResellerRow,
   type ResellerSuggestions,
 } from "@/lib/logistics/manual";
@@ -79,8 +81,9 @@ export default function ResellerDeliveriesPage() {
   const [rows, setRows] = useState<ResellerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [docFolder, setDocFolder] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [parsing, setParsing] = useState(false);
+  const [parsing, setParsing] = useState<"invoice" | "do" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [sugg, setSugg] = useState<ResellerSuggestions>({ customers: [], drivers: [], vehicles: [] });
@@ -117,6 +120,19 @@ export default function ResellerDeliveriesPage() {
 
   const set = (k: keyof ResellerRow, v: unknown) => setDraft((d) => ({ ...(d ?? {}), [k]: v }));
 
+  function openDraft(d: Draft) {
+    setDocFolder((d.id as string) || (typeof crypto !== "undefined" ? crypto.randomUUID() : `${Date.now()}`));
+    setMsg(null);
+    setErr(null);
+    setDraft(d);
+  }
+
+  async function openFile(path: string) {
+    const url = await fileUrl(path);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else setErr("Could not open the document.");
+  }
+
   // Autocomplete back-fill: typing a known customer/driver fills linked fields.
   function onCustomer(v: string) {
     setDraft((d) => {
@@ -140,12 +156,22 @@ export default function ResellerDeliveriesPage() {
     });
   }
 
-  async function uploadInvoice(file: File) {
-    setParsing(true);
+  async function uploadDoc(kind: "invoice" | "do", file: File) {
+    setParsing(kind);
     setErr(null);
     setMsg(null);
     try {
+      // 1) Read fields for autofill.
       const d = await parseDocPdf(file);
+      // 2) Store the actual PDF.
+      let path: string | null = null;
+      let fileFailed = "";
+      try {
+        path = await uploadDeliveryFile(docFolder, kind, file);
+      } catch (e) {
+        fileFailed = errMsg(e);
+        setErr(`Fields captured, but the file couldn't be stored: ${fileFailed}`);
+      }
       setDraft((cur) => {
         const next = { ...(cur ?? { status: "new" }) };
         if (d.customerName && !next.reseller_name) next.reseller_name = d.customerName;
@@ -156,18 +182,24 @@ export default function ResellerDeliveriesPage() {
         if (d.totalValue != null) next.total_value = d.totalValue;
         if (d.deliveryAddress && !next.delivery_address) next.delivery_address = d.deliveryAddress;
         if (d.itemsSummary && !next.items_summary) next.items_summary = d.itemsSummary;
+        if (path) {
+          if (kind === "invoice") next.invoice_file = path;
+          else next.do_file = path;
+        }
         return next;
       });
-      const what = d.docType === "delivery_note" ? "delivery note" : d.docType === "invoice" ? "invoice" : "document";
-      if (d.engine === "basic") {
-        setMsg(`Captured the key fields from the ${what} — add the item details manually. (Enable the AI key for automatic line-item capture.)`);
-      } else {
-        setMsg(`Captured from ${what} — review and complete the delivery details.`);
+      if (!fileFailed) {
+        const label = kind === "invoice" ? "Invoice" : "Delivery order";
+        setMsg(
+          d.engine === "basic"
+            ? `${label} attached & key fields captured — add item details manually.`
+            : `${label} attached & fields captured — review and complete.`
+        );
       }
     } catch (e) {
       setErr(errMsg(e));
     } finally {
-      setParsing(false);
+      setParsing(null);
     }
   }
 
@@ -219,7 +251,7 @@ export default function ResellerDeliveriesPage() {
       subtitle="Manual reseller delivery tracking."
       page="reseller"
       actions={
-        <button type="button" className={btnPrimary} onClick={() => setDraft({ ...EMPTY })}>
+        <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
           + New delivery
         </button>
       }
@@ -242,20 +274,24 @@ export default function ResellerDeliveriesPage() {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {draft.id ? "Edit delivery" : "New reseller delivery"}
             </h2>
-            <label className={`${parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800`}>
-              {parsing ? "Reading…" : "📎 Upload invoice / DO"}
-              <input
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                disabled={parsing}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void uploadInvoice(f);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`${parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border px-2.5 py-1 text-xs font-medium ${draft.invoice_file ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"}`}>
+                {parsing === "invoice" ? "Reading…" : draft.invoice_file ? "✓ Invoice" : "📎 Upload Invoice"}
+                <input type="file" accept="application/pdf" className="hidden" disabled={!!parsing}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDoc("invoice", f); e.target.value = ""; }} />
+              </label>
+              <label className={`${parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border px-2.5 py-1 text-xs font-medium ${draft.do_file ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"}`}>
+                {parsing === "do" ? "Reading…" : draft.do_file ? "✓ Delivery Order" : "📎 Upload DO"}
+                <input type="file" accept="application/pdf" className="hidden" disabled={!!parsing}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDoc("do", f); e.target.value = ""; }} />
+              </label>
+              {draft.invoice_file ? (
+                <button type="button" className="text-xs text-indigo-600 hover:underline" onClick={() => openFile(draft.invoice_file as string)}>View invoice</button>
+              ) : null}
+              {draft.do_file ? (
+                <button type="button" className="text-xs text-indigo-600 hover:underline" onClick={() => openFile(draft.do_file as string)}>View DO</button>
+              ) : null}
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <input list="rd-customers" className={inputClass} placeholder="Reseller / customer name" value={draft.reseller_name ?? ""} onChange={(e) => onCustomer(e.target.value)} />
@@ -361,9 +397,11 @@ export default function ResellerDeliveriesPage() {
             id: "actions",
             label: "",
             cell: (r) => (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" className="text-slate-600 hover:underline" onClick={() => printNote(r)}>Print</button>
-                <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
+                {r.invoice_file ? <button type="button" className="text-slate-600 hover:underline" onClick={() => openFile(r.invoice_file as string)}>Inv</button> : null}
+                {r.do_file ? <button type="button" className="text-slate-600 hover:underline" onClick={() => openFile(r.do_file as string)}>DO</button> : null}
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => openDraft(r)}>Edit</button>
                 <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
               </div>
             ),

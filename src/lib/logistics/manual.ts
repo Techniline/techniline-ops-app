@@ -56,6 +56,25 @@ export async function parseDocPdf(file: File): Promise<ParsedDoc> {
   return { ...d, itemsSummary: summary };
 }
 
+const DOC_BUCKET = "logistics-docs";
+
+/** Upload an invoice/DO PDF to private storage; returns the stored path. */
+export async function uploadDeliveryFile(folder: string, kind: "invoice" | "do", file: File): Promise<string> {
+  const safe = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
+  const path = `reseller/${folder}/${kind}-${safe}`;
+  const { error } = await supabase.storage
+    .from(DOC_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type || "application/pdf" });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+/** Short-lived signed URL to view/download a stored document. */
+export async function fileUrl(path: string): Promise<string | null> {
+  const { data } = await supabase.storage.from(DOC_BUCKET).createSignedUrl(path, 300);
+  return data?.signedUrl ?? null;
+}
+
 export interface ResellerFilters {
   search?: string; // reseller / invoice / DO / reference
   from?: string;
