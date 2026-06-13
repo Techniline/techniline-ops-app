@@ -7,14 +7,17 @@ import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { labelFor, PRT_STATUS, PRT_URGENCY, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
 import {
-  buildPrtEmail,
   deletePrt,
   fetchPrts,
+  prtEmailHtml,
+  prtEmailSubject,
+  prtEmailText,
   savePrt,
   sendPrtEmail,
   setPrtStatus,
   type PrtRow,
 } from "@/lib/logistics/manual";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -24,6 +27,8 @@ type Draft = Partial<PrtRow>;
 const EMPTY: Draft = { status: "requested", urgency: "normal", qty: 1 };
 
 export default function PrtRequestsPage() {
+  const { profile } = useAuth();
+  const sender = { name: profile?.full_name ?? null, email: profile?.email ?? null };
   const [rows, setRows] = useState<PrtRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -39,7 +44,7 @@ export default function PrtRequestsPage() {
   const [emailFor, setEmailFor] = useState<PrtRow | null>(null);
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [notes, setNotes] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,20 +108,20 @@ export default function PrtRequestsPage() {
   }
 
   function openEmail(p: PrtRow) {
-    const { subject: s, body: b } = buildPrtEmail(p);
-    setSubject(s);
-    setBody(b);
+    setSubject(prtEmailSubject(p));
+    setNotes(p.notes ?? "");
     setTo("");
     setMsg(null);
     setEmailFor(p);
   }
 
   async function send() {
+    if (!emailFor) return;
     setBusy(true);
     setErr(null);
     setMsg(null);
     try {
-      await sendPrtEmail(to, subject, body);
+      await sendPrtEmail(to, subject, prtEmailHtml(emailFor, sender, notes), prtEmailText(emailFor, sender, notes));
       setMsg(`Email sent to ${to}.`);
       setEmailFor(null);
     } catch (e) {
@@ -127,8 +132,9 @@ export default function PrtRequestsPage() {
   }
 
   async function copyBody() {
+    if (!emailFor) return;
     try {
-      await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
+      await navigator.clipboard.writeText(`Subject: ${subject}\n\n${prtEmailText(emailFor, sender, notes)}`);
       setMsg("Copied to clipboard.");
     } catch {
       setErr("Could not copy — select and copy manually.");
@@ -227,19 +233,35 @@ export default function PrtRequestsPage() {
 
       {/* Email generator modal */}
       {emailFor ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className={`${surface} w-full max-w-2xl p-5`}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={() => !busy && setEmailFor(null)}>
+          <div className={`${surface} my-6 w-full max-w-2xl p-5`} onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
               PRT email — {emailFor.sku ?? ""} / Order {emailFor.order_number ?? "—"}
             </h2>
-            <input className={`${inputClass} mb-2`} placeholder="Recipient email (branch)" value={to} onChange={(e) => setTo(e.target.value)} />
-            <input className={`${inputClass} mb-2`} value={subject} onChange={(e) => setSubject(e.target.value)} />
-            <textarea className={`${inputClass} mb-3 h-64 font-mono text-xs`} value={body} onChange={(e) => setBody(e.target.value)} />
+            <label className="text-xs text-slate-500">Recipient (branch email)</label>
+            <input className={`${inputClass} mb-2 mt-1`} placeholder="branch@techniline.org" value={to} onChange={(e) => setTo(e.target.value)} />
+            <label className="text-xs text-slate-500">Subject</label>
+            <input className={`${inputClass} mb-2 mt-1`} value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <label className="text-xs text-slate-500">Notes (optional)</label>
+            <textarea
+              className={`${inputClass} mb-3 mt-1 h-20`}
+              placeholder="Anything extra for the branch…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Preview</p>
+            <div
+              className="mb-3 max-h-72 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700"
+              dangerouslySetInnerHTML={{ __html: prtEmailHtml(emailFor, sender, notes) }}
+            />
+            <p className="mb-3 text-[11px] text-slate-400">
+              Sends from {sender.email ?? "your address"} · signed {sender.name ?? "you"}.
+            </p>
             <div className="flex flex-wrap gap-2">
               <button type="button" className={btnPrimary} disabled={busy || !to.includes("@")} onClick={send}>
                 {busy ? "Sending…" : "Send email"}
               </button>
-              <button type="button" className={btnSecondary} onClick={copyBody}>Copy</button>
+              <button type="button" className={btnSecondary} onClick={copyBody}>Copy text</button>
               <button type="button" className={btnSecondary} onClick={() => setEmailFor(null)}>Close</button>
             </div>
           </div>

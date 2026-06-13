@@ -127,33 +127,115 @@ export async function setPrtStatus(id: string, status: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** Build the PRT request email subject + body (used for send or copy). */
-export function buildPrtEmail(p: PrtRow): { subject: string; body: string } {
-  const subject = `PRT Request – ${p.sku ?? "—"} – Order ${p.order_number ?? "—"}`;
-  const lines = [
-    `Please arrange the following product transfer:`,
-    ``,
+export interface PrtSender {
+  name: string | null;
+  email: string | null;
+}
+
+const URGENCY_LABEL: Record<string, string> = {
+  normal: "Normal",
+  urgent: "Urgent",
+  same_day: "Same Day",
+  customer_waiting: "Customer Waiting",
+};
+const LOCATION_LABEL: Record<string, string> = {
+  warehouse: "Warehouse",
+  hq: "Techniline HQ",
+  al_shoala: "Al Shoala Showroom",
+  soundline: "Soundline Main / SLM",
+  other: "Other",
+};
+const loc = (v: string | null) => (v ? LOCATION_LABEL[v] ?? v : "—");
+const urg = (v: string | null) => (v ? URGENCY_LABEL[v] ?? v : "Normal");
+
+function esc(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function prtEmailSubject(p: PrtRow): string {
+  return `PRT Request – ${p.sku ?? "—"} – Order ${p.order_number ?? "—"}`;
+}
+
+/** Plain-text version (for the Copy button / text fallback). */
+export function prtEmailText(p: PrtRow, sender: PrtSender, notes: string): string {
+  return [
+    "Please arrange the following product transfer:",
+    "",
     `Order Number : ${p.order_number ?? "—"}`,
     `Customer     : ${p.customer_name ?? "—"}`,
     `SKU          : ${p.sku ?? "—"}`,
     `Product      : ${p.title ?? "—"}`,
     `Brand        : ${p.brand ?? "—"}`,
     `Quantity     : ${p.qty ?? 1}`,
-    `From         : ${p.from_location ?? "—"}`,
-    `To           : ${p.to_location ?? "—"}`,
+    `From         : ${loc(p.from_location)}`,
+    `To           : ${loc(p.to_location)}`,
     `Required by  : ${p.required_date ?? "—"}`,
-    `Urgency      : ${p.urgency ?? "normal"}`,
-    ``,
-    p.notes ? `Notes: ${p.notes}` : ``,
-    ``,
-    `Thank you,`,
-    `Techniline Logistics`,
-  ];
-  return { subject, body: lines.filter((l) => l !== undefined).join("\n") };
+    `Urgency      : ${urg(p.urgency)}`,
+    notes ? `\nNotes: ${notes}` : "",
+    "",
+    "Thank you,",
+    sender.name || "Techniline Logistics",
+    "Techniline Logistics",
+    sender.email || "",
+  ]
+    .filter((l) => l !== undefined)
+    .join("\n");
 }
 
-/** Send the PRT email via the server (Graph). Returns ok or throws. */
-export async function sendPrtEmail(to: string, subject: string, body: string): Promise<void> {
+/** Branded HTML email. */
+export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): string {
+  const urgent = p.urgency === "urgent" || p.urgency === "same_day" || p.urgency === "customer_waiting";
+  const chip = `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;${
+    urgent ? "background:#fee2e2;color:#b91c1c" : "background:#e0e7ff;color:#4338ca"
+  }">${esc(urg(p.urgency))}</span>`;
+
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:7px 0;color:#64748b;font-size:13px;width:140px;vertical-align:top">${label}</td>` +
+    `<td style="padding:7px 0;color:#0f172a;font-size:14px;font-weight:600">${value}</td></tr>`;
+
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:24px">
+    <div style="max-width:560px;margin:0 auto">
+      <div style="background:#4f46e5;padding:18px 22px;border-radius:12px 12px 0 0">
+        <h1 style="margin:0;color:#fff;font-size:18px">Product Transfer Request</h1>
+        <p style="margin:5px 0 0;color:#c7d2fe;font-size:13px">Order ${esc(p.order_number ?? "—")} · ${esc(p.sku ?? "—")}</p>
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:22px">
+        <p style="margin:0 0 16px;color:#334155;font-size:14px">Please arrange the following product transfer:</p>
+        <table style="width:100%;border-collapse:collapse">
+          ${row("Order Number", esc(p.order_number ?? "—"))}
+          ${row("Customer", esc(p.customer_name ?? "—"))}
+          ${row("SKU", esc(p.sku ?? "—"))}
+          ${row("Product", esc(p.title ?? "—"))}
+          ${row("Brand", esc(p.brand ?? "—"))}
+          ${row("Quantity", esc(p.qty ?? 1))}
+          ${row("From", esc(loc(p.from_location)))}
+          ${row("To", esc(loc(p.to_location)))}
+          ${row("Required by", esc(p.required_date ?? "—"))}
+          ${row("Urgency", chip)}
+        </table>
+        ${
+          notes
+            ? `<div style="margin-top:16px;padding:12px 14px;background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;color:#334155;font-size:13px"><strong>Notes:</strong> ${esc(notes)}</div>`
+            : ""
+        }
+        <p style="margin:22px 0 0;color:#334155;font-size:14px">Thank you,</p>
+        <p style="margin:2px 0 0;font-size:14px">
+          <strong style="color:#0f172a">${esc(sender.name || "Techniline Logistics")}</strong><br>
+          <span style="color:#64748b">Techniline Logistics</span>${
+            sender.email ? `<br><a style="color:#4f46e5;text-decoration:none" href="mailto:${esc(sender.email)}">${esc(sender.email)}</a>` : ""
+          }
+        </p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Send the PRT email via the server (Graph) as the logged-in user. */
+export async function sendPrtEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -162,7 +244,7 @@ export async function sendPrtEmail(to: string, subject: string, body: string): P
   const res = await fetch("/api/logistics/prt-email", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ to, subject, body }),
+    body: JSON.stringify({ to, subject, html, body: text }),
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);

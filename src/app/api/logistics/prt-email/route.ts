@@ -10,7 +10,7 @@ export async function POST(request: Request): Promise<Response> {
   const auth = await authorizeLogistics(request);
   if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
-  let b: { to?: unknown; subject?: unknown; body?: unknown };
+  let b: { to?: unknown; subject?: unknown; body?: unknown; html?: unknown };
   try {
     b = await request.json();
   } catch {
@@ -19,9 +19,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const to = typeof b.to === "string" && b.to.includes("@") ? b.to.trim() : "";
   const subject = typeof b.subject === "string" && b.subject ? b.subject : "PRT Request";
+  const html = typeof b.html === "string" && b.html.trim() ? b.html : "";
   const body = typeof b.body === "string" ? b.body : "";
   if (!to) return Response.json({ ok: false, error: "Enter a valid recipient email." }, { status: 400 });
-  if (!body) return Response.json({ ok: false, error: "Empty email body." }, { status: 400 });
+  if (!html && !body) return Response.json({ ok: false, error: "Empty email body." }, { status: 400 });
 
   // Send as the logged-in user, falling back to the configured default.
   const sender = auth.email ?? process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
@@ -33,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
       body: JSON.stringify({
         message: {
           subject,
-          body: { contentType: "Text", content: body },
+          body: html ? { contentType: "HTML", content: html } : { contentType: "Text", content: body },
           toRecipients: [{ emailAddress: { address: to } }],
         },
         saveToSentItems: true,
