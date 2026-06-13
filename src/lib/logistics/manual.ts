@@ -199,14 +199,14 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
     `</tr>`;
 
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:24px">
-    <div style="max-width:560px;margin:0 auto">
-      <div style="background:#4f46e5;padding:18px 22px;border-radius:12px 12px 0 0">
-        <h1 style="margin:0;color:#fff;font-size:18px">Product Transfer Request</h1>
-        <p style="margin:5px 0 0;color:#c7d2fe;font-size:13px">Order ${esc(p.order_number ?? "—")} · ${esc(p.sku ?? "—")}</p>
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:28px 24px">
+    <div style="max-width:580px;margin:0 auto">
+      <div style="background:linear-gradient(135deg,#4f46e5 0%,#4338ca 100%);padding:24px 26px;border-radius:14px 14px 0 0;border-bottom:3px solid #3730a3;box-shadow:0 6px 16px -6px rgba(67,56,202,0.6)">
+        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.2px;text-shadow:0 1px 1px rgba(0,0,0,0.25)">Product Transfer Request</h1>
+        <p style="margin:8px 0 0;color:#dbe1ff;font-size:13px;font-weight:600">Order ${esc(p.order_number ?? "—")} &nbsp;·&nbsp; ${esc(p.sku ?? "—")}</p>
       </div>
-      <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:22px">
-        <p style="margin:0 0 16px;color:#334155;font-size:14px">Please arrange the following product transfer:</p>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 14px 14px;padding:28px 26px">
+        <p style="margin:0 0 24px;color:#0f172a;font-size:17px;font-weight:600;line-height:1.4">Please arrange the following product transfer:</p>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">
           ${row("Order Number", esc(p.order_number ?? "—"))}
           ${row("Customer", esc(p.customer_name ?? "—"))}
