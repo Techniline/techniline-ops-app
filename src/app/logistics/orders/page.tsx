@@ -16,6 +16,7 @@ import {
   lastSyncTime,
   loadUserView,
   saveUserView,
+  setOrderStatus,
   syncOrders,
   type LedgerImportSummary,
   type OrderFilters,
@@ -113,6 +114,8 @@ export default function LogisticsOrdersPage() {
   const [facets, setFacets] = useState<{ cities: string[]; methods: string[] }>({ cities: [], methods: [] });
   const [openId, setOpenId] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "board">("list");
+  const [moreMenu, setMoreMenu] = useState(false);
+  const dragOrderId = useRef<string | null>(null);
 
   // Ledger backfill (manager only)
   const [ledgerFile, setLedgerFile] = useState<File | null>(null);
@@ -128,6 +131,7 @@ export default function LogisticsOrdersPage() {
 
   const [search, setSearch] = useState("");
   const [logisticsStatus, setLogisticsStatus] = useState("");
+  const [fulfillmentStatus, setFulfillmentStatus] = useState("");
   const [city, setCity] = useState("");
   const [shippingMethod, setShippingMethod] = useState("");
   const [from, setFrom] = useState("");
@@ -180,12 +184,13 @@ export default function LogisticsOrdersPage() {
     () => ({
       search,
       logisticsStatus: logisticsStatus || undefined,
+      fulfillmentStatus: fulfillmentStatus || undefined,
       city: city || undefined,
       shippingMethod: shippingMethod || undefined,
       from: from || undefined,
       to: to ? `${to}T23:59:59` : undefined,
     }),
-    [search, logisticsStatus, city, shippingMethod, from, to]
+    [search, logisticsStatus, fulfillmentStatus, city, shippingMethod, from, to]
   );
 
   const load = useCallback(async () => {
@@ -301,6 +306,20 @@ export default function LogisticsOrdersPage() {
     }
   }
 
+  // Board drag-and-drop: move an order card to a new logistics status.
+  async function moveOrder(orderId: string, status: string) {
+    const cur = rows.find((r) => r.id === orderId);
+    if (!cur || cur.logistics_status === status) return;
+    setErr(null);
+    setMsg(null);
+    try {
+      await setOrderStatus(orderId, status);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    }
+  }
+
   // Column drag-reorder.
   function onDrop(targetId: string) {
     const src = dragId.current;
@@ -408,7 +427,16 @@ export default function LogisticsOrdersPage() {
         {LOGISTICS_STATUS.map((s) => {
           const cards = rows.filter((o) => o.logistics_status === s.value);
           return (
-            <div key={s.value} className="flex w-72 shrink-0 flex-col rounded-xl bg-slate-100/70 p-2 dark:bg-slate-800/40">
+            <div
+              key={s.value}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                const id = dragOrderId.current;
+                dragOrderId.current = null;
+                if (id) void moveOrder(id, s.value);
+              }}
+              className="flex w-72 shrink-0 flex-col rounded-xl bg-slate-100/70 p-2 dark:bg-slate-800/40"
+            >
               <div className="mb-2 flex items-center justify-between px-1">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{s.label}</span>
                 <span className="rounded-full bg-white px-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-900">
@@ -420,8 +448,10 @@ export default function LogisticsOrdersPage() {
                   <button
                     key={o.id}
                     type="button"
+                    draggable
+                    onDragStart={() => (dragOrderId.current = o.id)}
                     onClick={() => setOpenId(o.id)}
-                    className="rounded-lg border border-slate-200 bg-white p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-slate-700 dark:bg-slate-900"
+                    className="cursor-grab rounded-lg border border-slate-200 bg-white p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow active:cursor-grabbing dark:border-slate-700 dark:bg-slate-900"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-indigo-600">{o.order_number ?? o.shopify_order_id}</span>
@@ -488,27 +518,43 @@ export default function LogisticsOrdersPage() {
             ) : null}
           </div>
           {canImport ? (
-            <button type="button" onClick={handleBackfill} disabled={syncing} className={btnSecondary}>
-              {syncing ? "Working…" : "Backfill 2025→now"}
-            </button>
-          ) : null}
-          {canImport ? (
-            <label
-              className={`${ledgerBusy ? "pointer-events-none opacity-60" : ""} ${btnSecondary} cursor-pointer`}
-            >
-              {ledgerBusy ? "Reading…" : "Import ledger"}
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                disabled={ledgerBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void previewLedger(f);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            <div className="relative">
+              <button type="button" onClick={() => setMoreMenu((v) => !v)} className={btnSecondary} aria-label="More actions">
+                ⋯ More
+              </button>
+              {moreMenu ? (
+                <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={() => {
+                      setMoreMenu(false);
+                      void handleBackfill();
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    {syncing ? "Working…" : "Backfill 2025 → now"}
+                  </button>
+                  <label
+                    className={`${ledgerBusy ? "pointer-events-none opacity-60" : ""} block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800`}
+                  >
+                    {ledgerBusy ? "Reading ledger…" : "Import sales ledger…"}
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      disabled={ledgerBusy}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        setMoreMenu(false);
+                        if (f) void previewLedger(f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <button type="button" onClick={() => handleSync()} disabled={syncing} className={btnPrimary}>
             {syncing ? "Syncing…" : "Sync now"}
@@ -552,7 +598,13 @@ export default function LogisticsOrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <select value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)} className={inputClass}>
+          <option value="">All fulfillment</option>
+          <option value="unfulfilled">Unfulfilled</option>
+          <option value="partial">Partial</option>
+          <option value="fulfilled">Fulfilled</option>
+        </select>
         <select value={logisticsStatus} onChange={(e) => setLogisticsStatus(e.target.value)} className={inputClass}>
           <option value="">All statuses</option>
           {LOGISTICS_STATUS.map((s) => (
@@ -603,7 +655,7 @@ export default function LogisticsOrdersPage() {
         </div>
         <span className="text-xs text-slate-400">
           {rows.length} orders · {unfulfilled.length} need action
-          {view === "list" ? " · drag headers to reorder · Columns ▾ to show/hide" : ""}
+          {view === "list" ? " · drag headers to reorder · Columns ▾ to show/hide" : " · drag a card to change its status"}
         </span>
       </div>
 
