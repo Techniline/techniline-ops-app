@@ -31,6 +31,7 @@ export function CustomizableTable<T extends { id: string }>({
   loading,
   emptyText,
   rowClassName,
+  defaultHidden,
 }: {
   viewKey: string;
   columns: TableColumn<T>[];
@@ -38,13 +39,15 @@ export function CustomizableTable<T extends { id: string }>({
   loading?: boolean;
   emptyText?: string;
   rowClassName?: (row: T) => string;
+  /** Column ids hidden by default (until the user shows them / has a saved view). */
+  defaultHidden?: string[];
 }) {
   const { profile } = useAuth();
   const defaultOrder = useMemo(() => columns.map((c) => c.id), [columns]);
   const byId = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns]);
 
   const [colOrder, setColOrder] = useState<string[]>(defaultOrder);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [hidden, setHidden] = useState<Set<string>>(new Set(defaultHidden ?? []));
   const [menu, setMenu] = useState(false);
   const dragId = useRef<string | null>(null);
   const lsKey = `${viewKey}.${profile?.id ?? "anon"}`;
@@ -106,9 +109,10 @@ export function CustomizableTable<T extends { id: string }>({
   }
 
   function reset() {
+    const def = new Set(defaultHidden ?? []);
     setColOrder(defaultOrder);
-    setHidden(new Set());
-    persist(defaultOrder, new Set());
+    setHidden(def);
+    persist(defaultOrder, def);
     setMenu(false);
   }
 

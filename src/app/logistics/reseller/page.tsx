@@ -354,6 +354,7 @@ export default function ResellerDeliveriesPage() {
         rows={rows}
         loading={loading}
         emptyText="No reseller deliveries found."
+        defaultHidden={["city", "driver", "vehicle", "scheduled"]}
         rowClassName={(r) => (overdueDays(r) > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40")}
         columns={[
           { id: "reseller", label: "Customer", cell: (r) => r.reseller_name ?? "—" },
