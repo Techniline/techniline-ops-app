@@ -193,8 +193,10 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
   }">${esc(urg(p.urgency))}</span>`;
 
   const row = (label: string, value: string) =>
-    `<tr><td style="padding:7px 0;color:#64748b;font-size:13px;width:140px;vertical-align:top">${label}</td>` +
-    `<td style="padding:7px 0;color:#0f172a;font-size:14px;font-weight:600">${value}</td></tr>`;
+    `<tr>` +
+    `<td style="padding:9px 12px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:13px;font-weight:600;width:150px">${label}</td>` +
+    `<td style="padding:9px 12px;border:1px solid #e2e8f0;color:#0f172a;font-size:14px">${value}</td>` +
+    `</tr>`;
 
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:24px">
@@ -205,7 +207,7 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:22px">
         <p style="margin:0 0 16px;color:#334155;font-size:14px">Please arrange the following product transfer:</p>
-        <table style="width:100%;border-collapse:collapse">
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">
           ${row("Order Number", esc(p.order_number ?? "—"))}
           ${row("Customer", esc(p.customer_name ?? "—"))}
           ${row("SKU", esc(p.sku ?? "—"))}
