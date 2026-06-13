@@ -10,12 +10,12 @@ import {
   deleteReseller,
   fetchResellerSuggestions,
   fetchResellers,
+  parseDocPdf,
   saveReseller,
   setResellerStatus,
   type ResellerRow,
   type ResellerSuggestions,
 } from "@/lib/logistics/manual";
-import { parseInvoicePdf } from "@/lib/logistics/orders";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -145,17 +145,21 @@ export default function ResellerDeliveriesPage() {
     setErr(null);
     setMsg(null);
     try {
-      const d = await parseInvoicePdf(file);
+      const d = await parseDocPdf(file);
       setDraft((cur) => {
         const next = { ...(cur ?? { status: "new" }) };
         if (d.customerName && !next.reseller_name) next.reseller_name = d.customerName;
         if (d.invoiceNumber) next.invoice_number = d.invoiceNumber;
-        if (d.invoiceNumber && !next.reference_no) next.reference_no = d.invoiceNumber;
-        if (d.invoiceValue != null) next.total_value = d.invoiceValue;
-        if (d.skus.length && !next.items_summary) next.items_summary = d.skus.join(", ");
+        if (d.doNumber) next.do_number = d.doNumber;
+        if (d.poNumber && !next.reference_no) next.reference_no = d.poNumber;
+        else if (d.invoiceNumber && !next.reference_no) next.reference_no = d.invoiceNumber;
+        if (d.totalValue != null) next.total_value = d.totalValue;
+        if (d.deliveryAddress && !next.delivery_address) next.delivery_address = d.deliveryAddress;
+        if (d.itemsSummary && !next.items_summary) next.items_summary = d.itemsSummary;
         return next;
       });
-      setMsg("Captured from invoice — review and complete the delivery details.");
+      const what = d.docType === "delivery_note" ? "delivery note" : d.docType === "invoice" ? "invoice" : "document";
+      setMsg(`Captured from ${what} — review and complete the delivery details.`);
     } catch (e) {
       setErr(errMsg(e));
     } finally {
@@ -235,7 +239,7 @@ export default function ResellerDeliveriesPage() {
               {draft.id ? "Edit delivery" : "New reseller delivery"}
             </h2>
             <label className={`${parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800`}>
-              {parsing ? "Reading…" : "📎 Upload invoice PDF"}
+              {parsing ? "Reading…" : "📎 Upload invoice / DO"}
               <input
                 type="file"
                 accept="application/pdf"

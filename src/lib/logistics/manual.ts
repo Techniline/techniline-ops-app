@@ -19,6 +19,42 @@ async function currentUserId(): Promise<string | null> {
 
 // ── Reseller deliveries ──────────────────────────────────────────────────────
 
+export interface ParsedDoc {
+  docType: "invoice" | "delivery_note" | "other";
+  invoiceNumber: string | null;
+  doNumber: string | null;
+  customerName: string | null;
+  deliveryAddress: string | null;
+  poNumber: string | null;
+  totalValue: number | null;
+  items: { sku: string | null; description: string | null; brand: string | null; qty: number | null }[];
+  itemsSummary: string;
+}
+
+/** Upload an invoice OR delivery note PDF and extract a unified draft. */
+export async function parseDocPdf(file: File): Promise<ParsedDoc> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/logistics/parse-doc", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: Omit<ParsedDoc, "itemsSummary">; error?: string };
+  if (!res.ok || !j.ok || !j.draft) throw new Error(j.error ?? `HTTP ${res.status}`);
+  const d = j.draft;
+  const summary = d.items
+    .map((i) => `${i.qty != null ? `${i.qty} × ` : ""}${i.description ?? i.sku ?? ""}${i.sku && i.description ? ` (${i.sku})` : ""}`.trim())
+    .filter(Boolean)
+    .join("; ");
+  return { ...d, itemsSummary: summary };
+}
+
 export interface ResellerFilters {
   search?: string; // reseller / invoice / DO / reference
   from?: string;
