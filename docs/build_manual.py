@@ -60,6 +60,7 @@ tbl = Table([
     ["2. Operations Coordinator", "Stock, finance & purchasing"],
     ["3. Marketplace Specialist", "Cocoblu & Music Majlis"],
     ["4. Manager", "Oversight, scorecard & reporting"],
+    ["5. Logistics", "Warehouse — deliveries & order fulfillment"],
 ], colWidths=[70*mm, 90*mm])
 tbl.setStyle(TableStyle([
     ("BACKGROUND", (0,0), (-1,0), INDIGO),
@@ -257,6 +258,86 @@ bullets([
     "watch Cocoblu 90+ and open blockers.",
     "<b>Month-end</b>: send the monthly summary to the Sales Head.",
 ])
+story.append(PageBreak())
+
+# ---------- 5. Logistics ----------
+h1("5. Logistics")
+p("The Logistics portal handles deliveries and Music Majlis order fulfillment. You see only the "
+  "Logistics sections your designation is allowed to use; the warehouse role sees the whole "
+  "portal, while some staff are given just specific pages (e.g. Reseller Deliveries, Product "
+  "Transfers and Delivery Reports).", LEAD)
+
+h2("Logistics Dashboard")
+bullets([
+    "A live snapshot: orders to fulfill, tracking pending, ready to dispatch, delivered today, "
+    "delayed shipments, <b>missing invoice</b>, and reseller/cargo counts.",
+    "Module cards open each area. The menu is grouped: Channels, Deliveries, Operations, Marketplace.",
+])
+
+h2("Shopify / Music Majlis Orders")
+p("This is the order-processing screen. Orders arrive from the website automatically.")
+h3("Find and view orders")
+bullets([
+    "Press <b>Sync now</b> to pull the latest orders. Use the search box (order number, customer, "
+    "mobile, email, SKU or product) and the filters (fulfillment, status, city, method, dates).",
+    "<b>List view</b> splits “Needs action (unfulfilled)” on top from “Fulfilled &amp; closed”. "
+    "<b>Board view</b> shows orders as cards by stage — drag a card to change its stage.",
+    "Drag column headings to reorder, use <b>Columns</b> to show/hide; your layout is saved for you.",
+    "Click an order to open it; use <b>View in Shopify</b> to see the original order online.",
+])
+h3("Pick, pack and dispatch an order")
+steps([
+    "Open the order. For each product line set the source location and tick <b>Picked</b> and "
+    "<b>Packed</b> as you prepare it.",
+    "Record the <b>TLE invoice</b>: type the invoice number and value, or upload the invoice PDF. "
+    "If the value or items don’t match the order, you must add a remark before it can be completed.",
+    "When everything is picked and packed, set the courier (Aramex, Quiqup, … or <b>In-Store "
+    "Pickup</b>), enter the tracking number, and press <b>Fulfill &amp; push tracking to Shopify</b>. "
+    "In-store pickup doesn’t need a tracking number.",
+    "If Shopify rejects the push, the record is kept and you can retry — nothing is lost.",
+])
+bullets([
+    "An order <b>cancelled</b> in Shopify shows here as cancelled. If it was already invoiced you "
+    "must enter the <b>SRT</b> and <b>PRT</b> document numbers to close it; if it was cancelled "
+    "before invoicing, a short reason closes it.",
+])
+
+h2("Reseller Deliveries")
+p("Manual deliveries to resellers/customers, with the invoice and delivery order kept on file.")
+steps([
+    "Press <b>+ New delivery</b>. Use <b>Upload Invoice</b> and <b>Upload DO</b> — each reads the "
+    "document and fills in the customer, numbers, value and delivery address, and stores the PDF "
+    "(the button turns green and you can re-open it with <b>View</b>).",
+    "Add the driver, driver phone and vehicle number. Known customers/drivers/vehicles "
+    "auto-suggest as you type and fill in their details.",
+    "Set the <b>scheduled delivery date</b> (lateness is measured from this), then <b>Save</b>.",
+    "Update the status as it progresses (New → Preparing → Ready → Out for delivery → Delivered).",
+    "Use <b>Print</b> on a row for a delivery note to sign. Use the recall bar (customer / invoice "
+    "/ DO / date) to find older records — the list shows only the most recent by default.",
+])
+
+h2("Product Transfers (PRT)")
+steps([
+    "Open <b>Product Transfers</b> → <b>+ New PRT</b>. Enter the order, SKU, product, quantity and "
+    "the from/to branch, required date and urgency.",
+    "Press <b>Email</b> on a row to send the branch a formatted request — it sends from your own "
+    "email and always copies purchasing. You can also Copy the text.",
+    "Move the status along as the branch responds. Deleting a PRT asks for a reason (kept in the log).",
+])
+
+h2("Delivery Reports")
+bullets([
+    "<b>Delay</b>: orders and reseller deliveries running late. <b>Branch Support</b>: transfers by "
+    "branch. <b>Courier</b>: shipments by courier. <b>Activity Log</b> and <b>API Errors</b> for "
+    "an audit trail.",
+])
+
+h2("Master data (Manager only)")
+bullets([
+    "Customers, drivers and vehicles build up automatically from the deliveries you save.",
+    "Only the Manager can edit or remove them (e.g. fix a phone, add a licence/insurance expiry).",
+])
+
 gap(16)
 rule()
 p("Techniline Operations — internal use. Keep this manual at your desk; ask the Manager if a "
