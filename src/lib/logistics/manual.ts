@@ -198,9 +198,10 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
     `<td style="padding:9px 12px;border:1px solid #e2e8f0;color:#0f172a;font-size:14px">${value}</td>` +
     `</tr>`;
 
-  // Header chip color by urgency.
-  const headChip = `<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;${
-    urgent ? "background:#fee2e2;color:#b91c1c" : "background:#e0e7ff;color:#3730a3"
+  // Header badge: a solid filled pill with white text so it reads cleanly on the
+  // indigo bar even in Outlook (where rounded corners are dropped).
+  const headChip = `<span style="display:inline-block;padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#ffffff;${
+    urgent ? "background:#ef4444" : "background:rgba(255,255,255,0.22)"
   }">${esc(urg(p.urgency))}</span>`;
 
   // Table-based + bgcolor fallback so Outlook (Word renderer, ignores gradients)
