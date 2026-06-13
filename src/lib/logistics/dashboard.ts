@@ -15,6 +15,7 @@ export interface LogisticsKpis {
   resellerDueToday: number;
   resellerDelayed: number;
   cargoPending: number;
+  returnsDocsPending: number;
   /** Set when the logistics tables aren't created yet, so the UI can prompt setup. */
   notSetUp: boolean;
 }
@@ -34,6 +35,7 @@ const EMPTY: LogisticsKpis = {
   resellerDueToday: 0,
   resellerDelayed: 0,
   cargoPending: 0,
+  returnsDocsPending: 0,
   notSetUp: false,
 };
 
@@ -86,6 +88,7 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       resellerDueToday,
       resellerDelayed,
       cargoPending,
+      returnsDocsPending,
     ] = await Promise.all([
       take(orders().gte("shopify_created_at", todayIso)),
       take(orders().in("logistics_status", PENDING_STATUSES)),
@@ -119,6 +122,12 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
           .select("*", { count: "exact", head: true })
           .not("status", "in", "(delivered,cancelled)"),
       ),
+      take(
+        supabase
+          .from("marketplace_returns")
+          .select("*", { count: "exact", head: true })
+          .in("doc_status", ["pending", "in_progress"]),
+      ),
     ]);
 
     return {
@@ -136,6 +145,7 @@ export async function fetchLogisticsKpis(): Promise<LogisticsKpis> {
       resellerDueToday: resellerDueToday.n,
       resellerDelayed: resellerDelayed.n,
       cargoPending: cargoPending.n,
+      returnsDocsPending: returnsDocsPending.n,
       notSetUp: shopifyToday.missing,
     };
   } catch {

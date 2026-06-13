@@ -10,8 +10,8 @@ import {
   ActionsIcon,
   AnalyticsIcon,
   CargoIcon,
-  CocobluIcon,
   ResellerIcon,
+  ReturnsIcon,
   ShopifyIcon,
 } from "@/components/icons";
 import { fetchLogisticsKpis, type LogisticsKpis } from "@/lib/logistics/dashboard";
@@ -39,6 +39,7 @@ const KPIS: Kpi[] = [
   { key: "resellerDueToday", label: "Reseller due today", accent: "from-pink-50 to-white text-pink-700" },
   { key: "resellerDelayed", label: "Reseller delayed", accent: "from-rose-50 to-white text-rose-700" },
   { key: "cargoPending", label: "Cargo pending", accent: "from-cyan-50 to-white text-cyan-700" },
+  { key: "returnsDocsPending", label: "Returns: docs pending", accent: "from-amber-50 to-white text-amber-700" },
 ];
 
 // Glossy + embossed card base (matches the main staff dashboard).
@@ -97,40 +98,12 @@ const MODULES: ModuleCard[] = [
     tint: "border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-slate-900",
   },
   {
-    title: "Amazon Vendor",
-    description: "Vendor Central logistics.",
-    href: "/logistics/amazon-vendor",
-    icon: CocobluIcon,
+    title: "Marketplace Returns",
+    description: "Amazon / Noon returns received in the warehouse + documentation.",
+    href: "/logistics/returns",
+    icon: ReturnsIcon,
     accent: "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
     tint: "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
-    comingSoon: true,
-  },
-  {
-    title: "Amazon DF",
-    description: "Direct Fulfillment logistics.",
-    href: "/logistics/amazon-df",
-    icon: CocobluIcon,
-    accent: "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
-    tint: "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
-    comingSoon: true,
-  },
-  {
-    title: "Amazon Seller / Flex",
-    description: "Seller & Flex logistics.",
-    href: "/logistics/amazon-seller",
-    icon: CocobluIcon,
-    accent: "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
-    tint: "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
-    comingSoon: true,
-  },
-  {
-    title: "Noon",
-    description: "Noon marketplace logistics.",
-    href: "/logistics/noon",
-    icon: CocobluIcon,
-    accent: "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
-    tint: "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
-    comingSoon: true,
   },
 ];
 

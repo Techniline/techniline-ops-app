@@ -407,6 +407,44 @@ end $$;
 
 ---
 
+## Step 1h — Marketplace returns (run once)
+
+Warehouse-logged returns for Amazon Vendor / DF / Seller-Flex / Noon. Kesh logs
+the receipt; Maricel completes the documentation. Team (manager/admin/logistics
++ Maricel) can read/write.
+
+```sql
+create table if not exists public.marketplace_returns (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null,
+  return_ref text, order_ref text, asin text, sku text, product text, brand text,
+  qty integer default 1, reason text, carrier text, tracking_number text,
+  received_date date, condition text, physical_status text not null default 'received',
+  location text default 'warehouse', notes text,
+  doc_status text not null default 'pending', claim_amount numeric,
+  credit_note_no text, srt_number text, prt_number text, dispute_id text, case_id text,
+  doc_remarks text,
+  logged_by uuid references public.users(id), documented_by uuid references public.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists marketplace_returns_channel_idx on public.marketplace_returns (channel);
+create index if not exists marketplace_returns_doc_idx on public.marketplace_returns (doc_status);
+create index if not exists marketplace_returns_created_idx on public.marketplace_returns (created_at desc);
+
+alter table public.marketplace_returns enable row level security;
+do $$
+declare cond constant text :=
+  '(public.current_user_role() in (''manager'',''admin'',''logistics'') '
+  || 'or auth.uid() in (''227fdb27-80b5-4040-ab14-4bb945068af7'',''cbb81b27-8756-4f2d-bfe0-04211c27092c''))';
+begin
+  drop policy if exists marketplace_returns_rw on public.marketplace_returns;
+  execute format('create policy marketplace_returns_rw on public.marketplace_returns for all to authenticated using %s with check %s', cond, cond);
+end $$;
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

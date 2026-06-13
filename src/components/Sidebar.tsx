@@ -130,10 +130,7 @@ export function Sidebar({
     {
       heading: "Marketplace",
       items: [
-        { href: "/logistics/amazon-vendor", label: "Amazon Vendor", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
-        { href: "/logistics/amazon-df", label: "Amazon DF", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
-        { href: "/logistics/amazon-seller", label: "Amazon Seller / Flex", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
-        { href: "/logistics/noon", label: "Noon", icon: CocobluIcon, comingSoon: true, show: can("marketplace") },
+        { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
       ],
     },
   ];

@@ -73,7 +73,7 @@ export type LogisticsPage =
 
 const LOGISTICS_PAGE_GRANTS: Readonly<Record<string, readonly LogisticsPage[]>> = {
   // Maricel
-  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports"],
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports", "marketplace"],
   // Aaron
   "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["orders"],
 };

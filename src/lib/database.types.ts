@@ -2562,6 +2562,102 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_returns: {
+        Row: {
+          asin: string | null
+          brand: string | null
+          carrier: string | null
+          case_id: string | null
+          channel: string
+          claim_amount: number | null
+          condition: string | null
+          created_at: string
+          credit_note_no: string | null
+          dispute_id: string | null
+          doc_remarks: string | null
+          doc_status: string
+          documented_by: string | null
+          id: string
+          location: string | null
+          logged_by: string | null
+          notes: string | null
+          order_ref: string | null
+          physical_status: string
+          product: string | null
+          prt_number: string | null
+          qty: number | null
+          reason: string | null
+          received_date: string | null
+          return_ref: string | null
+          sku: string | null
+          srt_number: string | null
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          asin?: string | null
+          brand?: string | null
+          carrier?: string | null
+          case_id?: string | null
+          channel: string
+          claim_amount?: number | null
+          condition?: string | null
+          created_at?: string
+          credit_note_no?: string | null
+          dispute_id?: string | null
+          doc_remarks?: string | null
+          doc_status?: string
+          documented_by?: string | null
+          id?: string
+          location?: string | null
+          logged_by?: string | null
+          notes?: string | null
+          order_ref?: string | null
+          physical_status?: string
+          product?: string | null
+          prt_number?: string | null
+          qty?: number | null
+          reason?: string | null
+          received_date?: string | null
+          return_ref?: string | null
+          sku?: string | null
+          srt_number?: string | null
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asin?: string | null
+          brand?: string | null
+          carrier?: string | null
+          case_id?: string | null
+          channel?: string
+          claim_amount?: number | null
+          condition?: string | null
+          created_at?: string
+          credit_note_no?: string | null
+          dispute_id?: string | null
+          doc_remarks?: string | null
+          doc_status?: string
+          documented_by?: string | null
+          id?: string
+          location?: string | null
+          logged_by?: string | null
+          notes?: string | null
+          order_ref?: string | null
+          physical_status?: string
+          product?: string | null
+          prt_number?: string | null
+          qty?: number | null
+          reason?: string | null
+          received_date?: string | null
+          return_ref?: string | null
+          sku?: string | null
+          srt_number?: string | null
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       logistics_vehicles: {
         Row: {
           active: boolean
