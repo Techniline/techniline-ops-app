@@ -10,21 +10,21 @@ export const maxDuration = 30;
 
 const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
-async function authorized(request: Request): Promise<boolean> {
+async function authorized(request: Request): Promise<string | null> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return false;
+  if (!token) return null;
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anon || !service) return false;
+  if (!url || !anon || !service) return null;
   const auth = createClient(url, anon, { auth: { persistSession: false } });
   const { data, error } = await auth.auth.getUser(token);
-  if (error || !data.user) return false;
+  if (error || !data.user) return null;
   const svc = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
   const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === MARICEL_ID;
+  return isManager(profile) || profile.id === MARICEL_ID ? data.user.email ?? data.user.id : null;
 }
 
 const emails = (s: unknown): string[] =>
@@ -34,7 +34,8 @@ const emails = (s: unknown): string[] =>
 
 /** Send a remittance reconciliation email to accounts (To + CC), manager or Maricel. */
 export async function POST(request: Request): Promise<Response> {
-  if (!(await authorized(request))) {
+  const caller = await authorized(request);
+  if (!caller) {
     return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
   let b: { to?: unknown; cc?: unknown; subject?: unknown; html?: unknown };
@@ -50,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
   const html = typeof b.html === "string" ? b.html : "";
   if (!html) return Response.json({ ok: false, error: "Missing email body." }, { status: 400 });
 
-  const sender = process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
+  const sender = caller.includes("@") ? caller : process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
     const token = await getGraphToken();
     const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`, {

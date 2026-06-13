@@ -5,6 +5,7 @@ import type { UserProfile } from "@/lib/types";
 
 export interface LogisticsAuth {
   uid: string;
+  email: string | null;
   serviceClient: SupabaseClient;
 }
 
@@ -36,5 +37,5 @@ export async function authorizeLogistics(request: Request): Promise<LogisticsAut
   } as UserProfile;
 
   if (!canViewLogistics(profile)) return null;
-  return { uid: data.user.id, serviceClient: svc };
+  return { uid: data.user.id, email: data.user.email ?? null, serviceClient: svc };
 }

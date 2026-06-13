@@ -23,7 +23,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!to) return Response.json({ ok: false, error: "Enter a valid recipient email." }, { status: 400 });
   if (!body) return Response.json({ ok: false, error: "Empty email body." }, { status: 400 });
 
-  const sender = process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
+  // Send as the logged-in user, falling back to the configured default.
+  const sender = auth.email ?? process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
     const token = await getGraphToken();
     const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`, {

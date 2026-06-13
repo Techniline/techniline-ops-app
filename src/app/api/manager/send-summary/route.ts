@@ -8,22 +8,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-/** Manager-only: returns true iff the caller is a manager. */
-async function authorizedManager(request: Request): Promise<boolean> {
+/** Manager-only: returns the caller's email iff they're a manager, else null. */
+async function authorizedManager(request: Request): Promise<string | null> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return false;
+  if (!token) return null;
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anon || !service) return false;
+  if (!url || !anon || !service) return null;
   const auth = createClient(url, anon, { auth: { persistSession: false } });
   const { data, error } = await auth.auth.getUser(token);
-  if (error || !data.user) return false;
+  if (error || !data.user) return null;
   const svc = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
   const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile);
+  return isManager(profile) ? data.user.email ?? null : null;
 }
 
 /**
@@ -31,7 +31,8 @@ async function authorizedManager(request: Request): Promise<boolean> {
  * caller supplies the pre-rendered subject/html; fail-soft on Graph errors.
  */
 export async function POST(request: Request): Promise<Response> {
-  if (!(await authorizedManager(request))) {
+  const callerEmail = await authorizedManager(request);
+  if (!callerEmail) {
     return Response.json({ ok: false, error: "Unauthorized (manager only)." }, { status: 401 });
   }
 
@@ -54,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
   const html = typeof body.html === "string" ? body.html : "";
   if (!html) return Response.json({ ok: false, error: "Missing summary html." }, { status: 400 });
 
-  const sender = process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
+  const sender = callerEmail ?? process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
     const token = await getGraphToken();
     const res = await fetch(

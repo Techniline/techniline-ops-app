@@ -38,7 +38,8 @@ async function authorizedId(request: Request): Promise<string | null> {
     id: data.user.id,
     role: (row as { role?: string } | null)?.role ?? null,
   } as UserProfile;
-  return isManager(profile) || hasCapability(profile, "lp_tracker") ? profile.id : null;
+  // Returns the caller's email (or uid as a truthy fallback) when authorized.
+  return isManager(profile) || hasCapability(profile, "lp_tracker") ? data.user.email ?? profile.id : null;
 }
 
 /**
@@ -48,8 +49,8 @@ async function authorizedId(request: Request): Promise<string | null> {
  * warning if this returns non-ok; no data is ever lost.
  */
 export async function POST(request: Request): Promise<Response> {
-  const uid = await authorizedId(request);
-  if (!uid) {
+  const caller = await authorizedId(request);
+  if (!caller) {
     return Response.json({ ok: false, error: "Unauthorized (LP Tracker access required)." }, { status: 401 });
   }
 
@@ -70,7 +71,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Missing report html." }, { status: 400 });
   }
 
-  const sender = process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
+  const sender = caller.includes("@") ? caller : process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
     const token = await getGraphToken();
     const res = await fetch(

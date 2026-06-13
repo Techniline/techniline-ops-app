@@ -28,7 +28,7 @@ async function managerId(request: Request): Promise<string | null> {
     .select("role")
     .eq("id", data.user.id)
     .maybeSingle();
-  return (row as { role?: string } | null)?.role === "manager" ? data.user.id : null;
+  return (row as { role?: string } | null)?.role === "manager" ? data.user.email ?? data.user.id : null;
 }
 
 /**
@@ -40,8 +40,8 @@ async function managerId(request: Request): Promise<string | null> {
  * this returns non-ok.
  */
 export async function POST(request: Request): Promise<Response> {
-  const uid = await managerId(request);
-  if (!uid) {
+  const caller = await managerId(request);
+  if (!caller) {
     return Response.json({ ok: false, error: "Unauthorized (manager only)." }, { status: 401 });
   }
 
@@ -58,7 +58,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Missing recipients / subject / html." }, { status: 400 });
   }
 
-  const sender = process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
+  const sender = caller.includes("@") ? caller : process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
     const token = await getGraphToken();
     const res = await fetch(
