@@ -300,6 +300,22 @@ create policy user_prefs_own on public.user_prefs for all to authenticated
 
 ---
 
+## Step 1e — Reseller delivery: driver / vehicle / document fields (run once)
+
+Adds driver, vehicle and document-reference fields used by the reseller delivery
+note + invoice autofill. Idempotent.
+
+```sql
+alter table public.reseller_deliveries add column if not exists do_number text;
+alter table public.reseller_deliveries add column if not exists invoice_number text;
+alter table public.reseller_deliveries add column if not exists driver_name text;
+alter table public.reseller_deliveries add column if not exists driver_phone text;
+alter table public.reseller_deliveries add column if not exists vehicle_number text;
+create index if not exists reseller_deliveries_created_idx on public.reseller_deliveries (created_at desc);
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

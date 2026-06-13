@@ -239,6 +239,7 @@ export async function closeCancellation(
 export interface InvoiceDraft {
   invoiceNumber: string | null;
   invoiceValue: number | null;
+  customerName: string | null;
   skus: string[];
   engine: "ai" | "basic";
 }

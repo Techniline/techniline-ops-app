@@ -4,6 +4,7 @@ import { extractText, getDocumentProxy } from "unpdf";
 export interface InvoiceDraft {
   invoiceNumber: string | null;
   invoiceValue: number | null;
+  customerName: string | null;
   skus: string[];
   engine: "ai" | "basic";
 }
@@ -13,6 +14,7 @@ const INVOICE_SCHEMA = {
   additionalProperties: false,
   properties: {
     invoice_number: { type: ["string", "null"], description: "The TLE invoice number / document number" },
+    customer_name: { type: ["string", "null"], description: "The customer / bill-to / buyer name on the invoice" },
     invoice_total: {
       type: ["number", "null"],
       description: "The final total amount payable (grand total including VAT), as a number",
@@ -23,7 +25,7 @@ const INVOICE_SCHEMA = {
       description: "Every product Model No / SKU / item code, one per product line. Exclude totals, VAT and summary rows.",
     },
   },
-  required: ["invoice_number", "invoice_total", "skus"],
+  required: ["invoice_number", "customer_name", "invoice_total", "skus"],
 } as const;
 
 const PROMPT = `You are extracting structured data from a Techniline (TLE) TAX INVOICE.
@@ -40,6 +42,7 @@ Rules:
 
 interface RawDraft {
   invoice_number?: string | null;
+  customer_name?: string | null;
   invoice_total?: number | null;
   skus?: string[];
 }
@@ -54,6 +57,7 @@ function parseBasic(text: string): InvoiceDraft {
   return {
     invoiceNumber: numMatch ? numMatch[1].trim() : null,
     invoiceValue: total,
+    customerName: null,
     skus: [],
     engine: "basic",
   };
@@ -102,6 +106,7 @@ export async function parseTleInvoice(pdf: Uint8Array): Promise<InvoiceDraft> {
     invoiceNumber: raw.invoice_number?.trim() || null,
     invoiceValue:
       typeof raw.invoice_total === "number" && Number.isFinite(raw.invoice_total) ? raw.invoice_total : null,
+    customerName: raw.customer_name?.trim() || null,
     skus: [...new Set(skus)],
     engine: "ai",
   };

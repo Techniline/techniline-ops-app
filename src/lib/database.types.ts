@@ -2281,6 +2281,11 @@ export type Database = {
           phone: string | null
           reference_no: string | null
           requested_by: string | null
+          driver_name: string | null
+          driver_phone: string | null
+          do_number: string | null
+          invoice_number: string | null
+          vehicle_number: string | null
           reseller_name: string | null
           scheduled_date: string | null
           status: string
@@ -2303,6 +2308,11 @@ export type Database = {
           phone?: string | null
           reference_no?: string | null
           requested_by?: string | null
+          driver_name?: string | null
+          driver_phone?: string | null
+          do_number?: string | null
+          invoice_number?: string | null
+          vehicle_number?: string | null
           reseller_name?: string | null
           scheduled_date?: string | null
           status?: string
@@ -2325,6 +2335,11 @@ export type Database = {
           phone?: string | null
           reference_no?: string | null
           requested_by?: string | null
+          driver_name?: string | null
+          driver_phone?: string | null
+          do_number?: string | null
+          invoice_number?: string | null
+          vehicle_number?: string | null
           reseller_name?: string | null
           scheduled_date?: string | null
           status?: string

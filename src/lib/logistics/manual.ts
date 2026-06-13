@@ -16,14 +16,70 @@ async function currentUserId(): Promise<string | null> {
 
 // ── Reseller deliveries ──────────────────────────────────────────────────────
 
-export async function fetchResellers(): Promise<ResellerRow[]> {
-  const { data, error } = await supabase
-    .from("reseller_deliveries")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
+export interface ResellerFilters {
+  search?: string; // reseller / invoice / DO / reference
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
+/** Recent reseller deliveries, or matches for the recall filters. */
+export async function fetchResellers(filters: ResellerFilters = {}): Promise<ResellerRow[]> {
+  let q = supabase.from("reseller_deliveries").select("*").order("created_at", { ascending: false });
+  const s = filters.search?.trim();
+  if (s) {
+    const like = `%${s}%`;
+    q = q.or(
+      [
+        `reseller_name.ilike.${like}`,
+        `invoice_number.ilike.${like}`,
+        `do_number.ilike.${like}`,
+        `reference_no.ilike.${like}`,
+      ].join(",")
+    );
+  }
+  if (filters.from) q = q.gte("scheduled_date", filters.from);
+  if (filters.to) q = q.lte("scheduled_date", filters.to);
+  q = q.limit(filters.limit ?? (s || filters.from || filters.to ? 200 : 25));
+  const { data, error } = await q;
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+export interface ResellerSuggestions {
+  customers: { name: string; contact_person: string | null; phone: string | null; city: string | null; delivery_address: string | null }[];
+  drivers: { name: string; phone: string | null }[];
+  vehicles: string[];
+}
+
+/** Build driver / vehicle / customer suggestion sets from past records (newest
+ *  value wins), so fields autocomplete and back-fill over time. */
+export async function fetchResellerSuggestions(): Promise<ResellerSuggestions> {
+  const { data } = await supabase
+    .from("reseller_deliveries")
+    .select("reseller_name, contact_person, phone, city, delivery_address, driver_name, driver_phone, vehicle_number")
+    .order("created_at", { ascending: false })
+    .limit(2000);
+  const customers = new Map<string, ResellerSuggestions["customers"][number]>();
+  const drivers = new Map<string, { name: string; phone: string | null }>();
+  const vehicles = new Set<string>();
+  for (const r of data ?? []) {
+    const c = (r.reseller_name ?? "").trim();
+    if (c && !customers.has(c.toLowerCase())) {
+      customers.set(c.toLowerCase(), {
+        name: c,
+        contact_person: r.contact_person ?? null,
+        phone: r.phone ?? null,
+        city: r.city ?? null,
+        delivery_address: r.delivery_address ?? null,
+      });
+    }
+    const d = (r.driver_name ?? "").trim();
+    if (d && !drivers.has(d.toLowerCase())) drivers.set(d.toLowerCase(), { name: d, phone: r.driver_phone ?? null });
+    const v = (r.vehicle_number ?? "").trim();
+    if (v) vehicles.add(v);
+  }
+  return { customers: [...customers.values()], drivers: [...drivers.values()], vehicles: [...vehicles] };
 }
 
 export async function saveReseller(row: Partial<ResellerRow> & { id?: string }): Promise<void> {
