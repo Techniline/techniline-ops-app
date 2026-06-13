@@ -4,10 +4,11 @@ import type { Tables, TablesInsert } from "@/lib/types";
 export type ReturnRow = Tables<"marketplace_returns">;
 
 export const CHANNELS: { value: string; label: string }[] = [
-  { value: "amazon_vendor", label: "Amazon Vendor" },
   { value: "amazon_df", label: "Amazon DF" },
-  { value: "amazon_seller_flex", label: "Amazon Seller / Flex" },
+  { value: "amazon_seller", label: "Amazon Seller" },
+  { value: "amazon_flex", label: "Amazon Flex" },
   { value: "noon", label: "Noon" },
+  { value: "cocoblu", label: "Cocoblu" },
 ];
 
 export const RETURN_REASONS: { value: string; label: string }[] = [
@@ -145,14 +146,14 @@ export function returnEmailHtml(r: ReturnRow): string {
           <div style="color:#0f172a;font-size:20px;font-weight:700;line-height:1.4;margin-bottom:26px">A return was received in the warehouse and needs documentation:</div>
           <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0">
             ${row("Channel", esc(rLabel(CHANNELS, r.channel)))}
-            ${row("Return / RMA", esc(r.return_ref ?? "—"))}
-            ${row("Order / PO", esc(r.order_ref ?? "—"))}
+            ${row("Return ID", esc(r.return_ref ?? "—"))}
+            ${row("Order number", esc(r.order_ref ?? "—"))}
             ${row("ASIN", esc(r.asin ?? "—"))}
             ${row("SKU", esc(r.sku ?? "—"))}
             ${row("Product", esc(r.product ?? "—"))}
             ${row("Qty", esc(r.qty ?? 1))}
             ${row("Reason", esc(rLabel(RETURN_REASONS, r.reason)))}
-            ${row("Received", esc(r.received_date ?? "—"))}
+            ${row("Return date", esc(r.received_date ?? "—"))}
             ${row("Condition", esc(rLabel(CONDITIONS, r.condition)))}
           </table>
           <p style="margin:22px 0 0;color:#334155;font-size:14px">Please open <strong>Logistics → Marketplace Returns</strong> and complete the documentation (credit note, SRT/PRT, dispute &amp; case IDs).</p>

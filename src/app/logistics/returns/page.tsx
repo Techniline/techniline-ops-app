@@ -137,8 +137,8 @@ export default function MarketplaceReturnsPage() {
               <option value="">Channel…</option>
               {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <input className={inputClass} placeholder="Return / RMA ref" value={draft.return_ref ?? ""} onChange={(e) => set("return_ref", e.target.value)} />
-            <input className={inputClass} placeholder="Order / PO" value={draft.order_ref ?? ""} onChange={(e) => set("order_ref", e.target.value)} />
+            <input className={inputClass} placeholder="Return ID" value={draft.return_ref ?? ""} onChange={(e) => set("return_ref", e.target.value)} />
+            <input className={inputClass} placeholder="Order number" value={draft.order_ref ?? ""} onChange={(e) => set("order_ref", e.target.value)} />
             <input className={inputClass} placeholder="ASIN (Amazon)" value={draft.asin ?? ""} onChange={(e) => set("asin", e.target.value)} />
             <input className={inputClass} placeholder="SKU" value={draft.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
             <input className={`${inputClass} sm:col-span-2`} placeholder="Product" value={draft.product ?? ""} onChange={(e) => set("product", e.target.value)} />
@@ -150,7 +150,7 @@ export default function MarketplaceReturnsPage() {
             </select>
             <input className={inputClass} placeholder="Carrier" value={draft.carrier ?? ""} onChange={(e) => set("carrier", e.target.value)} />
             <input className={inputClass} placeholder="Tracking number" value={draft.tracking_number ?? ""} onChange={(e) => set("tracking_number", e.target.value)} />
-            <label className="flex flex-col gap-1 text-xs text-slate-500">Received date
+            <label className="flex flex-col gap-1 text-xs text-slate-500">Return date
               <input className={inputClass} type="date" value={draft.received_date ?? ""} onChange={(e) => set("received_date", e.target.value || null)} />
             </label>
             <select className={inputClass} value={draft.condition ?? ""} onChange={(e) => set("condition", e.target.value)}>
@@ -208,13 +208,13 @@ export default function MarketplaceReturnsPage() {
         defaultHidden={["order", "asin", "condition", "location"]}
         columns={[
           { id: "channel", label: "Channel", cell: (r) => rLabel(CHANNELS, r.channel) },
-          { id: "rma", label: "RMA", cell: (r) => r.return_ref ?? "—" },
-          { id: "order", label: "Order", cell: (r) => r.order_ref ?? "—" },
+          { id: "rma", label: "Return ID", cell: (r) => r.return_ref ?? "—" },
+          { id: "order", label: "Order #", cell: (r) => r.order_ref ?? "—" },
           { id: "asin", label: "ASIN", cell: (r) => r.asin ?? "—" },
           { id: "sku", label: "SKU", cell: (r) => r.sku ?? "—" },
           { id: "product", label: "Product", cell: (r) => r.product ?? "—" },
           { id: "qty", label: "Qty", className: "tabular-nums", cell: (r) => r.qty ?? 1 },
-          { id: "received", label: "Received", cell: (r) => r.received_date ?? "—" },
+          { id: "received", label: "Return date", cell: (r) => r.received_date ?? "—" },
           { id: "condition", label: "Condition", cell: (r) => rLabel(CONDITIONS, r.condition) },
           { id: "physical", label: "Physical", cell: (r) => rLabel(PHYSICAL_STATUS, r.physical_status) },
           { id: "location", label: "Location", cell: (r) => labelFor(SOURCE_LOCATIONS, r.location) },
