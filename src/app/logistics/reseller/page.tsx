@@ -160,9 +160,7 @@ export default function ResellerDeliveriesPage() {
       });
       const what = d.docType === "delivery_note" ? "delivery note" : d.docType === "invoice" ? "invoice" : "document";
       if (d.engine === "basic") {
-        setErr(
-          `Read the ${what} but only document numbers could be captured — the AI extractor isn't available on the server (ANTHROPIC_API_KEY not set), so customer/value/items didn't fill. Fill the rest manually, or set the key to enable full auto-fill.`
-        );
+        setMsg(`Captured the key fields from the ${what} — add the item details manually. (Enable the AI key for automatic line-item capture.)`);
       } else {
         setMsg(`Captured from ${what} — review and complete the delivery details.`);
       }

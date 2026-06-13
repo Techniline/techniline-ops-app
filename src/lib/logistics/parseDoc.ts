@@ -85,18 +85,55 @@ interface RawDoc {
   items?: RawItem[];
 }
 
+/**
+ * Free deterministic parser tuned to the Techniline ERP invoice / delivery-note
+ * layout. Reliably pulls the document numbers, PO/ref, customer and (for
+ * invoices) the net amount, without any API. Line items still need the AI path.
+ */
 function basic(text: string): DocDraft {
-  const inv = text.match(/\b([A-Z]{1,3}\/\d{6,})\b/);
-  const doNo = text.match(/\bDO\/?\s?(\d{6,})\b/i);
-  const isDO = /delivery note/i.test(text);
+  const t = text.replace(/\s+/g, " ").trim();
+  const isDO = /delivery note/i.test(t);
+  const docType: DocDraft["docType"] = isDO ? "delivery_note" : /tax invoice/i.test(t) ? "invoice" : "other";
+
+  // Invoice no like "WS/2601706"; DO no like "DO/260000737".
+  const doNumber = (t.match(/\b(DO\/\d{5,})\b/i) ?? [])[1] ?? null;
+  // First "AB/123456" style code that isn't the DO number.
+  const codes = [...t.matchAll(/\b([A-Z]{2}\/\d{6,})\b/g)].map((m) => m[1]);
+  const invoiceNumber = codes.find((c) => !/^DO\//i.test(c)) ?? null;
+  const poNumber = (t.match(/PO#\s*([A-Za-z0-9\-\/]+)/i) ?? [])[1]?.replace(/[.,;]+$/, "") ?? null;
+
+  // Customer: prefer the name sitting between the two 15-digit TRNs (invoice),
+  // else the first company-style name (…LLC / FZE / EST / ACADEMY / HOTEL …).
+  let customerName: string | null = null;
+  const between = t.match(/\b\d{15}\b\s+(.+?)\s+\b\d{15}\b/);
+  if (between) customerName = between[1].trim();
+  if (!customerName) {
+    const org = t.match(
+      /([A-Z][A-Za-z0-9 .&'\-]+?(?:L\.?L\.?C|LLC|FZE|FZCO|EST\.?|TRADING|GENERAL|TRAD(?:ING)?|COMPANY|GROUP))\b/
+    );
+    if (org) customerName = org[1].trim();
+  }
+
+  // Net amount = the figure immediately before "AED <amount in words>".
+  const amt = t.match(/([\d,]+\.\d{2})\s+AED\s+[A-Za-z]/);
+  const totalValue = amt ? Number(amt[1].replace(/,/g, "")) : null;
+
+  // Delivery address (DO): the branch line, usually after the customer and
+  // before "Narration"/"Delivery Terms".
+  let deliveryAddress: string | null = null;
+  if (isDO) {
+    const addr = t.match(/(?:LLC|L\.L\.C)\s+(.+?)\s+(?:Narration|Delivery Terms|Brand|Model No)\b/i);
+    if (addr) deliveryAddress = addr[1].trim();
+  }
+
   return {
-    docType: isDO ? "delivery_note" : /tax invoice/i.test(text) ? "invoice" : "other",
-    invoiceNumber: inv ? inv[1] : null,
-    doNumber: doNo ? `DO/${doNo[1]}` : null,
-    customerName: null,
-    deliveryAddress: null,
-    poNumber: null,
-    totalValue: null,
+    docType,
+    invoiceNumber,
+    doNumber,
+    customerName,
+    deliveryAddress,
+    poNumber,
+    totalValue,
     items: [],
     engine: "basic",
   };
