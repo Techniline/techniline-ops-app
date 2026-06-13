@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { btnPrimary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
+import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import {
   COURIERS,
   labelFor,
@@ -188,6 +188,7 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
   }
 
   const { order, items, tracking } = detail;
+  const shopUrl = shopifyAdminUrl(order);
   const isCancelled = order.logistics_status === "cancelled";
   // Cancelled orders don't need a TLE invoice — their requirement is SRT/PRT closure.
   const invoiceMissing = !order.tle_invoice_number && !isCancelled;
@@ -204,6 +205,22 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
       {err ? (
         <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div>
       ) : null}
+
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {order.order_number ?? order.shopify_order_id}
+        </span>
+        {shopUrl ? (
+          <a
+            href={shopUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${btnSecondary} inline-flex items-center gap-1`}
+          >
+            View in Shopify ↗
+          </a>
+        ) : null}
+      </div>
 
       {invoiceMissing ? (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
@@ -581,6 +598,20 @@ export function OrderDetailView({ id, onChanged }: { id: string; onChanged?: () 
       </div>
     </div>
   );
+}
+
+/** Build the Shopify admin order URL from the stored payload's order_status_url
+ *  host (the shop's domain), so no extra env/config is needed. */
+function shopifyAdminUrl(order: { shopify_order_id: string; raw: unknown }): string | null {
+  const raw = order.raw as { order_status_url?: string } | null;
+  const statusUrl = raw?.order_status_url;
+  if (!statusUrl || !order.shopify_order_id) return null;
+  try {
+    const host = new URL(statusUrl).host;
+    return `https://${host}/admin/orders/${order.shopify_order_id}`;
+  } catch {
+    return null;
+  }
 }
 
 function Row({ label, value }: { label: string; value: string | null }) {
