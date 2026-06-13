@@ -316,6 +316,64 @@ create index if not exists reseller_deliveries_created_idx on public.reseller_de
 
 ---
 
+## Step 1f — Master data: customers / drivers / vehicles (run once)
+
+Persistent master tables that auto-fill from saved deliveries. Everyone on the
+logistics team can read them and add new names; only manager/admin can edit or
+delete (correct details, add license/insurance expiry, deactivate, dedupe).
+
+```sql
+create table if not exists public.logistics_customers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  contact_person text, phone text, city text, address text, trn text, payment_terms text,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.logistics_drivers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  phone text, license_no text, license_expiry date,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.logistics_vehicles (
+  id uuid primary key default gen_random_uuid(),
+  plate text not null unique,
+  vehicle_type text, reg_expiry date, insurance_expiry date,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- RLS: read + insert for the logistics team (manager/admin/logistics + Maricel,
+-- Aaron); update/delete restricted to manager/admin.
+do $$
+declare
+  t text;
+  team constant text :=
+    '(public.current_user_role() in (''manager'',''admin'',''logistics'') '
+    || 'or auth.uid() in (''227fdb27-80b5-4040-ab14-4bb945068af7'',''cbb81b27-8756-4f2d-bfe0-04211c27092c''))';
+  mgr constant text := '(public.current_user_role() in (''manager'',''admin''))';
+begin
+  foreach t in array array['logistics_customers','logistics_drivers','logistics_vehicles'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_read', t);
+    execute format('drop policy if exists %I on public.%I', t || '_insert', t);
+    execute format('drop policy if exists %I on public.%I', t || '_update', t);
+    execute format('drop policy if exists %I on public.%I', t || '_delete', t);
+    execute format('create policy %I on public.%I for select to authenticated using %s', t || '_read', t, team);
+    execute format('create policy %I on public.%I for insert to authenticated with check %s', t || '_insert', t, team);
+    execute format('create policy %I on public.%I for update to authenticated using %s with check %s', t || '_update', t, mgr, mgr);
+    execute format('create policy %I on public.%I for delete to authenticated using %s', t || '_delete', t, mgr);
+  end loop;
+end $$;
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

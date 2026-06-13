@@ -2481,6 +2481,114 @@ export type Database = {
         }
         Relationships: []
       }
+      logistics_customers: {
+        Row: {
+          active: boolean
+          address: string | null
+          city: string | null
+          contact_person: string | null
+          created_at: string
+          id: string
+          name: string
+          payment_terms: string | null
+          phone: string | null
+          trn: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          address?: string | null
+          city?: string | null
+          contact_person?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          payment_terms?: string | null
+          phone?: string | null
+          trn?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          address?: string | null
+          city?: string | null
+          contact_person?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          payment_terms?: string | null
+          phone?: string | null
+          trn?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      logistics_drivers: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          license_expiry: string | null
+          license_no: string | null
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          license_expiry?: string | null
+          license_no?: string | null
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          license_expiry?: string | null
+          license_no?: string | null
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      logistics_vehicles: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          insurance_expiry: string | null
+          plate: string
+          reg_expiry: string | null
+          updated_at: string
+          vehicle_type: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          insurance_expiry?: string | null
+          plate: string
+          reg_expiry?: string | null
+          updated_at?: string
+          vehicle_type?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          insurance_expiry?: string | null
+          plate?: string
+          reg_expiry?: string | null
+          updated_at?: string
+          vehicle_type?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       cocoblu_ageing_view: {

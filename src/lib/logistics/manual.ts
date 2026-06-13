@@ -3,6 +3,9 @@ import type { Tables, TablesInsert } from "@/lib/types";
 
 export type ResellerRow = Tables<"reseller_deliveries">;
 export type CargoRow = Tables<"cargo_deliveries">;
+export type CustomerRow = Tables<"logistics_customers">;
+export type DriverRow = Tables<"logistics_drivers">;
+export type VehicleRow = Tables<"logistics_vehicles">;
 export type PrtRow = Tables<"prt_requests">;
 export type ActivityRow = Tables<"logistics_activity_logs">;
 export type ApiErrorRow = Tables<"logistics_api_error_logs">;
@@ -52,18 +55,48 @@ export interface ResellerSuggestions {
   vehicles: string[];
 }
 
-/** Build driver / vehicle / customer suggestion sets from past records (newest
- *  value wins), so fields autocomplete and back-fill over time. */
+/** Build driver / vehicle / customer suggestion sets from the master tables
+ *  (manager-curated, authoritative) merged with past delivery records (for
+ *  bootstrap). Master values win. */
 export async function fetchResellerSuggestions(): Promise<ResellerSuggestions> {
-  const { data } = await supabase
-    .from("reseller_deliveries")
-    .select("reseller_name, contact_person, phone, city, delivery_address, driver_name, driver_phone, vehicle_number")
-    .order("created_at", { ascending: false })
-    .limit(2000);
+  const [masterC, masterD, masterV, deliveries] = await Promise.all([
+    supabase.from("logistics_customers").select("name, contact_person, phone, city, address").eq("active", true).limit(3000),
+    supabase.from("logistics_drivers").select("name, phone").eq("active", true).limit(3000),
+    supabase.from("logistics_vehicles").select("plate").eq("active", true).limit(3000),
+    supabase
+      .from("reseller_deliveries")
+      .select("reseller_name, contact_person, phone, city, delivery_address, driver_name, driver_phone, vehicle_number")
+      .order("created_at", { ascending: false })
+      .limit(2000),
+  ]);
+
   const customers = new Map<string, ResellerSuggestions["customers"][number]>();
   const drivers = new Map<string, { name: string; phone: string | null }>();
   const vehicles = new Set<string>();
-  for (const r of data ?? []) {
+
+  // Seed from master tables first (authoritative).
+  for (const c of masterC.data ?? []) {
+    const k = (c.name ?? "").trim();
+    if (k)
+      customers.set(k.toLowerCase(), {
+        name: k,
+        contact_person: c.contact_person ?? null,
+        phone: c.phone ?? null,
+        city: c.city ?? null,
+        delivery_address: c.address ?? null,
+      });
+  }
+  for (const d of masterD.data ?? []) {
+    const k = (d.name ?? "").trim();
+    if (k) drivers.set(k.toLowerCase(), { name: k, phone: d.phone ?? null });
+  }
+  for (const v of masterV.data ?? []) {
+    const k = (v.plate ?? "").trim();
+    if (k) vehicles.add(k);
+  }
+
+  // Merge in anything from history not already covered.
+  for (const r of deliveries.data ?? []) {
     const c = (r.reseller_name ?? "").trim();
     if (c && !customers.has(c.toLowerCase())) {
       customers.set(c.toLowerCase(), {
@@ -92,6 +125,79 @@ export async function saveReseller(row: Partial<ResellerRow> & { id?: string }):
     updated_at: new Date().toISOString(),
   } as TablesInsert<"reseller_deliveries">;
   const { error } = await supabase.from("reseller_deliveries").upsert(payload);
+  if (error) throw new Error(error.message);
+  await captureMasters(row); // best-effort: grow the master lists
+}
+
+/** Insert any new customer / driver / vehicle names into the master tables
+ *  (on conflict do nothing — never overwrites manager-edited details). */
+async function captureMasters(d: Partial<ResellerRow>): Promise<void> {
+  const tasks: PromiseLike<unknown>[] = [];
+  if (d.reseller_name?.trim()) {
+    tasks.push(
+      supabase.from("logistics_customers").upsert(
+        {
+          name: d.reseller_name.trim(),
+          contact_person: d.contact_person ?? null,
+          phone: d.phone ?? null,
+          city: d.city ?? null,
+          address: d.delivery_address ?? null,
+        },
+        { onConflict: "name", ignoreDuplicates: true }
+      )
+    );
+  }
+  if (d.driver_name?.trim()) {
+    tasks.push(
+      supabase
+        .from("logistics_drivers")
+        .upsert({ name: d.driver_name.trim(), phone: d.driver_phone ?? null }, { onConflict: "name", ignoreDuplicates: true })
+    );
+  }
+  if (d.vehicle_number?.trim()) {
+    tasks.push(
+      supabase.from("logistics_vehicles").upsert({ plate: d.vehicle_number.trim() }, { onConflict: "plate", ignoreDuplicates: true })
+    );
+  }
+  try {
+    await Promise.all(tasks);
+  } catch {
+    /* best-effort; never block the delivery save */
+  }
+}
+
+// ── Master data (manager/admin manage; team reads) ───────────────────────────
+
+export async function fetchCustomers(): Promise<CustomerRow[]> {
+  const { data, error } = await supabase.from("logistics_customers").select("*").order("name");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+export async function fetchDrivers(): Promise<DriverRow[]> {
+  const { data, error } = await supabase.from("logistics_drivers").select("*").order("name");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+export async function fetchVehicles(): Promise<VehicleRow[]> {
+  const { data, error } = await supabase.from("logistics_vehicles").select("*").order("plate");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+export async function saveCustomer(row: Partial<CustomerRow>): Promise<void> {
+  const { error } = await supabase.from("logistics_customers").upsert({ ...row, updated_at: new Date().toISOString() } as never);
+  if (error) throw new Error(error.message);
+}
+export async function saveDriver(row: Partial<DriverRow>): Promise<void> {
+  const { error } = await supabase.from("logistics_drivers").upsert({ ...row, updated_at: new Date().toISOString() } as never);
+  if (error) throw new Error(error.message);
+}
+export async function saveVehicle(row: Partial<VehicleRow>): Promise<void> {
+  const { error } = await supabase.from("logistics_vehicles").upsert({ ...row, updated_at: new Date().toISOString() } as never);
+  if (error) throw new Error(error.message);
+}
+export async function deleteMaster(kind: "customers" | "drivers" | "vehicles", id: string): Promise<void> {
+  const table = kind === "customers" ? "logistics_customers" : kind === "drivers" ? "logistics_drivers" : "logistics_vehicles";
+  const { error } = await supabase.from(table).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
 

@@ -68,7 +68,8 @@ export type LogisticsPage =
   | "cargo"
   | "prt"
   | "reports"
-  | "marketplace";
+  | "marketplace"
+  | "masters";
 
 const LOGISTICS_PAGE_GRANTS: Readonly<Record<string, readonly LogisticsPage[]>> = {
   // Maricel
@@ -93,6 +94,8 @@ export function canViewLogistics(profile: ProfileArg): boolean {
 
 /** May the user access a specific logistics page? */
 export function canViewLogisticsPage(profile: ProfileArg, page: LogisticsPage): boolean {
+  // Master data management is manager/admin only — never the logistics user.
+  if (page === "masters") return isManager(profile) || profile?.role === "admin";
   const pages = logisticsPages(profile);
   return pages === "all" || pages.includes(page);
 }

@@ -124,6 +124,7 @@ export function Sidebar({
       items: [
         { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon, show: can("prt") },
         { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon, show: can("reports") },
+        { href: "/logistics/masters", label: "Master Data", icon: ResellerIcon, show: can("masters") },
       ],
     },
     {
