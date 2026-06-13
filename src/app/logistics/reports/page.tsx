@@ -6,9 +6,18 @@ import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { btnPrimary, btnSecondary, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import { labelFor, LOGISTICS_STATUS, RESELLER_STATUS, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
 import { fetchActivity, fetchApiErrors, type ActivityRow, type ApiErrorRow } from "@/lib/logistics/manual";
-import { branchSupportReport, courierReport, delayReport, type BranchRow, type CourierRow, type DelayRow } from "@/lib/logistics/reports";
+import {
+  aiUsageReport,
+  branchSupportReport,
+  courierReport,
+  delayReport,
+  type AiUsageReport,
+  type BranchRow,
+  type CourierRow,
+  type DelayRow,
+} from "@/lib/logistics/reports";
 
-type Tab = "delay" | "branch" | "courier" | "activity" | "errors";
+type Tab = "delay" | "branch" | "courier" | "activity" | "errors" | "ai";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "delay", label: "Delay Report" },
@@ -16,6 +25,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "courier", label: "Courier Report" },
   { key: "activity", label: "Activity Log" },
   { key: "errors", label: "API Errors" },
+  { key: "ai", label: "AI Usage" },
 ];
 
 function fmt(iso: string | null): string {
@@ -30,6 +40,7 @@ export default function DeliveryReportsPage() {
   const [courier, setCourier] = useState<CourierRow[]>([]);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [errors, setErrors] = useState<ApiErrorRow[]>([]);
+  const [ai, setAi] = useState<AiUsageReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -40,6 +51,7 @@ export default function DeliveryReportsPage() {
       else if (tab === "courier") setCourier(await courierReport());
       else if (tab === "activity") setActivity(await fetchActivity());
       else if (tab === "errors") setErrors(await fetchApiErrors());
+      else if (tab === "ai") setAi(await aiUsageReport());
     } finally {
       setLoading(false);
     }
@@ -128,7 +140,7 @@ export default function DeliveryReportsPage() {
                 ))}
             </tbody>
           </table>
-        ) : (
+        ) : tab === "errors" ? (
           <table className="min-w-full text-sm">
             <thead><tr><th className={thCell}>When</th><th className={thCell}>Source</th><th className={thCell}>Context</th><th className={thCell}>Message</th></tr></thead>
             <tbody>
@@ -143,8 +155,35 @@ export default function DeliveryReportsPage() {
                 ))}
             </tbody>
           </table>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead><tr><th className={thCell}>When</th><th className={thCell}>Source</th><th className={thCell}>Model</th><th className={thCell}>Input</th><th className={thCell}>Output</th><th className={thCell}>Cost (USD)</th></tr></thead>
+            <tbody>
+              {!ai || ai.rows.length === 0 ? <tr><td className={tdCell} colSpan={6}>No AI document extraction yet.</td></tr> :
+                ai.rows.map((u) => (
+                  <tr key={u.id}>
+                    <td className={tdCell}>{fmt(u.created_at)}</td>
+                    <td className={tdCell}>{u.source ?? "—"}</td>
+                    <td className={tdCell}>{u.model ?? "—"}</td>
+                    <td className={`${tdCell} tabular-nums`}>{u.input_tokens ?? 0}</td>
+                    <td className={`${tdCell} tabular-nums`}>{u.output_tokens ?? 0}</td>
+                    <td className={`${tdCell} tabular-nums`}>{(u.cost_usd ?? 0).toFixed(4)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         )}
       </div>
+      {tab === "ai" && ai ? (
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
+            This month: <strong>{ai.monthCount}</strong> docs · <strong>${ai.monthCost.toFixed(2)}</strong>
+          </span>
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
+            Recent total (last 300 calls): <strong>${ai.totalCost.toFixed(2)}</strong>
+          </span>
+        </div>
+      ) : null}
     </LogisticsShell>
   );
 }

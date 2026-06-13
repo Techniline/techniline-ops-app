@@ -447,6 +447,31 @@ end $$;
 
 ---
 
+## Step 1i — AI usage log (run once)
+
+Records each Claude document-extraction call (tokens + estimated cost) so usage
+is visible. Service-role writes; logistics team reads.
+
+```sql
+create table if not exists public.ai_usage (
+  id uuid primary key default gen_random_uuid(),
+  source text,            -- e.g. reseller_doc, order_invoice, cocoblu_invoice
+  model text,
+  input_tokens integer default 0,
+  output_tokens integer default 0,
+  cost_usd numeric default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_usage_created_idx on public.ai_usage (created_at desc);
+alter table public.ai_usage enable row level security;
+drop policy if exists ai_usage_read on public.ai_usage;
+create policy ai_usage_read on public.ai_usage for select to authenticated
+  using (public.current_user_role() in ('manager','admin','logistics')
+         or auth.uid() in ('227fdb27-80b5-4040-ab14-4bb945068af7','cbb81b27-8756-4f2d-bfe0-04211c27092c'));
+```
+
+---
+
 ## Step 2 — Create Kesh Rana's login
 
 The server gates Logistics access by `users.role = 'logistics'`.

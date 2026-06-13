@@ -6,6 +6,7 @@ import { CustomizableTable } from "@/components/logistics/CustomizableTable";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { SOURCE_LOCATIONS, labelFor } from "@/lib/logistics/constants";
+import { parseDocPdf } from "@/lib/logistics/manual";
 import {
   CHANNELS,
   CONDITIONS,
@@ -64,6 +65,32 @@ export default function MarketplaceReturnsPage() {
     setProducts((ps) => ps.map((p, idx) => (idx === i ? { ...p, [k]: v } : p)));
   const addItem = () => setProducts((ps) => (ps.length >= MAX_ITEMS ? ps : [...ps, { ...EMPTY_ITEM }]));
   const removeItem = (i: number) => setProducts((ps) => (ps.length <= 1 ? ps : ps.filter((_, idx) => idx !== i)));
+
+  const [parsing, setParsing] = useState(false);
+  async function uploadDoc(file: File) {
+    setParsing(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const d = await parseDocPdf(file);
+      setDraft((cur) => ({
+        ...(cur ?? { ...EMPTY }),
+        order_ref: cur?.order_ref || d.poNumber || d.invoiceNumber || d.doNumber || cur?.order_ref,
+      }));
+      if (d.items.length) {
+        setProducts(d.items.map((i) => ({ sku: i.sku, product: i.description, qty: i.qty ?? 1, condition: null })).slice(0, MAX_ITEMS));
+      }
+      setMsg(
+        d.engine === "basic"
+          ? "Captured the order number from the document — add product lines manually."
+          : `Captured ${d.items.length} product line(s) from the document — review and complete.`
+      );
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setParsing(false);
+    }
+  }
 
   const [channel, setChannel] = useState("");
   const [docPending, setDocPending] = useState(false);
@@ -163,7 +190,14 @@ export default function MarketplaceReturnsPage() {
 
       {draft ? (
         <div className={`${surface} mb-4 p-4`}>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Warehouse / receipt (Kesh)</h2>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Warehouse / receipt (Kesh)</h2>
+            <label className={`${parsing ? "pointer-events-none opacity-60" : ""} cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800`}>
+              {parsing ? "Reading…" : "📎 Upload PDF (auto-fill)"}
+              <input type="file" accept="application/pdf" className="hidden" disabled={parsing}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDoc(f); e.target.value = ""; }} />
+            </label>
+          </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <select className={inputClass} value={draft.channel ?? ""} onChange={(e) => set("channel", e.target.value)}>
               <option value="">Channel…</option>

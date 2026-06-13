@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extractText, getDocumentProxy } from "unpdf";
 
+import { logAiUsage } from "./aiUsage";
+
 export interface DocItem {
   sku: string | null;
   description: string | null;
@@ -158,6 +160,7 @@ export async function parseLogisticsDoc(pdf: Uint8Array): Promise<DocDraft> {
   } as unknown as Anthropic.MessageCreateParamsNonStreaming;
 
   const response = await client.messages.create(params);
+  void logAiUsage("logistics_doc", "claude-sonnet-4-6", response.usage as { input_tokens?: number; output_tokens?: number });
   const block = response.content.find((b) => b.type === "text");
   if (!block || block.type !== "text") return basic(docText);
   let raw: RawDoc;

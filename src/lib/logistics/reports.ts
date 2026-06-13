@@ -1,4 +1,35 @@
 import { supabase } from "@/lib/supabaseClient";
+import type { Tables } from "@/lib/types";
+
+export type AiUsageRow = Tables<"ai_usage">;
+
+export interface AiUsageReport {
+  rows: AiUsageRow[];
+  monthCost: number;
+  monthCount: number;
+  totalCost: number;
+}
+
+/** Recent AI document-extraction calls + this-month totals. */
+export async function aiUsageReport(): Promise<AiUsageReport> {
+  const { data } = await supabase.from("ai_usage").select("*").order("created_at", { ascending: false }).limit(300);
+  const rows = data ?? [];
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const startMs = start.getTime();
+  let monthCost = 0,
+    monthCount = 0,
+    totalCost = 0;
+  for (const r of rows) {
+    totalCost += r.cost_usd ?? 0;
+    if (r.created_at && new Date(r.created_at).getTime() >= startMs) {
+      monthCost += r.cost_usd ?? 0;
+      monthCount += 1;
+    }
+  }
+  return { rows, monthCost, monthCount, totalCost };
+}
 
 const PENDING = [
   "new_order",

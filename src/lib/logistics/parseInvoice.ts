@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extractText, getDocumentProxy } from "unpdf";
 
+import { logAiUsage } from "./aiUsage";
+
 export interface InvoiceDraft {
   invoiceNumber: string | null;
   invoiceValue: number | null;
@@ -87,6 +89,7 @@ export async function parseTleInvoice(pdf: Uint8Array): Promise<InvoiceDraft> {
   } as unknown as Anthropic.MessageCreateParamsNonStreaming;
 
   const response = await client.messages.create(params);
+  void logAiUsage("order_invoice", "claude-sonnet-4-6", response.usage as { input_tokens?: number; output_tokens?: number });
   const block = response.content.find((b) => b.type === "text");
   if (!block || block.type !== "text") {
     // Fall back rather than failing the whole upload.
