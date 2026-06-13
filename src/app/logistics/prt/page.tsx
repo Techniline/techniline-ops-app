@@ -43,6 +43,7 @@ export default function PrtRequestsPage() {
   // Email modal
   const [emailFor, setEmailFor] = useState<PrtRow | null>(null);
   const [to, setTo] = useState("");
+  const [cc, setCc] = useState("purchasing@techniline.org");
   const [subject, setSubject] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -111,6 +112,7 @@ export default function PrtRequestsPage() {
     setSubject(prtEmailSubject(p));
     setNotes(p.notes ?? "");
     setTo("");
+    setCc("purchasing@techniline.org");
     setMsg(null);
     setEmailFor(p);
   }
@@ -121,7 +123,7 @@ export default function PrtRequestsPage() {
     setErr(null);
     setMsg(null);
     try {
-      await sendPrtEmail(to, subject, prtEmailHtml(emailFor, sender, notes), prtEmailText(emailFor, sender, notes));
+      await sendPrtEmail(to, subject, prtEmailHtml(emailFor, sender, notes), prtEmailText(emailFor, sender, notes), cc);
       setMsg(`Email sent to ${to}.`);
       setEmailFor(null);
     } catch (e) {
@@ -240,6 +242,8 @@ export default function PrtRequestsPage() {
             </h2>
             <label className="text-xs text-slate-500">Recipient (branch email)</label>
             <input className={`${inputClass} mb-2 mt-1`} placeholder="branch@techniline.org" value={to} onChange={(e) => setTo(e.target.value)} />
+            <label className="text-xs text-slate-500">CC (purchasing@ always included)</label>
+            <input className={`${inputClass} mb-2 mt-1`} placeholder="purchasing@techniline.org" value={cc} onChange={(e) => setCc(e.target.value)} />
             <label className="text-xs text-slate-500">Subject</label>
             <input className={`${inputClass} mb-2 mt-1`} value={subject} onChange={(e) => setSubject(e.target.value)} />
             <label className="text-xs text-slate-500">Notes (optional)</label>

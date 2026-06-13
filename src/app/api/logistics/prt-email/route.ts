@@ -10,7 +10,7 @@ export async function POST(request: Request): Promise<Response> {
   const auth = await authorizeLogistics(request);
   if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
-  let b: { to?: unknown; subject?: unknown; body?: unknown; html?: unknown };
+  let b: { to?: unknown; cc?: unknown; subject?: unknown; body?: unknown; html?: unknown };
   try {
     b = await request.json();
   } catch {
@@ -24,6 +24,15 @@ export async function POST(request: Request): Promise<Response> {
   if (!to) return Response.json({ ok: false, error: "Enter a valid recipient email." }, { status: 400 });
   if (!html && !body) return Response.json({ ok: false, error: "Empty email body." }, { status: 400 });
 
+  // CC: caller-provided addresses + always purchasing@techniline.org, deduped,
+  // never duplicating the To recipient.
+  const ALWAYS_CC = "purchasing@techniline.org";
+  const rawCc = typeof b.cc === "string" ? b.cc.split(/[,;\s]+/) : Array.isArray(b.cc) ? (b.cc as unknown[]) : [];
+  const ccSet = new Set<string>([ALWAYS_CC]);
+  for (const c of rawCc) if (typeof c === "string" && c.includes("@")) ccSet.add(c.trim());
+  ccSet.delete(to);
+  const ccRecipients = [...ccSet].map((address) => ({ emailAddress: { address } }));
+
   // Send as the logged-in user, falling back to the configured default.
   const sender = auth.email ?? process.env.PRIORITY_MAIL_FROM ?? "vihan@techniline.org";
   try {
@@ -36,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
           subject,
           body: html ? { contentType: "HTML", content: html } : { contentType: "Text", content: body },
           toRecipients: [{ emailAddress: { address: to } }],
+          ccRecipients,
         },
         saveToSentItems: true,
       }),

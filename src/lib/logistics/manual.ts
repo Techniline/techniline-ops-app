@@ -237,7 +237,13 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
 }
 
 /** Send the PRT email via the server (Graph) as the logged-in user. */
-export async function sendPrtEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+export async function sendPrtEmail(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  cc?: string
+): Promise<void> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -246,7 +252,7 @@ export async function sendPrtEmail(to: string, subject: string, html: string, te
   const res = await fetch("/api/logistics/prt-email", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ to, subject, html, body: text }),
+    body: JSON.stringify({ to, cc, subject, html, body: text }),
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
