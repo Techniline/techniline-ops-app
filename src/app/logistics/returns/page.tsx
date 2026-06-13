@@ -14,10 +14,13 @@ import {
   RETURN_REASONS,
   deleteReturn,
   fetchReturns,
+  itemCount,
   notifyReturnLogged,
+  readItems,
   rLabel,
   saveReturn,
   type ReturnFilters,
+  type ReturnItem,
   type ReturnRow,
 } from "@/lib/logistics/marketplace";
 
@@ -26,7 +29,9 @@ function errMsg(e: unknown): string {
 }
 
 type Draft = Partial<ReturnRow>;
-const EMPTY: Draft = { physical_status: "received", doc_status: "pending", qty: 1, location: "warehouse" };
+const EMPTY: Draft = { physical_status: "received", doc_status: "pending", location: "warehouse" };
+const EMPTY_ITEM: ReturnItem = { sku: null, product: null, qty: 1, condition: null };
+const MAX_ITEMS = 10;
 
 function DocBadge({ value }: { value: string }) {
   const tone =
@@ -44,9 +49,21 @@ export default function MarketplaceReturnsPage() {
   const [rows, setRows] = useState<ReturnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [products, setProducts] = useState<ReturnItem[]>([{ ...EMPTY_ITEM }]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  function openDraft(d: Draft) {
+    setProducts(d.id ? readItems(d as ReturnRow) : [{ ...EMPTY_ITEM }]);
+    setErr(null);
+    setMsg(null);
+    setDraft(d);
+  }
+  const setItem = (i: number, k: keyof ReturnItem, v: unknown) =>
+    setProducts((ps) => ps.map((p, idx) => (idx === i ? { ...p, [k]: v } : p)));
+  const addItem = () => setProducts((ps) => (ps.length >= MAX_ITEMS ? ps : [...ps, { ...EMPTY_ITEM }]));
+  const removeItem = (i: number) => setProducts((ps) => (ps.length <= 1 ? ps : ps.filter((_, idx) => idx !== i)));
 
   const [channel, setChannel] = useState("");
   const [docPending, setDocPending] = useState(false);
@@ -81,11 +98,26 @@ export default function MarketplaceReturnsPage() {
       setErr("Choose a channel.");
       return;
     }
+    const clean = products.filter((p) => (p.sku ?? "").trim() || (p.product ?? "").trim());
+    if (clean.length === 0) {
+      setErr("Add at least one product (SKU or product name).");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
       const isNew = !draft.id;
-      const saved = await saveReturn(draft);
+      const totalQty = clean.reduce((s, p) => s + (Number(p.qty) || 0), 0);
+      const payload: Draft = {
+        ...draft,
+        items: clean as unknown as Draft["items"],
+        // Denormalised first line for the list columns / search / legacy.
+        sku: clean[0].sku,
+        product: clean[0].product,
+        condition: clean[0].condition,
+        qty: totalQty || clean[0].qty || 1,
+      };
+      const saved = await saveReturn(payload);
       if (isNew) void notifyReturnLogged(saved);
       setDraft(null);
       setMsg(isNew ? "Return logged — Maricel notified for documentation." : "Saved.");
@@ -113,11 +145,11 @@ export default function MarketplaceReturnsPage() {
   return (
     <LogisticsShell
       title="Marketplace Returns"
-      subtitle="Warehouse-logged returns (Amazon Vendor / DF / Seller-Flex / Noon) + documentation."
+      subtitle="Warehouse-logged returns (Amazon DF / Seller / Flex, Noon, Cocoblu) + documentation."
       page="marketplace"
       wide
       actions={
-        <button type="button" className={btnPrimary} onClick={() => setDraft({ ...EMPTY })}>
+        <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
           + Log return
         </button>
       }
@@ -140,10 +172,6 @@ export default function MarketplaceReturnsPage() {
             <input className={inputClass} placeholder="Return ID" value={draft.return_ref ?? ""} onChange={(e) => set("return_ref", e.target.value)} />
             <input className={inputClass} placeholder="Order number" value={draft.order_ref ?? ""} onChange={(e) => set("order_ref", e.target.value)} />
             <input className={inputClass} placeholder="ASIN (Amazon)" value={draft.asin ?? ""} onChange={(e) => set("asin", e.target.value)} />
-            <input className={inputClass} placeholder="SKU" value={draft.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
-            <input className={`${inputClass} sm:col-span-2`} placeholder="Product" value={draft.product ?? ""} onChange={(e) => set("product", e.target.value)} />
-            <input className={inputClass} placeholder="Brand" value={draft.brand ?? ""} onChange={(e) => set("brand", e.target.value)} />
-            <input className={inputClass} type="number" placeholder="Qty" value={draft.qty ?? 1} onChange={(e) => set("qty", e.target.value ? Number(e.target.value) : 1)} />
             <select className={inputClass} value={draft.reason ?? ""} onChange={(e) => set("reason", e.target.value)}>
               <option value="">Reason…</option>
               {RETURN_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -153,10 +181,6 @@ export default function MarketplaceReturnsPage() {
             <label className="flex flex-col gap-1 text-xs text-slate-500">Return date
               <input className={inputClass} type="date" value={draft.received_date ?? ""} onChange={(e) => set("received_date", e.target.value || null)} />
             </label>
-            <select className={inputClass} value={draft.condition ?? ""} onChange={(e) => set("condition", e.target.value)}>
-              <option value="">Condition…</option>
-              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
             <select className={inputClass} value={draft.physical_status ?? "received"} onChange={(e) => set("physical_status", e.target.value)}>
               {PHYSICAL_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -165,6 +189,41 @@ export default function MarketplaceReturnsPage() {
             </select>
             <input className={`${inputClass} sm:col-span-2 lg:col-span-4`} placeholder="Notes" value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
           </div>
+
+          {/* Products — one line by default, add up to 10 */}
+          <h2 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Products ({products.length})
+          </h2>
+          <div className="space-y-2">
+            {products.map((it, i) => (
+              <div key={i} className="grid items-center gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_2fr_5rem_1fr_2rem]">
+                <input className={inputClass} placeholder="SKU" value={it.sku ?? ""} onChange={(e) => setItem(i, "sku", e.target.value)} />
+                <input className={inputClass} placeholder="Product" value={it.product ?? ""} onChange={(e) => setItem(i, "product", e.target.value)} />
+                <input className={inputClass} type="number" placeholder="Qty" value={it.qty ?? 1} onChange={(e) => setItem(i, "qty", e.target.value ? Number(e.target.value) : 1)} />
+                <select className={inputClass} value={it.condition ?? ""} onChange={(e) => setItem(i, "condition", e.target.value || null)}>
+                  <option value="">Condition…</option>
+                  {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <button
+                  type="button"
+                  title="Remove product"
+                  disabled={products.length <= 1}
+                  onClick={() => removeItem(i)}
+                  className="rounded-md border border-slate-200 px-2 py-2 text-rose-600 hover:bg-rose-50 disabled:opacity-30 dark:border-slate-700"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addItem}
+            disabled={products.length >= MAX_ITEMS}
+            className={`${btnSecondary} mt-2 disabled:opacity-50`}
+          >
+            + Add product{products.length >= MAX_ITEMS ? " (max 10)" : ""}
+          </button>
 
           <h2 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Documentation (Maricel)</h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -211,8 +270,20 @@ export default function MarketplaceReturnsPage() {
           { id: "rma", label: "Return ID", cell: (r) => r.return_ref ?? "—" },
           { id: "order", label: "Order #", cell: (r) => r.order_ref ?? "—" },
           { id: "asin", label: "ASIN", cell: (r) => r.asin ?? "—" },
-          { id: "sku", label: "SKU", cell: (r) => r.sku ?? "—" },
-          { id: "product", label: "Product", cell: (r) => r.product ?? "—" },
+          {
+            id: "sku",
+            label: "SKU",
+            cell: (r) => {
+              const n = itemCount(r);
+              return (
+                <span>
+                  {r.sku ?? "—"}
+                  {n > 1 ? <span className="ml-1 rounded-full bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-600">+{n - 1}</span> : null}
+                </span>
+              );
+            },
+          },
+          { id: "product", label: "Product", cell: (r) => (itemCount(r) > 1 ? `${r.product ?? "—"} +${itemCount(r) - 1} more` : r.product ?? "—") },
           { id: "qty", label: "Qty", className: "tabular-nums", cell: (r) => r.qty ?? 1 },
           { id: "received", label: "Return date", cell: (r) => r.received_date ?? "—" },
           { id: "condition", label: "Condition", cell: (r) => rLabel(CONDITIONS, r.condition) },
@@ -224,7 +295,7 @@ export default function MarketplaceReturnsPage() {
             label: "Actions",
             cell: (r) => (
               <div className="flex items-center gap-2 whitespace-nowrap">
-                <button type="button" className="text-indigo-600 hover:underline" onClick={() => setDraft(r)}>Edit</button>
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => openDraft(r)}>Edit</button>
                 <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
               </div>
             ),

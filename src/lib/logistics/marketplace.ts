@@ -3,6 +3,32 @@ import type { Tables, TablesInsert } from "@/lib/types";
 
 export type ReturnRow = Tables<"marketplace_returns">;
 
+export interface ReturnItem {
+  sku: string | null;
+  product: string | null;
+  qty: number | null;
+  condition: string | null;
+}
+
+/** Product lines for a return — from the `items` array, falling back to the
+ *  legacy single header fields for older records. */
+export function readItems(r: Pick<ReturnRow, "items" | "sku" | "product" | "qty" | "condition">): ReturnItem[] {
+  const raw = r.items;
+  if (Array.isArray(raw) && raw.length) {
+    return (raw as unknown as ReturnItem[]).map((i) => ({
+      sku: i?.sku ?? null,
+      product: i?.product ?? null,
+      qty: typeof i?.qty === "number" ? i.qty : i?.qty ? Number(i.qty) : null,
+      condition: i?.condition ?? null,
+    }));
+  }
+  return [{ sku: r.sku ?? null, product: r.product ?? null, qty: r.qty ?? null, condition: r.condition ?? null }];
+}
+
+export function itemCount(r: Pick<ReturnRow, "items">): number {
+  return Array.isArray(r.items) ? r.items.length : 1;
+}
+
 export const CHANNELS: { value: string; label: string }[] = [
   { value: "amazon_df", label: "Amazon DF" },
   { value: "amazon_seller", label: "Amazon Seller" },
@@ -149,12 +175,19 @@ export function returnEmailHtml(r: ReturnRow): string {
             ${row("Return ID", esc(r.return_ref ?? "—"))}
             ${row("Order number", esc(r.order_ref ?? "—"))}
             ${row("ASIN", esc(r.asin ?? "—"))}
-            ${row("SKU", esc(r.sku ?? "—"))}
-            ${row("Product", esc(r.product ?? "—"))}
-            ${row("Qty", esc(r.qty ?? 1))}
             ${row("Reason", esc(rLabel(RETURN_REASONS, r.reason)))}
             ${row("Return date", esc(r.received_date ?? "—"))}
-            ${row("Condition", esc(rLabel(CONDITIONS, r.condition)))}
+            ${row(
+              "Products",
+              readItems(r)
+                .map(
+                  (i) =>
+                    `&bull; ${esc(i.product ?? i.sku ?? "—")}${i.sku && i.product ? ` (${esc(i.sku)})` : ""} &times;${esc(i.qty ?? 1)}${
+                      i.condition ? ` — ${esc(rLabel(CONDITIONS, i.condition))}` : ""
+                    }`
+                )
+                .join("<br>")
+            )}
           </table>
           <p style="margin:22px 0 0;color:#334155;font-size:14px">Please open <strong>Logistics → Marketplace Returns</strong> and complete the documentation (credit note, SRT/PRT, dispute &amp; case IDs).</p>
           <p style="margin:18px 0 0;font-size:14px"><span style="color:#64748b">Techniline Logistics</span></p>

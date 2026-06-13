@@ -424,10 +424,12 @@ create table if not exists public.marketplace_returns (
   doc_status text not null default 'pending', claim_amount numeric,
   credit_note_no text, srt_number text, prt_number text, dispute_id text, case_id text,
   doc_remarks text,
+  items jsonb,  -- product lines: [{sku, product, qty, condition}], up to 10
   logged_by uuid references public.users(id), documented_by uuid references public.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.marketplace_returns add column if not exists items jsonb;
 create index if not exists marketplace_returns_channel_idx on public.marketplace_returns (channel);
 create index if not exists marketplace_returns_doc_idx on public.marketplace_returns (doc_status);
 create index if not exists marketplace_returns_created_idx on public.marketplace_returns (created_at desc);

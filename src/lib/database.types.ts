@@ -2578,6 +2578,7 @@ export type Database = {
           doc_status: string
           documented_by: string | null
           id: string
+          items: Json | null
           location: string | null
           logged_by: string | null
           notes: string | null
@@ -2609,6 +2610,7 @@ export type Database = {
           doc_status?: string
           documented_by?: string | null
           id?: string
+          items?: Json | null
           location?: string | null
           logged_by?: string | null
           notes?: string | null
@@ -2640,6 +2642,7 @@ export type Database = {
           doc_status?: string
           documented_by?: string | null
           id?: string
+          items?: Json | null
           location?: string | null
           logged_by?: string | null
           notes?: string | null
