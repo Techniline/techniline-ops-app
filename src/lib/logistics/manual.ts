@@ -198,41 +198,60 @@ export function prtEmailHtml(p: PrtRow, sender: PrtSender, notes: string): strin
     `<td style="padding:9px 12px;border:1px solid #e2e8f0;color:#0f172a;font-size:14px">${value}</td>` +
     `</tr>`;
 
+  // Header chip color by urgency.
+  const headChip = `<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;${
+    urgent ? "background:#fee2e2;color:#b91c1c" : "background:#e0e7ff;color:#3730a3"
+  }">${esc(urg(p.urgency))}</span>`;
+
+  // Table-based + bgcolor fallback so Outlook (Word renderer, ignores gradients)
+  // still shows a solid indigo bar with visible white text; modern clients get
+  // the gradient + sheen.
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:28px 24px">
-    <div style="max-width:580px;margin:0 auto">
-      <div style="background:linear-gradient(135deg,#4f46e5 0%,#4338ca 100%);padding:24px 26px;border-radius:14px 14px 0 0;border-bottom:3px solid #3730a3;box-shadow:0 6px 16px -6px rgba(67,56,202,0.6)">
-        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.2px;text-shadow:0 1px 1px rgba(0,0,0,0.25)">Product Transfer Request</h1>
-        <p style="margin:8px 0 0;color:#dbe1ff;font-size:13px;font-weight:600">Order ${esc(p.order_number ?? "—")} &nbsp;·&nbsp; ${esc(p.sku ?? "—")}</p>
-      </div>
-      <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 14px 14px;padding:28px 26px">
-        <p style="margin:0 0 24px;color:#0f172a;font-size:17px;font-weight:600;line-height:1.4">Please arrange the following product transfer:</p>
-        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">
-          ${row("Order Number", esc(p.order_number ?? "—"))}
-          ${row("Customer", esc(p.customer_name ?? "—"))}
-          ${row("SKU", esc(p.sku ?? "—"))}
-          ${row("Product", esc(p.title ?? "—"))}
-          ${row("Brand", esc(p.brand ?? "—"))}
-          ${row("Quantity", esc(p.qty ?? 1))}
-          ${row("From", esc(loc(p.from_location)))}
-          ${row("To", esc(loc(p.to_location)))}
-          ${row("Required by", esc(p.required_date ?? "—"))}
-          ${row("Urgency", chip)}
-        </table>
-        ${
-          notes
-            ? `<div style="margin-top:16px;padding:12px 14px;background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;color:#334155;font-size:13px"><strong>Notes:</strong> ${esc(notes)}</div>`
-            : ""
-        }
-        <p style="margin:22px 0 0;color:#334155;font-size:14px">Thank you,</p>
-        <p style="margin:2px 0 0;font-size:14px">
-          <strong style="color:#0f172a">${esc(sender.name || "Techniline Logistics")}</strong><br>
-          <span style="color:#64748b">Techniline Logistics</span>${
-            sender.email ? `<br><a style="color:#4f46e5;text-decoration:none" href="mailto:${esc(sender.email)}">${esc(sender.email)}</a>` : ""
+    <table role="presentation" align="center" width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px">
+      <tr>
+        <td bgcolor="#4f46e5" style="background-color:#4f46e5;background-image:linear-gradient(135deg,#6366f1 0%,#4f46e5 45%,#4338ca 100%);padding:26px;border-bottom:3px solid #3730a3;border-radius:14px 14px 0 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="vertical-align:top">
+                <div style="color:#ffffff;font-size:23px;font-weight:700;letter-spacing:0.2px;text-shadow:0 1px 2px rgba(0,0,0,0.3)">Product Transfer Request</div>
+                <div style="margin-top:9px;color:#dbe1ff;font-size:13px;font-weight:600">Order ${esc(p.order_number ?? "—")} &nbsp;·&nbsp; ${esc(p.sku ?? "—")}</div>
+              </td>
+              <td style="vertical-align:top;text-align:right;white-space:nowrap">${headChip}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px 26px 20px">
+          <div style="color:#0f172a;font-size:20px;font-weight:700;line-height:1.4;margin-bottom:26px">Please arrange the following product transfer:</div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0">
+            ${row("Order Number", esc(p.order_number ?? "—"))}
+            ${row("Customer", esc(p.customer_name ?? "—"))}
+            ${row("SKU", esc(p.sku ?? "—"))}
+            ${row("Product", esc(p.title ?? "—"))}
+            ${row("Brand", esc(p.brand ?? "—"))}
+            ${row("Quantity", esc(p.qty ?? 1))}
+            ${row("From", esc(loc(p.from_location)))}
+            ${row("To", esc(loc(p.to_location)))}
+            ${row("Required by", esc(p.required_date ?? "—"))}
+            ${row("Urgency", chip)}
+          </table>
+          ${
+            notes
+              ? `<div style="margin-top:18px;padding:12px 14px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#334155;font-size:13px"><strong>Notes:</strong> ${esc(notes)}</div>`
+              : ""
           }
-        </p>
-      </div>
-    </div>
+          <p style="margin:24px 0 0;color:#334155;font-size:14px">Thank you,</p>
+          <p style="margin:2px 0 0;font-size:14px">
+            <strong style="color:#0f172a">${esc(sender.name || "Techniline Logistics")}</strong><br>
+            <span style="color:#64748b">Techniline Logistics</span>${
+              sender.email ? `<br><a style="color:#4f46e5;text-decoration:none" href="mailto:${esc(sender.email)}">${esc(sender.email)}</a>` : ""
+            }
+          </p>
+        </td>
+      </tr>
+    </table>
   </div>`;
 }
 
