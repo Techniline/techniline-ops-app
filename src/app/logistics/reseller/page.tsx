@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 import { CustomizableTable } from "@/components/logistics/CustomizableTable";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
@@ -395,19 +396,42 @@ export default function ResellerDeliveriesPage() {
           },
           {
             id: "actions",
-            label: "",
+            label: "Actions",
             cell: (r) => (
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="text-slate-600 hover:underline" onClick={() => printNote(r)}>Print</button>
-                {r.invoice_file ? <button type="button" className="text-slate-600 hover:underline" onClick={() => openFile(r.invoice_file as string)}>Inv</button> : null}
-                {r.do_file ? <button type="button" className="text-slate-600 hover:underline" onClick={() => openFile(r.do_file as string)}>DO</button> : null}
-                <button type="button" className="text-indigo-600 hover:underline" onClick={() => openDraft(r)}>Edit</button>
-                <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
+              <div className="flex items-center gap-1.5 whitespace-nowrap text-xs">
+                <IconBtn title="Edit" onClick={() => openDraft(r)} className="text-indigo-600">✎</IconBtn>
+                <IconBtn title="Print delivery note" onClick={() => printNote(r)}>🖨</IconBtn>
+                {r.invoice_file ? <IconBtn title="View invoice" onClick={() => openFile(r.invoice_file as string)}>INV</IconBtn> : null}
+                {r.do_file ? <IconBtn title="View delivery order" onClick={() => openFile(r.do_file as string)}>DO</IconBtn> : null}
+                <IconBtn title="Delete" onClick={() => remove(r.id)} className="text-rose-600">🗑</IconBtn>
               </div>
             ),
           },
         ]}
       />
     </LogisticsShell>
+  );
+}
+
+function IconBtn({
+  title,
+  onClick,
+  className,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`rounded-md border border-slate-200 px-1.5 py-1 leading-none text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 ${className ?? ""}`}
+    >
+      {children}
+    </button>
   );
 }
