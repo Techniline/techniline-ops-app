@@ -8,6 +8,7 @@ import { btnPrimary, btnSecondary, inputClass, surface } from "@/components/ui";
 import { labelFor, PRT_STATUS, PRT_URGENCY, SOURCE_LOCATIONS } from "@/lib/logistics/constants";
 import {
   buildPrtEmail,
+  deletePrt,
   fetchPrts,
   savePrt,
   sendPrtEmail,
@@ -29,6 +30,10 @@ export default function PrtRequestsPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Delete modal
+  const [delFor, setDelFor] = useState<PrtRow | null>(null);
+  const [delReason, setDelReason] = useState("");
 
   // Email modal
   const [emailFor, setEmailFor] = useState<PrtRow | null>(null);
@@ -73,6 +78,22 @@ export default function PrtRequestsPage() {
     setBusy(true);
     try {
       await setPrtStatus(id, status);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doDelete() {
+    if (!delFor || !delReason.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deletePrt(delFor, delReason.trim());
+      setDelFor(null);
+      setDelReason("");
       await load();
     } catch (e) {
       setErr(errMsg(e));
@@ -170,6 +191,40 @@ export default function PrtRequestsPage() {
         </div>
       ) : null}
 
+      {/* Delete confirmation with mandatory reason */}
+      {delFor ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setDelFor(null)}>
+          <div className={`${surface} w-full max-w-md p-5`} onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Delete PRT — {delFor.sku ?? ""} / Order {delFor.order_number ?? "—"}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              This permanently removes the request. A reason is required and is written to the activity
+              log as evidence.
+            </p>
+            <textarea
+              value={delReason}
+              onChange={(e) => setDelReason(e.target.value)}
+              placeholder="Reason for deleting (required)"
+              className={`${inputClass} mt-3 h-24`}
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className={btnSecondary} onClick={() => setDelFor(null)} disabled={busy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={doDelete}
+                disabled={busy || !delReason.trim()}
+                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {busy ? "Deleting…" : "Delete PRT"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Email generator modal */}
       {emailFor ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -235,6 +290,9 @@ export default function PrtRequestsPage() {
                 </button>
                 <button type="button" className="text-slate-600 hover:underline" onClick={() => setDraft(p)}>
                   Edit
+                </button>
+                <button type="button" className="text-rose-600 hover:underline" onClick={() => { setDelReason(""); setDelFor(p); }}>
+                  Delete
                 </button>
               </div>
             ),

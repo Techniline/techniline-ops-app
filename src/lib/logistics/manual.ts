@@ -103,6 +103,22 @@ export async function savePrt(row: Partial<PrtRow> & { id?: string }): Promise<P
   return data;
 }
 
+/** Delete a PRT, recording the reason to the activity log first (audit trail). */
+export async function deletePrt(p: PrtRow, reason: string): Promise<void> {
+  const uid = await currentUserId();
+  await supabase.from("logistics_activity_logs").insert({
+    entity_type: "prt",
+    entity_id: p.id,
+    order_number: p.order_number,
+    action: "prt_deleted",
+    old_value: p.status,
+    notes: `Deleted (SKU ${p.sku ?? "—"}): ${reason}`,
+    user_id: uid,
+  });
+  const { error } = await supabase.from("prt_requests").delete().eq("id", p.id);
+  if (error) throw new Error(error.message);
+}
+
 export async function setPrtStatus(id: string, status: string): Promise<void> {
   const { error } = await supabase
     .from("prt_requests")
