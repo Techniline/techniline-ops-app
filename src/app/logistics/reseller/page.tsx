@@ -159,7 +159,13 @@ export default function ResellerDeliveriesPage() {
         return next;
       });
       const what = d.docType === "delivery_note" ? "delivery note" : d.docType === "invoice" ? "invoice" : "document";
-      setMsg(`Captured from ${what} — review and complete the delivery details.`);
+      if (d.engine === "basic") {
+        setErr(
+          `Read the ${what} but only document numbers could be captured — the AI extractor isn't available on the server (ANTHROPIC_API_KEY not set), so customer/value/items didn't fill. Fill the rest manually, or set the key to enable full auto-fill.`
+        );
+      } else {
+        setMsg(`Captured from ${what} — review and complete the delivery details.`);
+      }
     } catch (e) {
       setErr(errMsg(e));
     } finally {

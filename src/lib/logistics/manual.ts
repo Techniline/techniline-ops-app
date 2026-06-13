@@ -29,6 +29,7 @@ export interface ParsedDoc {
   totalValue: number | null;
   items: { sku: string | null; description: string | null; brand: string | null; qty: number | null }[];
   itemsSummary: string;
+  engine: "ai" | "basic";
 }
 
 /** Upload an invoice OR delivery note PDF and extract a unified draft. */
@@ -45,7 +46,7 @@ export async function parseDocPdf(file: File): Promise<ParsedDoc> {
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: Omit<ParsedDoc, "itemsSummary">; error?: string };
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: Omit<ParsedDoc, "itemsSummary"> & { engine: "ai" | "basic" }; error?: string };
   if (!res.ok || !j.ok || !j.draft) throw new Error(j.error ?? `HTTP ${res.status}`);
   const d = j.draft;
   const summary = d.items
