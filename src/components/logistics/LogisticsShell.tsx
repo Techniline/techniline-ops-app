@@ -17,17 +17,19 @@ export function LogisticsShell({
   subtitle,
   actions,
   page,
+  wide,
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   page?: LogisticsPage;
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
     <RouteGuard requireLogistics logisticsPage={page}>
-      <AppShell>
+      <AppShell fullWidth={wide}>
         <PageHeader title={title} subtitle={subtitle} actions={actions} />
         {children}
       </AppShell>

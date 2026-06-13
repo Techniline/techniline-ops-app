@@ -10,7 +10,7 @@ import { Sidebar } from "./Sidebar";
  * Shared chrome for protected pages. Desktop: a collapsible sidebar rail.
  * Mobile: an off-canvas drawer toggled from a sticky top bar.
  */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, fullWidth }: { children: ReactNode; fullWidth?: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -50,7 +50,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div
+            className={`mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8 ${fullWidth ? "max-w-none" : "max-w-6xl"}`}
+          >
             {children}
           </div>
         </main>

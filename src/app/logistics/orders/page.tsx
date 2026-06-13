@@ -112,6 +112,7 @@ export default function LogisticsOrdersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [facets, setFacets] = useState<{ cities: string[]; methods: string[] }>({ cities: [], methods: [] });
   const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "board">("list");
 
   // Ledger backfill (manager only)
   const [ledgerFile, setLedgerFile] = useState<File | null>(null);
@@ -327,11 +328,132 @@ export default function LogisticsOrdersPage() {
     setColMenu(false);
   }
 
+  // An order "needs action" while it isn't fulfilled in Shopify and isn't cancelled.
+  const needsAction = (o: ShopifyOrderRow) =>
+    o.fulfillment_status !== "fulfilled" && o.logistics_status !== "cancelled";
+  const unfulfilled = rows.filter(needsAction);
+  const settled = rows.filter((o) => !needsAction(o));
+
+  function headerCell(col: Column, idx: number) {
+    return (
+      <th
+        key={col.id}
+        draggable
+        onDragStart={() => (dragId.current = col.id)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => onDrop(col.id)}
+        className={`cursor-grab select-none whitespace-nowrap border-b border-slate-200 bg-slate-100 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800 ${
+          idx === 0 ? "sticky left-0 z-30" : ""
+        }`}
+        title="Drag to reorder"
+      >
+        {col.label}
+      </th>
+    );
+  }
+
+  function ordersTable(title: string, data: ShopifyOrderRow[], tone: "amber" | "slate") {
+    return (
+      <div className="mb-5">
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${tone === "amber" ? "bg-amber-500" : "bg-slate-400"}`} />
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {data.length}
+          </span>
+        </div>
+        <div className={`${tableWrap} max-h-[58vh] overflow-auto`}>
+          <table className="min-w-full text-sm">
+            <thead className="sticky top-0 z-20">
+              <tr>{visibleColumns.map((col, idx) => headerCell(col, idx))}</tr>
+            </thead>
+            <tbody>
+              {data.length === 0 ? (
+                <tr>
+                  <td className={tdCell} colSpan={visibleColumns.length || 1}>
+                    None.
+                  </td>
+                </tr>
+              ) : (
+                data.map((o) => (
+                  <tr
+                    key={o.id}
+                    onClick={() => setOpenId(o.id)}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  >
+                    {visibleColumns.map((col, idx) => (
+                      <td
+                        key={col.id}
+                        className={`${tdCell} whitespace-nowrap ${col.className ?? ""} ${
+                          idx === 0 ? "sticky left-0 z-10 bg-white dark:bg-slate-900" : ""
+                        }`}
+                        onClick={col.id === "order" ? (e) => e.stopPropagation() : undefined}
+                      >
+                        {col.cell(o, setOpenId)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  function board() {
+    return (
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {LOGISTICS_STATUS.map((s) => {
+          const cards = rows.filter((o) => o.logistics_status === s.value);
+          return (
+            <div key={s.value} className="flex w-72 shrink-0 flex-col rounded-xl bg-slate-100/70 p-2 dark:bg-slate-800/40">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{s.label}</span>
+                <span className="rounded-full bg-white px-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-900">
+                  {cards.length}
+                </span>
+              </div>
+              <div className="flex max-h-[64vh] flex-col gap-2 overflow-y-auto">
+                {cards.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => setOpenId(o.id)}
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-indigo-600">{o.order_number ?? o.shopify_order_id}</span>
+                      <span className="text-xs tabular-nums text-slate-500">
+                        {o.order_value != null ? `${o.currency ?? "AED"} ${o.order_value.toFixed(0)}` : ""}
+                      </span>
+                    </div>
+                    <div className="truncate text-sm text-slate-700 dark:text-slate-300">{o.customer_name ?? "—"}</div>
+                    <div className="mt-0.5 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">{fmtDate(o.shopify_created_at)}</span>
+                      {!o.tle_invoice_number && o.logistics_status !== "cancelled" ? (
+                        <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">
+                          No invoice
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <LogisticsShell
       title="Shopify / MusicMajlis Orders"
       subtitle="Sync, track and fulfill MusicMajlis orders."
       page="orders"
+      wide
       actions={
         <div className="flex items-center gap-2">
           {lastSync ? <span className="text-xs text-slate-500">Last sync: {fmtDate(lastSync)}</span> : null}
@@ -461,65 +583,44 @@ export default function LogisticsOrdersPage() {
         </div>
       </div>
 
-      {/* Scrollable table with sticky header + draggable, hideable columns */}
-      <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
-        <table className="min-w-full text-sm">
-          <thead className="sticky top-0 z-10">
-            <tr>
-              {visibleColumns.map((col) => (
-                <th
-                  key={col.id}
-                  draggable
-                  onDragStart={() => (dragId.current = col.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onDrop(col.id)}
-                  className="cursor-grab select-none whitespace-nowrap border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800"
-                  title="Drag to reorder"
-                >
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className={tdCell} colSpan={visibleColumns.length || 1}>
-                  Loading…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td className={tdCell} colSpan={visibleColumns.length || 1}>
-                  No orders. Click <strong>Sync now</strong> to pull MusicMajlis orders from Shopify.
-                </td>
-              </tr>
-            ) : (
-              rows.map((o) => (
-                <tr
-                  key={o.id}
-                  onClick={() => setOpenId(o.id)}
-                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                >
-                  {visibleColumns.map((col) => (
-                    <td
-                      key={col.id}
-                      className={`${tdCell} whitespace-nowrap ${col.className ?? ""}`}
-                      onClick={col.id === "order" ? (e) => e.stopPropagation() : undefined}
-                    >
-                      {col.cell(o, setOpenId)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* View toggle */}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+          {(["list", "board"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition ${
+                view === v
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {v === "board" ? "Board" : "List"}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-slate-400">
+          {rows.length} orders · {unfulfilled.length} need action
+          {view === "list" ? " · drag headers to reorder · Columns ▾ to show/hide" : ""}
+        </span>
       </div>
 
-      <p className="mt-2 text-xs text-slate-400">
-        Drag a column header to reorder · use <strong>Columns ▾</strong> to show/hide · click a row to open the order.
-      </p>
+      {loading ? (
+        <div className={`${tableWrap} p-5 text-sm text-slate-500`}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className={`${tableWrap} p-5 text-sm text-slate-500`}>
+          No orders. Click <strong>Sync now</strong> to pull MusicMajlis orders from Shopify.
+        </div>
+      ) : view === "board" ? (
+        board()
+      ) : (
+        <>
+          {ordersTable("Needs action — unfulfilled", unfulfilled, "amber")}
+          {ordersTable("Fulfilled & closed", settled, "slate")}
+        </>
+      )}
 
       {/* Ledger import preview */}
       {ledgerSummary ? (
