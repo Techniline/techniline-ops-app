@@ -86,10 +86,7 @@ export default function MarketplaceReturnsPage() {
     try {
       const isNew = !draft.id;
       const saved = await saveReturn(draft);
-      if (isNew) {
-        const summary = `${rLabel(CHANNELS, saved.channel)} return ${saved.return_ref ?? ""} — ${saved.sku ?? saved.product ?? ""} ×${saved.qty ?? 1}`;
-        void notifyReturnLogged(summary);
-      }
+      if (isNew) void notifyReturnLogged(saved);
       setDraft(null);
       setMsg(isNew ? "Return logged — Maricel notified for documentation." : "Saved.");
       await load();

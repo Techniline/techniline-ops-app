@@ -116,8 +116,55 @@ export async function docsPendingCount(): Promise<number> {
   return count ?? 0;
 }
 
+function esc(s: unknown): string {
+  return String(s ?? "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function returnEmailSubject(r: ReturnRow): string {
+  return `Marketplace return – ${rLabel(CHANNELS, r.channel)} – ${r.return_ref ?? r.sku ?? "documentation needed"}`;
+}
+
+/** Branded HTML email (matches the PRT email style; Outlook-safe header). */
+export function returnEmailHtml(r: ReturnRow): string {
+  const row = (label: string, value: string) =>
+    `<tr>` +
+    `<td style="padding:9px 12px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:13px;font-weight:600;width:150px">${label}</td>` +
+    `<td style="padding:9px 12px;border:1px solid #e2e8f0;color:#0f172a;font-size:14px">${value}</td></tr>`;
+
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:28px 24px">
+    <table role="presentation" align="center" width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px">
+      <tr>
+        <td bgcolor="#4f46e5" style="background-color:#4f46e5;background-image:linear-gradient(135deg,#6366f1 0%,#4f46e5 45%,#4338ca 100%);padding:26px;border-bottom:3px solid #3730a3;border-radius:14px 14px 0 0">
+          <div style="color:#ffffff;font-size:23px;font-weight:700;letter-spacing:0.2px;text-shadow:0 1px 2px rgba(0,0,0,0.3)">Marketplace Return — documentation needed</div>
+          <div style="margin-top:9px;color:#dbe1ff;font-size:13px;font-weight:600">${esc(rLabel(CHANNELS, r.channel))} &nbsp;·&nbsp; ${esc(r.return_ref ?? "—")}</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px 26px 20px">
+          <div style="color:#0f172a;font-size:20px;font-weight:700;line-height:1.4;margin-bottom:26px">A return was received in the warehouse and needs documentation:</div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0">
+            ${row("Channel", esc(rLabel(CHANNELS, r.channel)))}
+            ${row("Return / RMA", esc(r.return_ref ?? "—"))}
+            ${row("Order / PO", esc(r.order_ref ?? "—"))}
+            ${row("ASIN", esc(r.asin ?? "—"))}
+            ${row("SKU", esc(r.sku ?? "—"))}
+            ${row("Product", esc(r.product ?? "—"))}
+            ${row("Qty", esc(r.qty ?? 1))}
+            ${row("Reason", esc(rLabel(RETURN_REASONS, r.reason)))}
+            ${row("Received", esc(r.received_date ?? "—"))}
+            ${row("Condition", esc(rLabel(CONDITIONS, r.condition)))}
+          </table>
+          <p style="margin:22px 0 0;color:#334155;font-size:14px">Please open <strong>Logistics → Marketplace Returns</strong> and complete the documentation (credit note, SRT/PRT, dispute &amp; case IDs).</p>
+          <p style="margin:18px 0 0;font-size:14px"><span style="color:#64748b">Techniline Logistics</span></p>
+        </td>
+      </tr>
+    </table>
+  </div>`;
+}
+
 /** Notify Maricel that a return was logged (server emails her). Best-effort. */
-export async function notifyReturnLogged(summary: string): Promise<void> {
+export async function notifyReturnLogged(r: ReturnRow): Promise<void> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -126,6 +173,6 @@ export async function notifyReturnLogged(summary: string): Promise<void> {
   await fetch("/api/logistics/notify-return", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ summary }),
+    body: JSON.stringify({ subject: returnEmailSubject(r), html: returnEmailHtml(r) }),
   }).catch(() => {});
 }
