@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ComponentType, FormEvent, SVGProps } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import Link from "next/link";
 
@@ -9,13 +9,6 @@ import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
-import {
-  ActionsIcon,
-  ChecklistIcon,
-  CocobluIcon,
-  LpTrackerIcon,
-  PrioritiesIcon,
-} from "@/components/icons";
 import { btnSecondary, surface } from "@/components/ui";
 import { AaronDealsBand } from "@/components/AaronDealsBand";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
@@ -62,8 +55,6 @@ import {
   isManager,
 } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
-
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 /** Local-time today as YYYY-MM-DD (matches `daily_tasks.task_date`). */
 function todayISODate(): string {
@@ -383,38 +374,81 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 
   if (groups === null) {
     return (
-      <div className={`${surface} mt-8 p-6 text-center text-sm text-slate-500`}>
-        Loading your metrics…
+      <div className={`${surface} mt-6 p-6 text-center text-sm text-slate-500`}>
+        Loading your overview…
       </div>
     );
   }
   if (groups.length === 0) return null;
 
+  // "Needs attention" reuses the per-KPI problem tones each module already
+  // computes (red = urgent, amber/orange = watch). Only non-zero problems show.
+  const isProblem = (k: Kpi) => !!k.tone && /red|amber|orange/.test(k.tone) && k.value !== "0";
+  const alerts = groups.flatMap((g) =>
+    g.kpis.filter(isProblem).map((k) => ({ label: `${k.label}: ${k.value}`, danger: /red/.test(k.tone ?? "") }))
+  );
+  alerts.sort((a, b) => Number(b.danger) - Number(a.danger));
+
+  // Merge the per-module groups into a few human categories.
+  const CATEGORY: Record<string, string> = {
+    checklist: "team",
+    priorities: "team",
+    reseller: "team",
+    cocoblu: "inventory",
+    lp: "inventory",
+    amazon: "amazon",
+  };
+  const CAT_META = [
+    { key: "team", title: "Team & tasks", href: "/checklist", accent: "checklist" },
+    { key: "inventory", title: "Inventory & ageing", href: "/cocoblu", accent: "cocoblu" },
+    { key: "amazon", title: "Amazon & finance", href: "/amazon-actions", accent: "amazon" },
+  ];
+  const cats = CAT_META.map((c) => ({
+    ...c,
+    kpis: groups.filter((g) => CATEGORY[g.key] === c.key).flatMap((g) => g.kpis),
+  })).filter((c) => c.kpis.length > 0);
+
   return (
-    <div className="mt-8 flex flex-col gap-6">
-      <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-        Key Metrics
-      </h2>
-      {groups.map((g) => (
-        <section key={g.key}>
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {g.title}
-            </h3>
-            <Link
-              href={g.href}
-              className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-            >
-              View →
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {g.kpis.map((k, i) => (
-              <KpiTile key={i} kpi={k} accentKey={g.key} />
+    <div className="mt-6 flex flex-col gap-5">
+      <section className={`${surface} p-4`}>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Needs attention</p>
+        {alerts.length === 0 ? (
+          <p className="text-sm text-emerald-600 dark:text-emerald-400">All clear — nothing overdue or ageing right now.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {alerts.map((a, i) => (
+              <span
+                key={i}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                  a.danger
+                    ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                }`}
+              >
+                {a.label}
+              </span>
             ))}
           </div>
-        </section>
-      ))}
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {cats.map((c) => (
+          <section key={c.key} className={`${surface} p-4`}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{c.title}</h3>
+              <Link href={c.href} className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                View →
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {c.kpis.map((k, i) => (
+                <KpiTile key={i} kpi={k} accentKey={c.accent} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
@@ -536,6 +570,9 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const [logNote, setLogNote] = useState("");
   const [logOrderRef, setLogOrderRef] = useState("");
   const [actionCounts, setActionCounts] = useState<MonthActionCounts>({ actioned: 0, deals: 0 });
+  // Sales detail (supporting metrics, pace chart, abandoned-cart list) collapses
+  // by default for the manager glass view; stays open for Aaron (his daily tool).
+  const [showDetail, setShowDetail] = useState(profile.id === AARON_ID);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -721,6 +758,17 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
         <MmTile label="Achieved (net sales)" value={connected ? formatAED(k.achieved) : "—"} tone="text-emerald-700 dark:text-emerald-400" big />
       </div>
 
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowDetail((s) => !s)}
+          className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+        >
+          {showDetail ? "Hide sales detail ▲" : "Show sales detail ▼"}
+        </button>
+      </div>
+      {showDetail ? (
+      <>
       {/* Supporting metrics below. */}
       <div className="mt-3 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <MmTile label="% Achieved" value={target > 0 && connected ? `${Math.round(k.pct)}%` : "—"} tone={k.pct >= 100 ? "text-emerald-700 dark:text-emerald-400" : undefined} />
@@ -842,6 +890,8 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
           )}
         </div>
       ) : null}
+      </>
+      ) : null}
 
       {showTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setShowTarget(false)}>
@@ -900,21 +950,18 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   );
 }
 
-interface ModuleCard {
-  key: string;
-  title: string;
-  description: string;
-  href: string | null;
-  icon: IconType;
-  accent: string;
-  tint: string;
-  show: boolean;
-  comingSoon: boolean;
+/** A calm collapsible section so secondary detail doesn't crowd the glass view. */
+function Collapsible({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  return (
+    <details className="group mt-6" {...(defaultOpen ? { open: true } : {})}>
+      <summary className="flex cursor-pointer select-none list-none items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        <span className="text-slate-400 transition-transform group-open:rotate-90">▸</span>
+        {title}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
 }
-
-// Glossy + embossed card base (pastel gradient comes from each card's `tint`).
-const CARD_BASE =
-  "group rounded-2xl border p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-12px_rgba(15,23,42,0.18)] ring-1 ring-inset ring-white/60 transition-all duration-200 dark:ring-white/5";
 
 function DashboardContent() {
   const { profile } = useAuth();
@@ -926,81 +973,11 @@ function DashboardContent() {
   const role = managerView ? "Manager" : "Staff";
   const displayName = profile.full_name ?? profile.email ?? "there";
 
-  const cards: ModuleCard[] = [
-    {
-      key: "checklist",
-      title: "Checklist",
-      description: "Track and submit your daily operational tasks.",
-      href: "/checklist",
-      icon: ChecklistIcon,
-      accent:
-        "bg-indigo-100 text-indigo-600 shadow-inner dark:bg-indigo-950 dark:text-indigo-300",
-      tint:
-        "border-indigo-200/70 bg-gradient-to-br from-indigo-50 to-white dark:border-indigo-900/50 dark:from-indigo-950/40 dark:to-slate-900",
-      show: canViewChecklist(profile),
-      comingSoon: false,
-    },
-    {
-      key: "priorities",
-      title: "Priorities",
-      description: "Assigned objectives — progress, due dates, and completion.",
-      href: "/priorities",
-      icon: PrioritiesIcon,
-      accent:
-        "bg-amber-100 text-amber-600 shadow-inner dark:bg-amber-950 dark:text-amber-300",
-      tint:
-        "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/40 dark:to-slate-900",
-      show: true,
-      comingSoon: false,
-    },
-    {
-      key: "cocoblu",
-      title: "Cocoblu",
-      description: "Monitor stock ageing and manage remaining quantities.",
-      href: "/cocoblu",
-      icon: CocobluIcon,
-      accent:
-        "bg-emerald-100 text-emerald-600 shadow-inner dark:bg-emerald-950 dark:text-emerald-300",
-      tint:
-        "border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-slate-900",
-      show: canViewCocoblu(profile),
-      comingSoon: false,
-    },
-    {
-      key: "lp",
-      title: "LP Tracker",
-      description: "Local purchase stock — ageing, draw-down, and price alerts.",
-      href: "/lp",
-      icon: LpTrackerIcon,
-      accent:
-        "bg-sky-100 text-sky-600 shadow-inner dark:bg-sky-950 dark:text-sky-300",
-      tint:
-        "border-sky-200/70 bg-gradient-to-br from-sky-50 to-white dark:border-sky-900/50 dark:from-sky-950/40 dark:to-slate-900",
-      show: canViewLpTracker(profile),
-      comingSoon: false,
-    },
-    {
-      key: "amazon-actions",
-      title: "Amazon Actions",
-      description: "Act on Amazon issues — log references and drive closure.",
-      href: "/amazon-actions",
-      icon: ActionsIcon,
-      accent:
-        "bg-rose-100 text-rose-600 shadow-inner dark:bg-rose-950 dark:text-rose-300",
-      tint:
-        "border-rose-200/70 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/50 dark:from-rose-950/40 dark:to-slate-900",
-      show: canViewFinance(profile),
-      comingSoon: false,
-    },
-  ];
-
-  const visibleCards = cards.filter((card) => card.show);
-
   return (
     <div>
       <PageHeader
-        title={`Welcome, ${displayName}`}
-        subtitle="Here are the modules available to you."
+        title={managerView ? "Operations overview" : `Welcome, ${displayName}`}
+        subtitle={managerView ? "Everything that needs you, in one view." : "Your modules and metrics."}
         actions={
           <div className="flex items-center gap-2">
             {managerView ? (
@@ -1015,70 +992,29 @@ function DashboardContent() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleCards.map((card) => {
-          const Icon = card.icon;
-          const inner = (
-            <>
-              <div className="flex items-start justify-between">
-                <span
-                  className={`flex h-11 w-11 items-center justify-center rounded-lg ${card.accent}`}
-                >
-                  <Icon className="h-6 w-6" />
-                </span>
-                {card.comingSoon ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                    Coming Soon
-                  </span>
-                ) : null}
-              </div>
-              <h2 className="mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {card.title}
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">{card.description}</p>
-            </>
-          );
+      {/* Needs attention + categorized metrics */}
+      <KpiDashboard profile={profile} />
 
-          if (card.href && !card.comingSoon) {
-            return (
-              <Link
-                key={card.key}
-                href={card.href}
-                className={`${CARD_BASE} ${card.tint} hover:-translate-y-0.5 hover:shadow-lg`}
-              >
-                {inner}
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                  Open
-                  <span className="transition-transform group-hover:translate-x-0.5">
-                    →
-                  </span>
-                </span>
-              </Link>
-            );
-          }
-
-          return (
-            <div
-              key={card.key}
-              className={`${CARD_BASE} ${card.tint} opacity-75`}
-              aria-disabled="true"
-            >
-              {inner}
-            </div>
-          );
-        })}
-      </div>
-
-      {managerView ? <ManagerScorecard profile={profile} /> : null}
-
+      {/* Sales focus — headline always visible, detail on demand */}
       {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
 
-      {managerView ? <ZohoPipelineBand /> : null}
+      {/* Secondary detail — collapsible so the view stays calm */}
+      {managerView ? (
+        <Collapsible title="Team scorecard">
+          <ManagerScorecard profile={profile} />
+        </Collapsible>
+      ) : null}
+      {managerView ? (
+        <Collapsible title="Zoho pipeline">
+          <ZohoPipelineBand />
+        </Collapsible>
+      ) : null}
       {!managerView && profile.id === AARON_ID ? <AaronDealsBand /> : null}
-
-      {canViewFinance(profile) ? <RemittanceTasksBand profile={profile} /> : null}
-
-      <KpiDashboard profile={profile} />
+      {canViewFinance(profile) ? (
+        <Collapsible title="Remittance tasks" defaultOpen>
+          <RemittanceTasksBand profile={profile} />
+        </Collapsible>
+      ) : null}
 
       {showWeekly ? (
         <WeeklySummaryModal profile={profile} onClose={() => setShowWeekly(false)} />
