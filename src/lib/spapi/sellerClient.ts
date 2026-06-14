@@ -175,6 +175,69 @@ export async function fetchFinancialEventGroups(startedAfter: string): Promise<S
   return out;
 }
 
+// ── Orders API (order tracking / fulfillment) ───────────────────────────────
+
+export interface SellerOrder {
+  amazonOrderId: string;
+  purchaseDate: string | null;
+  lastUpdateDate: string | null;
+  status: string | null;
+  fulfillmentChannel: string | null;
+  salesChannel: string | null;
+  shipServiceLevel: string | null;
+  itemsShipped: number | null;
+  itemsUnshipped: number | null;
+  orderTotal: number | null;
+  currency: string | null;
+  raw: unknown;
+}
+
+interface RawOrder {
+  AmazonOrderId?: string;
+  PurchaseDate?: string;
+  LastUpdateDate?: string;
+  OrderStatus?: string;
+  FulfillmentChannel?: string;
+  SalesChannel?: string;
+  ShipmentServiceLevelCategory?: string;
+  NumberOfItemsShipped?: number;
+  NumberOfItemsUnshipped?: number;
+  OrderTotal?: { Amount?: string; CurrencyCode?: string };
+}
+
+/** Pull orders updated since `lastUpdatedAfter` (catches status changes), paged.
+ *  The Orders API is heavily rate-limited (~1 req/min), so we cap pages. */
+export async function fetchSellerOrders(lastUpdatedAfter: string): Promise<SellerOrder[]> {
+  const out: SellerOrder[] = [];
+  let nextToken: string | undefined;
+  let pages = 0;
+  do {
+    const qs = new URLSearchParams({ MarketplaceIds: sellerMarketplaceId(), LastUpdatedAfter: lastUpdatedAfter });
+    if (nextToken) qs.set("NextToken", nextToken);
+    const j = await sellerJson<{ payload?: { Orders?: RawOrder[]; NextToken?: string } }>(`/orders/v0/orders?${qs}`);
+    for (const o of j.payload?.Orders ?? []) {
+      if (!o.AmazonOrderId) continue;
+      out.push({
+        amazonOrderId: o.AmazonOrderId,
+        purchaseDate: o.PurchaseDate ?? null,
+        lastUpdateDate: o.LastUpdateDate ?? null,
+        status: o.OrderStatus ?? null,
+        fulfillmentChannel: o.FulfillmentChannel ?? null,
+        salesChannel: o.SalesChannel ?? null,
+        shipServiceLevel: o.ShipmentServiceLevelCategory ?? null,
+        itemsShipped: o.NumberOfItemsShipped ?? null,
+        itemsUnshipped: o.NumberOfItemsUnshipped ?? null,
+        orderTotal: o.OrderTotal?.Amount ? Number(o.OrderTotal.Amount) : null,
+        currency: o.OrderTotal?.CurrencyCode ?? null,
+        raw: o,
+      });
+    }
+    nextToken = j.payload?.NextToken;
+    pages += 1;
+  } while (nextToken && pages < 30);
+  return out;
+}
+
 // ── Reports API (create → poll → download) ───────────────────────────────────
 
 interface ReportDoc {

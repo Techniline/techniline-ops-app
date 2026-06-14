@@ -11,14 +11,16 @@ import { btnPrimary, inputClass, tableWrap, tdCell, thCell } from "@/components/
 import { isManager } from "@/lib/permissions";
 import {
   fetchSellerFinance,
+  fetchSellerOrders,
   fetchSellerReturns,
   sellerLastSync,
   syncSeller,
   type SellerFinanceRow,
+  type SellerOrderRow,
   type SellerReturnRow,
 } from "@/lib/spapi/seller";
 
-type Tab = "finance" | "orders";
+type Tab = "finance" | "orders" | "returns";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -36,6 +38,7 @@ function Content() {
   const { profile } = useAuth();
   const [tab, setTab] = useState<Tab>("finance");
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
+  const [orders, setOrders] = useState<SellerOrderRow[]>([]);
   const [returns, setReturns] = useState<SellerReturnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -48,6 +51,7 @@ function Content() {
     setLoading(true);
     try {
       if (tab === "finance") setFinance(await fetchSellerFinance(search));
+      else if (tab === "orders") setOrders(await fetchSellerOrders(search));
       else setReturns(await fetchSellerReturns(search));
       setErr(null);
     } catch (e) {
@@ -71,7 +75,7 @@ function Content() {
     try {
       const r = await syncSeller();
       const warn = r.warnings.length ? ` (${r.warnings.join("; ")})` : "";
-      setMsg(`Synced ${r.finance} settlement group(s) and ${r.returns} return(s) from Amazon Seller.${warn}`);
+      setMsg(`Synced ${r.orders} order(s), ${r.finance} settlement group(s) and ${r.returns} return(s) from Amazon Seller.${warn}`);
       setLastSync(r.lastSync);
       await load();
     } catch (e) {
@@ -105,7 +109,8 @@ function Content() {
 
       <div className="mb-3 flex gap-2">
         <button type="button" onClick={() => setTab("finance")} className={tabBtn("finance", "Finance")}>Finance</button>
-        <button type="button" onClick={() => setTab("orders")} className={tabBtn("orders", "Orders / Fulfillment")}>Orders / Fulfillment</button>
+        <button type="button" onClick={() => setTab("orders")} className={tabBtn("orders", "Orders")}>Orders / Fulfillment</button>
+        <button type="button" onClick={() => setTab("returns")} className={tabBtn("returns", "Returns")}>Returns</button>
       </div>
 
       {msg ? <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div> : null}
@@ -113,7 +118,13 @@ function Content() {
 
       <input
         className={`${inputClass} mb-3 w-full`}
-        placeholder={tab === "finance" ? "Search settlement group or status…" : "Search order, SKU or ASIN…"}
+        placeholder={
+          tab === "finance"
+            ? "Search settlement group or status…"
+            : tab === "orders"
+              ? "Search order ID, status or channel…"
+              : "Search order, SKU or ASIN…"
+        }
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -145,6 +156,43 @@ function Content() {
                     <td className={tdCell}>{fmt(r.end_time)}</td>
                     <td className={tdCell}>{fmt(r.fund_transfer_date)}</td>
                     <td className={`${tdCell} tabular-nums`}>{money(r.original_total, r.currency)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : tab === "orders" ? (
+        <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
+          <table className="min-w-full text-sm">
+            <thead className="sticky top-0 z-10">
+              <tr>
+                <th className={thCell}>Order ID</th>
+                <th className={thCell}>Date</th>
+                <th className={thCell}>Status</th>
+                <th className={thCell}>Fulfillment</th>
+                <th className={thCell}>Shipped</th>
+                <th className={thCell}>Unshipped</th>
+                <th className={thCell}>Total</th>
+                <th className={thCell}>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
+              ) : orders.length === 0 ? (
+                <tr><td className={tdCell} colSpan={8}>No orders yet — click <strong>Sync now</strong>.</td></tr>
+              ) : (
+                orders.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className={`${tdCell} font-medium`}>{r.amazon_order_id}</td>
+                    <td className={tdCell}>{fmt(r.purchase_date)}</td>
+                    <td className={tdCell}>{r.order_status ?? "—"}</td>
+                    <td className={tdCell}>{r.fulfillment_channel ?? "—"}</td>
+                    <td className={`${tdCell} tabular-nums`}>{r.items_shipped ?? "—"}</td>
+                    <td className={`${tdCell} tabular-nums`}>{r.items_unshipped ?? "—"}</td>
+                    <td className={`${tdCell} tabular-nums`}>{money(r.order_total, r.currency)}</td>
+                    <td className={tdCell}>{fmt(r.last_update_date)}</td>
                   </tr>
                 ))
               )}
@@ -191,8 +239,8 @@ function Content() {
       )}
 
       <p className="mt-2 text-xs text-slate-400">
-        Finance and FBA returns come from Seller Central via SP-API (Finance + Fulfillment roles). Auto-syncs daily; use Sync now for an
-        immediate refresh. Per-order live tracking requires the Orders API role (Amazon app review, phase 2).
+        Orders, finance settlements, and FBA returns come from Seller Central via SP-API. Auto-syncs daily; use Sync now for an immediate
+        refresh. Order rows show status, fulfillment channel and shipment counts; buyer personal data is not included.
       </p>
     </div>
   );

@@ -1,7 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { isManager } from "@/lib/permissions";
-import { fetchFbaCustomerReturns, fetchFinancialEventGroups, sellerConfigured } from "@/lib/spapi/sellerClient";
+import {
+  fetchFbaCustomerReturns,
+  fetchFinancialEventGroups,
+  fetchSellerOrders,
+  sellerConfigured,
+} from "@/lib/spapi/sellerClient";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,7 +43,12 @@ async function runSync(url: string, service: string): Promise<Response> {
     : new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
 
   const nowIso = new Date().toISOString();
-  const result: { finance: number; returns: number; warnings: string[] } = { finance: 0, returns: 0, warnings: [] };
+  const result: { finance: number; orders: number; returns: number; warnings: string[] } = {
+    finance: 0,
+    orders: 0,
+    returns: 0,
+    warnings: [],
+  };
 
   // Finance — settlement / financial event groups
   try {
@@ -65,7 +75,35 @@ async function runSync(url: string, service: string): Promise<Response> {
     result.warnings.push(`finance: ${e instanceof Error ? e.message : "failed"}`);
   }
 
-  // Orders / Fulfillment — FBA customer returns (Amazon Fulfillment role)
+  // Orders — live order tracking / fulfillment (Orders API)
+  try {
+    const orders = await fetchSellerOrders(startedAfter);
+    if (orders.length) {
+      const rows = orders.map((o) => ({
+        amazon_order_id: o.amazonOrderId,
+        purchase_date: o.purchaseDate,
+        last_update_date: o.lastUpdateDate,
+        order_status: o.status,
+        fulfillment_channel: o.fulfillmentChannel,
+        sales_channel: o.salesChannel,
+        ship_service_level: o.shipServiceLevel,
+        items_shipped: o.itemsShipped,
+        items_unshipped: o.itemsUnshipped,
+        order_total: o.orderTotal,
+        currency: o.currency,
+        raw: o.raw as never,
+        synced_at: nowIso,
+        updated_at: nowIso,
+      }));
+      const { error } = await svc.from("seller_orders").upsert(rows, { onConflict: "amazon_order_id" });
+      if (error) result.warnings.push(`orders: ${error.message}`);
+      else result.orders = rows.length;
+    }
+  } catch (e) {
+    result.warnings.push(`orders: ${e instanceof Error ? e.message : "failed"}`);
+  }
+
+  // Returns — FBA customer returns (Amazon Fulfillment role)
   try {
     const returns = await fetchFbaCustomerReturns(startedAfter);
     if (returns.length) {

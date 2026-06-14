@@ -26,6 +26,28 @@ create table if not exists public.seller_finance_groups (
 );
 create index if not exists seller_fin_start_idx on public.seller_finance_groups (start_time desc);
 
+-- ── Orders: live order tracking / fulfillment (Orders API) ──────────────────
+create table if not exists public.seller_orders (
+  id uuid primary key default gen_random_uuid(),
+  amazon_order_id text not null unique,
+  purchase_date timestamptz,
+  last_update_date timestamptz,
+  order_status text,
+  fulfillment_channel text,
+  sales_channel text,
+  ship_service_level text,
+  items_shipped integer,
+  items_unshipped integer,
+  order_total numeric,
+  currency text,
+  raw jsonb,
+  synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists seller_ord_date_idx on public.seller_orders (purchase_date desc);
+create index if not exists seller_ord_status_idx on public.seller_orders (order_status);
+
 -- ── Orders / Fulfillment: FBA customer returns ──────────────────────────────
 create table if not exists public.seller_returns (
   id uuid primary key default gen_random_uuid(),
@@ -49,7 +71,14 @@ create index if not exists seller_ret_order_idx on public.seller_returns (order_
 
 -- ── RLS: managers/admin + Maricel + Aaron may read ──────────────────────────
 alter table public.seller_finance_groups enable row level security;
+alter table public.seller_orders enable row level security;
 alter table public.seller_returns enable row level security;
+
+drop policy if exists seller_ord_read on public.seller_orders;
+create policy seller_ord_read on public.seller_orders for select to authenticated
+  using (public.current_user_role() in ('manager','admin')
+         or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
+         or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
 
 drop policy if exists seller_fin_read on public.seller_finance_groups;
 create policy seller_fin_read on public.seller_finance_groups for select to authenticated

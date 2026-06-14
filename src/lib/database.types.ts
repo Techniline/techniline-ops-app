@@ -2673,6 +2673,63 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_orders: {
+        Row: {
+          amazon_order_id: string
+          created_at: string
+          currency: string | null
+          fulfillment_channel: string | null
+          id: string
+          items_shipped: number | null
+          items_unshipped: number | null
+          last_update_date: string | null
+          order_status: string | null
+          order_total: number | null
+          purchase_date: string | null
+          raw: Json | null
+          sales_channel: string | null
+          ship_service_level: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amazon_order_id: string
+          created_at?: string
+          currency?: string | null
+          fulfillment_channel?: string | null
+          id?: string
+          items_shipped?: number | null
+          items_unshipped?: number | null
+          last_update_date?: string | null
+          order_status?: string | null
+          order_total?: number | null
+          purchase_date?: string | null
+          raw?: Json | null
+          sales_channel?: string | null
+          ship_service_level?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          amazon_order_id?: string
+          created_at?: string
+          currency?: string | null
+          fulfillment_channel?: string | null
+          id?: string
+          items_shipped?: number | null
+          items_unshipped?: number | null
+          last_update_date?: string | null
+          order_status?: string | null
+          order_total?: number | null
+          purchase_date?: string | null
+          raw?: Json | null
+          sales_channel?: string | null
+          ship_service_level?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       seller_returns: {
         Row: {
           asin: string | null
