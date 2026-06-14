@@ -5,8 +5,18 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
-import { btnPrimary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
-import { fetchVendorPOs, syncVendorPOs, vendorPoLastSync, type VendorPORow } from "@/lib/spapi/vendorOrders";
+import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
+import {
+  fetchVendorPOs,
+  parsePOItems,
+  syncVendorPOs,
+  updateVendorPO,
+  vendorPoLastSync,
+  type VendorPORow,
+} from "@/lib/spapi/vendorOrders";
+
+/** Internal workflow states for a PO (separate from the Amazon-side status). */
+const INTERNAL_STATUSES = ["New", "Reviewed", "Booked", "Shipped", "Invoiced", "Closed", "Issue"] as const;
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -27,6 +37,150 @@ function StateBadge({ value }: { value: string | null }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{value ?? "—"}</span>;
 }
 
+function money(n: number | null, ccy: string | null): string {
+  if (n == null) return "—";
+  return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** PO detail: accepted products (read-only from Amazon) + editable internal fields. */
+function PoDetailModal({
+  po,
+  onClose,
+  onSaved,
+}: {
+  po: VendorPORow;
+  onClose: () => void;
+  onSaved: (row: VendorPORow) => void;
+}) {
+  const items = parsePOItems(po.raw);
+  const [bookingDate, setBookingDate] = useState(po.booking_date ?? "");
+  const [bookingRef, setBookingRef] = useState(po.booking_ref ?? "");
+  const [status, setStatus] = useState(po.internal_status ?? "");
+  const [invoice, setInvoice] = useState(po.invoice_number ?? "");
+  const [note, setNote] = useState(po.internal_note ?? "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const row = await updateVendorPO(po.id, {
+        booking_date: bookingDate || null,
+        booking_ref: bookingRef || null,
+        internal_status: status || null,
+        invoice_number: invoice || null,
+        internal_note: note || null,
+      });
+      onSaved(row);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const totalCost = items.reduce(
+    (sum, it) => sum + (it.unitCost ?? 0) * (it.acceptedQty ?? it.orderedQty ?? 0),
+    0
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+      <div className={`${surface} w-full max-w-3xl`}>
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">PO {po.po_number}</h2>
+            <p className="text-xs text-slate-500">
+              {po.po_state ?? "—"} · {po.po_type ?? "—"} · PO date {fmt(po.po_date)} · {po.item_count ?? 0} line(s)
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
+          {/* Accepted products */}
+          <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Products on this PO</h3>
+          <div className={`${tableWrap} mb-5`}>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr>
+                  <th className={thCell}>SKU</th>
+                  <th className={thCell}>ASIN</th>
+                  <th className={thCell}>Ordered</th>
+                  <th className={thCell}>Accepted</th>
+                  <th className={thCell}>Unit Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr><td className={tdCell} colSpan={5}>No line items in the synced PO payload.</td></tr>
+                ) : (
+                  items.map((it, i) => (
+                    <tr key={it.seq ?? i}>
+                      <td className={`${tdCell} font-medium`}>{it.sku ?? "—"}</td>
+                      <td className={tdCell}>{it.asin ?? "—"}</td>
+                      <td className={`${tdCell} tabular-nums`}>{it.orderedQty ?? "—"}</td>
+                      <td className={`${tdCell} tabular-nums`}>{it.acceptedQty ?? "—"}</td>
+                      <td className={`${tdCell} tabular-nums`}>{money(it.unitCost, it.currency)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {totalCost > 0 ? (
+            <p className="mb-5 text-right text-sm text-slate-600 dark:text-slate-300">
+              Estimated PO value: <strong>{money(totalCost, items[0]?.currency ?? null)}</strong>
+            </p>
+          ) : null}
+
+          {/* Internal fields */}
+          <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Internal tracking</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Schedule / booking date</span>
+              <input type="date" className={`${inputClass} w-full`} value={bookingDate ?? ""} onChange={(e) => setBookingDate(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Booking reference</span>
+              <input className={`${inputClass} w-full`} value={bookingRef} onChange={(e) => setBookingRef(e.target.value)} placeholder="Appointment / slot ref" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Internal status</span>
+              <select className={`${inputClass} w-full`} value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">—</option>
+                {INTERNAL_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Invoice / reference number</span>
+              <input className={`${inputClass} w-full`} value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="Your invoice no." />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
+              <textarea className={`${inputClass} w-full`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          </div>
+
+          {err ? <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <button type="button" onClick={onClose} className={btnSecondary} disabled={saving}>Close</button>
+          <button type="button" onClick={save} className={btnPrimary} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Content() {
   const [rows, setRows] = useState<VendorPORow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +189,7 @@ function Content() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [selected, setSelected] = useState<VendorPORow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,27 +257,39 @@ function Content() {
             <tr>
               <th className={thCell}>PO Number</th>
               <th className={thCell}>Status</th>
+              <th className={thCell}>Internal</th>
               <th className={thCell}>Type</th>
               <th className={thCell}>PO Date</th>
+              <th className={thCell}>Booking</th>
+              <th className={thCell}>Invoice</th>
               <th className={thCell}>Items</th>
-              <th className={thCell}>Ship-to</th>
               <th className={thCell}>Updated in Amazon</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className={tdCell} colSpan={7}>Loading…</td></tr>
+              <tr><td className={tdCell} colSpan={9}>Loading…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td className={tdCell} colSpan={7}>No purchase orders yet — click <strong>Sync now</strong>.</td></tr>
+              <tr><td className={tdCell} colSpan={9}>No purchase orders yet — click <strong>Sync now</strong>.</td></tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className={`${tdCell} font-medium`}>{r.po_number}</td>
+                  <td className={tdCell}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(r)}
+                      className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                    >
+                      {r.po_number}
+                    </button>
+                  </td>
                   <td className={tdCell}><StateBadge value={r.po_state} /></td>
+                  <td className={tdCell}>{r.internal_status ?? "—"}</td>
                   <td className={tdCell}>{r.po_type ?? "—"}</td>
                   <td className={tdCell}>{fmt(r.po_date)}</td>
+                  <td className={tdCell}>{r.booking_date ? fmt(r.booking_date) : "—"}</td>
+                  <td className={tdCell}>{r.invoice_number ?? "—"}</td>
                   <td className={`${tdCell} tabular-nums`}>{r.item_count ?? 0}</td>
-                  <td className={tdCell}>{r.ship_to_party ?? "—"}</td>
                   <td className={tdCell}>{fmt(r.state_changed_at)}</td>
                 </tr>
               ))
@@ -130,7 +297,19 @@ function Content() {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-slate-400">Status mirrors Vendor Central. Auto-syncs daily; use Sync now for an immediate refresh.</p>
+      <p className="mt-2 text-xs text-slate-400">Status mirrors Vendor Central. Auto-syncs daily; use Sync now for an immediate refresh. Click a PO number to view accepted products and record booking, status, invoice and notes.</p>
+
+      {selected ? (
+        <PoDetailModal
+          po={selected}
+          onClose={() => setSelected(null)}
+          onSaved={(row) => {
+            setRows((prev) => prev.map((r) => (r.id === row.id ? row : r)));
+            setSelected(null);
+            setMsg(`Saved internal details for PO ${row.po_number}.`);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

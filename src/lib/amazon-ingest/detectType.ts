@@ -96,10 +96,12 @@ export function detectType(payload: IngestPayload): IngestType {
   if (/\bappointment\b/.test(text) && !/amazon\.ae\s+po\b/.test(text)) {
     return "unknown";
   }
-  // PO cancellation before dispute: "PO(s) have been cancelled" notices cite a
-  // DSPT id in boilerplate that would otherwise mis-route them to a dispute.
+  // PO emails are now sourced from the SP-API Vendor Orders sync, not email.
+  // We still catch PO-cancellation notices here (before the dispute rule, so a
+  // DSPT id in boilerplate doesn't mis-route them) but classify them as
+  // "unknown" so no PO action is created from email.
   if (/cancel/.test(text) && /amazon\.ae\s+po\b|purchase order|\bpo\(s\)|\bpo\b/.test(text)) {
-    return "po_cancellation";
+    return "unknown";
   }
   // Real disputes carry a DSPT id; the bare word "dispute" appears in PO and
   // payment boilerplate, so don't classify on it alone.
@@ -111,10 +113,10 @@ export function detectType(payload: IngestPayload): IngestType {
   if (/\bvret\d+|\brma\b|\bprt\b|\bsrt\b|vendor return|return processed|return id/.test(text)) {
     return "return_processed";
   }
-  // vendor_po without the bare word "confirm" (which matched "Appointment
-  // Confirmed"); keep "unconfirmed" and explicit PO references.
+  // PO confirmations now come from the SP-API Vendor Orders sync, not email —
+  // classify PO emails as "unknown" so they create no action.
   if (/purchase order|unconfirmed|amazon\.ae\s+po\b|\bpo\(s\)|\bpo\b/.test(text)) {
-    return "vendor_po";
+    return "unknown";
   }
   return "unknown";
 }

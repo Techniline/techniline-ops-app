@@ -2564,8 +2564,13 @@ export type Database = {
       }
       vendor_purchase_orders: {
         Row: {
+          booking_date: string | null
+          booking_ref: string | null
           created_at: string
           id: string
+          internal_note: string | null
+          internal_status: string | null
+          invoice_number: string | null
           item_count: number | null
           po_date: string | null
           po_number: string
@@ -2579,8 +2584,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booking_date?: string | null
+          booking_ref?: string | null
           created_at?: string
           id?: string
+          internal_note?: string | null
+          internal_status?: string | null
+          invoice_number?: string | null
           item_count?: number | null
           po_date?: string | null
           po_number: string
@@ -2594,8 +2604,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booking_date?: string | null
+          booking_ref?: string | null
           created_at?: string
           id?: string
+          internal_note?: string | null
+          internal_status?: string | null
+          invoice_number?: string | null
           item_count?: number | null
           po_date?: string | null
           po_number?: string

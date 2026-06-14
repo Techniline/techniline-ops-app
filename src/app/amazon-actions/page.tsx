@@ -116,10 +116,13 @@ function referenceLabel(type: ReferenceType | undefined): string {
  */
 type UiFilter = ActionCategory | "all" | "cancellation";
 
+// PO Confirmation / Cancellation tabs were retired — purchase orders now come
+// live from the SP-API Vendor Orders sync on the "Vendor POs" page (single
+// source of truth). Historical PO actions remain in the data and still appear
+// under "All"; we just no longer surface dedicated PO/cancellation tabs or
+// capture new POs from email. Disputes/shortage/remittance are unchanged.
 const CATEGORY_TABS: ReadonlyArray<{ key: UiFilter; label: string }> = [
   { key: "all", label: "All" },
-  { key: "po", label: "PO Confirmation" },
-  { key: "cancellation", label: "Cancellations" },
   { key: "dispute", label: "Disputes" },
   { key: "shortage", label: "Shortage" },
   { key: "remittance", label: "Remittance" },

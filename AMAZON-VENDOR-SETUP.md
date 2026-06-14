@@ -32,3 +32,19 @@ create policy vendor_po_read on public.vendor_purchase_orders for select to auth
 insert into public.app_settings (key, value) values ('vendor_po_last_sync', null)
 on conflict (key) do nothing;
 ```
+
+## Internal PO tracking fields (run once, additive)
+
+Adds the editable fields shown on the **Vendor POs** PO-detail panel — schedule/
+booking, internal status, invoice/reference, and notes. These are never touched
+by the Amazon sync; they're written through `/api/spapi/po-update` (managers +
+Maricel only, via the service role), so no extra write policy is required.
+
+```sql
+alter table public.vendor_purchase_orders
+  add column if not exists booking_date    date,
+  add column if not exists booking_ref     text,
+  add column if not exists internal_status text,
+  add column if not exists internal_note   text,
+  add column if not exists invoice_number  text;
+```
