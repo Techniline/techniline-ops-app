@@ -28,10 +28,11 @@ export function sellerConfigured(): boolean {
   return Boolean(c.clientId && c.clientSecret && c.refreshToken);
 }
 
-/** Marketplaces to sync. Defaults to UAE + KSA (the Seller Central returns list
- *  spans both). Override with SELLER_SPAPI_MARKETPLACE_IDS (comma-separated). */
+/** Marketplaces to sync. UAE only by default — the account is registered there
+ *  (KSA returned "merchant not registered"). Override with
+ *  SELLER_SPAPI_MARKETPLACE_IDS (comma-separated) if more are added later. */
 export function sellerMarketplaceIds(): string[] {
-  const raw = process.env.SELLER_SPAPI_MARKETPLACE_IDS || "A2VIGQ35RCS4UG,A17E79C6D8DWNP";
+  const raw = process.env.SELLER_SPAPI_MARKETPLACE_IDS || "A2VIGQ35RCS4UG";
   const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
   return ids.length ? ids : ["A2VIGQ35RCS4UG"];
 }

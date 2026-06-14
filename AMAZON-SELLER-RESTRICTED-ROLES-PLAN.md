@@ -4,7 +4,7 @@ Two things our Seller app can't do today, both blocked by the **same gate**:
 
 | Want | Needs role | Today |
 |---|---|---|
-| Sync seller-fulfilled (MFN) returns — the `/gp/returns/list/v2` data | Orders / **Inventory and Order Tracking** (returns reports) | `403` on `GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE` |
+| Sync seller-fulfilled (MFN) returns — the `/gp/returns/list/v2` data | **Inventory and Order Tracking** + **Direct to Consumer Shipping (Restricted)** | `403` — got Inventory & Order Tracking (Jun 2026) but still need **Direct to Consumer Shipping** |
 | Read buyer–seller messages in-app | **Buyer Communication** | not requestable |
 
 Both are **restricted roles**. On a **private/draft** app they don't even appear
