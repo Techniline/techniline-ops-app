@@ -99,7 +99,7 @@ export function Sidebar({
     { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
     { href: "/amazon-actions", label: "Amazon Actions", icon: ActionsIcon, show: canViewFinance(profile) },
     { href: "/amazon-actions/seller", label: "Amazon Seller Central", icon: ShopifyIcon, show: canViewSellerCentral(profile) },
-    { href: "/returns", label: "Returns", icon: ReturnsIcon, show: canViewFinance(profile) },
+    { href: "/returns", label: "Returns & Disputes (Finance)", icon: ReturnsIcon, show: canViewFinance(profile) },
     { href: "/vendor-orders", label: "Vendor POs", icon: ShopifyIcon, show: canViewFinance(profile) },
     { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
   ].filter((i) => i.show);
