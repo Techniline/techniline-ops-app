@@ -22,6 +22,24 @@ import { supabase } from "@/lib/supabaseClient";
 function SpapiCheck() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [probe, setProbe] = useState<{ label: string; status: number | string }[] | null>(null);
+  async function authHeader() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return { Authorization: `Bearer ${session?.access_token ?? ""}` };
+  }
+  async function discover() {
+    setBusy(true);
+    setProbe(null);
+    try {
+      const res = await fetch("/api/spapi/probe", { headers: await authHeader() });
+      const j = (await res.json().catch(() => ({}))) as { results?: { label: string; status: number | string }[] };
+      setProbe(j.results ?? []);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function test() {
     setBusy(true);
     setResult(null);
@@ -50,8 +68,28 @@ function SpapiCheck() {
       >
         {busy ? "Testing…" : "Test connection"}
       </button>
+      <button
+        type="button"
+        onClick={discover}
+        disabled={busy}
+        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        {busy ? "…" : "Discover access"}
+      </button>
       {result ? (
         <span className={`text-sm ${result.ok ? "text-emerald-700" : "text-rose-600"}`}>{result.text}</span>
+      ) : null}
+      {probe ? (
+        <ul className="basis-full text-xs text-slate-600 dark:text-slate-300">
+          {probe.map((p) => (
+            <li key={p.label}>
+              <span className={p.status === 200 ? "text-emerald-700" : p.status === 403 ? "text-amber-600" : "text-rose-600"}>
+                {String(p.status)}
+              </span>{" "}
+              · {p.label}
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

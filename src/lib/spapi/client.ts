@@ -98,6 +98,34 @@ export async function spapiPing(): Promise<{ ok: boolean; detail: string }> {
   }
 }
 
+/** Probe which Vendor endpoints / report types our granted roles actually allow.
+ *  Returns the HTTP status for each (200 = accessible, 403 = role not granted). */
+export async function spapiProbe(): Promise<{ label: string; status: number | string }[]> {
+  const now = new Date();
+  const after = new Date(now.getTime() - 7 * 86_400_000);
+  const iso = (d: Date) => d.toISOString();
+  const rt = (t: string) => `/reports/2021-06-30/reports?reportTypes=${t}&pageSize=1`;
+  const checks: { label: string; path: string }[] = [
+    { label: "Vendor purchase orders (API)", path: `/vendor/orders/v1/purchaseOrders?limit=1&createdAfter=${iso(after)}&createdBefore=${iso(now)}` },
+    { label: "Finances event groups (API)", path: `/finances/v0/financialEventGroups?MaxResultsPerPage=1&FinancialEventGroupStartedAfter=${iso(after)}` },
+    { label: "Report GET_VENDOR_SALES_REPORT", path: rt("GET_VENDOR_SALES_REPORT") },
+    { label: "Report GET_VENDOR_INVENTORY_REPORT", path: rt("GET_VENDOR_INVENTORY_REPORT") },
+    { label: "Report GET_VENDOR_NET_PURE_PRODUCT_MARGIN_REPORT", path: rt("GET_VENDOR_NET_PURE_PRODUCT_MARGIN_REPORT") },
+    { label: "Report GET_VENDOR_TRAFFIC_REPORT", path: rt("GET_VENDOR_TRAFFIC_REPORT") },
+    { label: "Report GET_VENDOR_FORECASTING_REPORT", path: rt("GET_VENDOR_FORECASTING_REPORT") },
+  ];
+  const out: { label: string; status: number | string }[] = [];
+  for (const c of checks) {
+    try {
+      const res = await spFetch(c.path);
+      out.push({ label: c.label, status: res.status });
+    } catch (e) {
+      out.push({ label: c.label, status: e instanceof Error ? e.message.slice(0, 40) : "error" });
+    }
+  }
+  return out;
+}
+
 // ── Reports API (the standard create → poll → download flow) ─────────────────
 
 export interface ReportDoc {
