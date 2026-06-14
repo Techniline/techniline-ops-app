@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
+import { SpapiConnectionCheck } from "@/components/SpapiConnectionCheck";
 import {
   btnPrimary,
   btnSecondary,
@@ -739,6 +740,8 @@ function AmazonActionsContent() {
         title="Amazon Actions"
         subtitle="Drive Amazon issues to closure — log a reference or reason for each."
       />
+
+      {isManager(profile) ? <SpapiConnectionCheck /> : null}
 
       <div className="sticky top-24 z-10 -mx-4 mb-4 bg-slate-50/95 px-4 pb-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-slate-950/95">
         <AdvancedSearch />
