@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import Link from "next/link";
 
+import { useAuth } from "@/app/providers/AuthProvider";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import {
   ActionsIcon,
@@ -15,6 +16,46 @@ import {
   ShopifyIcon,
 } from "@/components/icons";
 import { fetchLogisticsKpis, type LogisticsKpis } from "@/lib/logistics/dashboard";
+import { isManager } from "@/lib/permissions";
+import { supabase } from "@/lib/supabaseClient";
+
+function SpapiCheck() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  async function test() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch("/api/spapi/ping", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; configured?: boolean; detail?: string; error?: string };
+      if (j.configured === false) setResult({ ok: false, text: "Not configured — SP-API env vars aren't set / deployed yet." });
+      else setResult({ ok: !!j.ok, text: j.ok ? `Connected ✓ — ${j.detail ?? ""}` : `Failed — ${j.error ?? j.detail ?? "unknown"}` });
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof Error ? e.message : "Request failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Amazon SP-API connection</span>
+      <button
+        type="button"
+        onClick={test}
+        disabled={busy}
+        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        {busy ? "Testing…" : "Test connection"}
+      </button>
+      {result ? (
+        <span className={`text-sm ${result.ok ? "text-emerald-700" : "text-rose-600"}`}>{result.text}</span>
+      ) : null}
+    </div>
+  );
+}
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -108,6 +149,7 @@ const MODULES: ModuleCard[] = [
 ];
 
 export default function LogisticsDashboardPage() {
+  const { profile } = useAuth();
   const [kpis, setKpis] = useState<LogisticsKpis | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -138,6 +180,8 @@ export default function LogisticsDashboardPage() {
           to activate this module.
         </div>
       ) : null}
+
+      {isManager(profile) ? <SpapiCheck /> : null}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
