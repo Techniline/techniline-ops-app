@@ -47,10 +47,24 @@ export function canViewFinance(profile: ProfileArg): boolean {
   return hasCapability(profile, "finance");
 }
 
-/** Amazon Seller Central (finance + orders/fulfillment) — finance users plus
- *  anyone explicitly granted the seller_central capability (e.g. Aaron). */
+/** Amazon Seller Central page access (any seller_* grant or finance). */
 export function canViewSellerCentral(profile: ProfileArg): boolean {
-  return hasCapability(profile, "finance") || hasCapability(profile, "seller_central");
+  return (
+    hasCapability(profile, "finance") ||
+    hasCapability(profile, "seller_central") ||
+    hasCapability(profile, "seller_orders") ||
+    hasCapability(profile, "seller_finance")
+  );
+}
+
+/** Seller orders + buyer messages + returns tabs (Aaron, managers). */
+export function canViewSellerOrders(profile: ProfileArg): boolean {
+  return hasCapability(profile, "seller_orders");
+}
+
+/** Seller finance / payment tab (Maricel, managers). */
+export function canViewSellerFinance(profile: ProfileArg): boolean {
+  return hasCapability(profile, "seller_finance") || hasCapability(profile, "finance");
 }
 
 export function canViewCocoblu(profile: ProfileArg): boolean {
@@ -75,11 +89,12 @@ export type LogisticsPage =
   | "prt"
   | "reports"
   | "marketplace"
-  | "masters";
+  | "masters"
+  | "amazon_fulfillment";
 
 const LOGISTICS_PAGE_GRANTS: Readonly<Record<string, readonly LogisticsPage[]>> = {
-  // Maricel
-  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports", "marketplace"],
+  // Maricel — also documents Amazon return paperwork (invoice/PRT/SRT)
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports", "marketplace", "amazon_fulfillment"],
   // Aaron
   "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["orders"],
 };

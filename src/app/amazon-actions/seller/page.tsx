@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { SellerConnectionCheck } from "@/components/SellerConnectionCheck";
 import { btnPrimary, inputClass, tableWrap, tdCell, thCell } from "@/components/ui";
-import { isManager } from "@/lib/permissions";
+import { canViewSellerFinance, canViewSellerOrders, isManager } from "@/lib/permissions";
 import {
   fetchSellerFinance,
   fetchSellerOrders,
@@ -20,7 +20,7 @@ import {
   type SellerReturnRow,
 } from "@/lib/spapi/seller";
 
-type Tab = "finance" | "orders" | "returns";
+type Tab = "finance" | "orders" | "messages" | "returns";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -36,7 +36,9 @@ function money(n: number | null, ccy: string | null): string {
 
 function Content() {
   const { profile } = useAuth();
-  const [tab, setTab] = useState<Tab>("finance");
+  const showOrders = canViewSellerOrders(profile);
+  const showFinance = canViewSellerFinance(profile);
+  const [tab, setTab] = useState<Tab>(showFinance && !showOrders ? "finance" : "orders");
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
   const [channel, setChannel] = useState<string>("all");
@@ -53,7 +55,8 @@ function Content() {
     try {
       if (tab === "finance") setFinance(await fetchSellerFinance(search));
       else if (tab === "orders") setOrders(await fetchSellerOrders(search));
-      else setReturns(await fetchSellerReturns(search));
+      else if (tab === "returns") setReturns(await fetchSellerReturns(search));
+      // "messages" has no data source yet (pending Buyer Communication role)
       setErr(null);
     } catch (e) {
       setErr(errMsg(e));
@@ -108,10 +111,17 @@ function Content() {
 
       {isManager(profile) ? <SellerConnectionCheck /> : null}
 
-      <div className="mb-3 flex gap-2">
-        <button type="button" onClick={() => setTab("finance")} className={tabBtn("finance", "Finance")}>Finance</button>
-        <button type="button" onClick={() => setTab("orders")} className={tabBtn("orders", "Orders")}>Orders / Fulfillment</button>
-        <button type="button" onClick={() => setTab("returns")} className={tabBtn("returns", "Returns")}>Returns</button>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {showFinance ? (
+          <button type="button" onClick={() => setTab("finance")} className={tabBtn("finance", "Finance")}>Finance / Payment</button>
+        ) : null}
+        {showOrders ? (
+          <>
+            <button type="button" onClick={() => setTab("orders")} className={tabBtn("orders", "Orders")}>Orders / Fulfillment</button>
+            <button type="button" onClick={() => setTab("messages")} className={tabBtn("messages", "Messages")}>Buyer Messages</button>
+            <button type="button" onClick={() => setTab("returns")} className={tabBtn("returns", "Returns")}>Returns</button>
+          </>
+        ) : null}
       </div>
 
       {msg ? <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div> : null}
@@ -223,6 +233,15 @@ function Content() {
           </table>
           </div>
         </>
+      ) : tab === "messages" ? (
+        <div className={`${tableWrap} px-4 py-6 text-sm text-slate-600 dark:text-slate-300`}>
+          <p className="font-medium text-slate-800 dark:text-slate-100">Buyer messages — pending Amazon approval</p>
+          <p className="mt-2 max-w-2xl text-slate-500">
+            Buyer–seller messages need Amazon&apos;s restricted <strong>Buyer Communication</strong> role, which is granted only after an
+            app review (it exposes buyer personal data). Once that role is approved this tab will list buyer messages automatically — no
+            further setup on your side. See AMAZON-SELLER-MESSAGING-PLAN.md for the steps to request it.
+          </p>
+        </div>
       ) : (
         <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
           <table className="min-w-full text-sm">

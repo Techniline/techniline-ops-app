@@ -134,6 +134,7 @@ export function Sidebar({
       heading: "Marketplace",
       items: [
         { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
+        { href: "/logistics/amazon-fulfillment", label: "Amazon Fulfillment", icon: ShopifyIcon, show: can("amazon_fulfillment") },
       ],
     },
   ];

@@ -8,6 +8,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   "lp_tracker",
   "logistics",
   "seller_central",
+  "seller_orders",
+  "seller_finance",
 ] as const;
 
 /**
@@ -23,10 +25,10 @@ export type CapabilityGrant = readonly Capability[] | "all";
  * changing a user's email address can never alter their access.
  */
 export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
-  // Maricel
-  "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance", "lp_tracker", "seller_central"],
-  // Aaron — order/fulfillment visibility into Amazon Seller Central
-  "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu", "seller_central"],
+  // Maricel — Amazon Seller Central: payment/finance only
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance", "lp_tracker", "seller_central", "seller_finance"],
+  // Aaron — Amazon Seller Central: orders + buyer messages
+  "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu", "seller_central", "seller_orders"],
   // Vihan
   "c4abda49-13e9-41fd-acae-88acd4aa7fcb": "all",
 };

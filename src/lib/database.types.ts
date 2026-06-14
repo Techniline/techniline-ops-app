@@ -2673,6 +2673,45 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_order_docs: {
+        Row: {
+          amazon_order_id: string
+          created_at: string
+          doc_status: string | null
+          id: string
+          invoice_number: string | null
+          prt_number: string | null
+          return_note: string | null
+          srt_number: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amazon_order_id: string
+          created_at?: string
+          doc_status?: string | null
+          id?: string
+          invoice_number?: string | null
+          prt_number?: string | null
+          return_note?: string | null
+          srt_number?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amazon_order_id?: string
+          created_at?: string
+          doc_status?: string | null
+          id?: string
+          invoice_number?: string | null
+          prt_number?: string | null
+          return_note?: string | null
+          srt_number?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       seller_orders: {
         Row: {
           amazon_order_id: string

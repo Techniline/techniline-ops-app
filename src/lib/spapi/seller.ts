@@ -32,6 +32,41 @@ export async function fetchSellerReturns(search?: string): Promise<SellerReturnR
   return data ?? [];
 }
 
+export type SellerOrderDocRow = Tables<"seller_order_docs">;
+
+/** Return documentation keyed by amazon_order_id. */
+export async function fetchSellerOrderDocs(): Promise<Map<string, SellerOrderDocRow>> {
+  const map = new Map<string, SellerOrderDocRow>();
+  const { data, error } = await supabase.from("seller_order_docs").select("*");
+  if (error) return map;
+  for (const d of data ?? []) map.set(d.amazon_order_id, d);
+  return map;
+}
+
+export interface SellerOrderDocPatch {
+  invoice_number?: string | null;
+  prt_number?: string | null;
+  srt_number?: string | null;
+  return_note?: string | null;
+  doc_status?: string | null;
+}
+
+export async function updateSellerOrderDoc(amazonOrderId: string, patch: SellerOrderDocPatch): Promise<SellerOrderDocRow> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/spapi/seller-order-doc", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ amazon_order_id: amazonOrderId, ...patch }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; row?: SellerOrderDocRow };
+  if (!res.ok || !j.ok || !j.row) throw new Error(j.error ?? `HTTP ${res.status}`);
+  return j.row;
+}
+
 export async function sellerLastSync(): Promise<string | null> {
   const { data } = await supabase.from("app_settings").select("value").eq("key", "seller_last_sync").maybeSingle();
   return (data as { value?: string | null } | null)?.value ?? null;
