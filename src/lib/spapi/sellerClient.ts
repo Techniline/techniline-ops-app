@@ -2,7 +2,7 @@
  * Amazon Seller Central SP-API client (server-only). Separate credentials from
  * the Vendor client — never mixed. LWA-only auth (no AWS SigV4). Requires env:
  *   SELLER_SPAPI_CLIENT_ID, SELLER_SPAPI_CLIENT_SECRET, SELLER_SPAPI_REFRESH_TOKEN
- *   SELLER_SPAPI_MARKETPLACE_ID (optional; defaults to UAE A2VIGQ35RCS4UG)
+ *   SELLER_SPAPI_MARKETPLACE_IDS (optional; comma-separated; defaults to UAE + KSA)
  * Region: UAE → Europe endpoint. Never import from client components.
  *
  * Granted roles: Finance and Accounting + Amazon Fulfillment. The Orders API
@@ -26,6 +26,14 @@ function cfg() {
 export function sellerConfigured(): boolean {
   const c = cfg();
   return Boolean(c.clientId && c.clientSecret && c.refreshToken);
+}
+
+/** Marketplaces to sync. Defaults to UAE + KSA (the Seller Central returns list
+ *  spans both). Override with SELLER_SPAPI_MARKETPLACE_IDS (comma-separated). */
+export function sellerMarketplaceIds(): string[] {
+  const raw = process.env.SELLER_SPAPI_MARKETPLACE_IDS || "A2VIGQ35RCS4UG,A17E79C6D8DWNP";
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return ids.length ? ids : ["A2VIGQ35RCS4UG"];
 }
 
 export function sellerMarketplaceId(): string {
@@ -212,7 +220,7 @@ export async function fetchSellerOrders(lastUpdatedAfter: string): Promise<Selle
   let nextToken: string | undefined;
   let pages = 0;
   do {
-    const qs = new URLSearchParams({ MarketplaceIds: sellerMarketplaceId(), LastUpdatedAfter: lastUpdatedAfter });
+    const qs = new URLSearchParams({ MarketplaceIds: sellerMarketplaceIds().join(","), LastUpdatedAfter: lastUpdatedAfter });
     if (nextToken) qs.set("NextToken", nextToken);
     const j = await sellerJson<{ payload?: { Orders?: RawOrder[]; NextToken?: string } }>(`/orders/v0/orders?${qs}`);
     for (const o of j.payload?.Orders ?? []) {
@@ -251,7 +259,7 @@ async function createReport(reportType: string, opts?: { dataStartTime?: string;
     method: "POST",
     body: JSON.stringify({
       reportType,
-      marketplaceIds: [sellerMarketplaceId()],
+      marketplaceIds: sellerMarketplaceIds(),
       ...(opts?.dataStartTime ? { dataStartTime: opts.dataStartTime } : {}),
       ...(opts?.dataEndTime ? { dataEndTime: opts.dataEndTime } : {}),
     }),

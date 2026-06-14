@@ -232,8 +232,8 @@ function Content() {
         <div className={`${tableWrap} px-4 py-6 text-sm text-slate-600 dark:text-slate-300`}>
           <p className="font-medium text-slate-800 dark:text-slate-100">Buyer messages open in Seller Central</p>
           <p className="mt-2 max-w-2xl text-slate-500">
-            Reading buyer messages inside this app needs Amazon&apos;s restricted Buyer Communication role (a public app-listing review),
-            so for now we link straight to your Seller Central message inbox — your team can read and reply there.
+            Amazon&apos;s SP-API doesn&apos;t expose the buyer-message inbox for reading — the Messaging API only sends messages, it can&apos;t
+            list incoming ones. So buyer messages are handled in Seller Central; open the inbox below to read and reply.
           </p>
           <a
             href="https://sellercentral.amazon.ae/messaging/inbox"
