@@ -126,6 +126,71 @@ export async function spapiProbe(): Promise<{ label: string; status: number | st
   return out;
 }
 
+// ── Vendor Orders ────────────────────────────────────────────────────────────
+
+export interface VendorPO {
+  poNumber: string;
+  state: string | null;
+  type: string | null;
+  poDate: string | null;
+  stateChangedAt: string | null;
+  sellingParty: string | null;
+  shipToParty: string | null;
+  itemCount: number;
+  raw: unknown;
+}
+
+interface RawVendorOrder {
+  purchaseOrderNumber?: string;
+  purchaseOrderState?: string;
+  orderDetails?: {
+    purchaseOrderDate?: string;
+    purchaseOrderStateChangedDate?: string;
+    purchaseOrderType?: string;
+    sellingParty?: { partyId?: string };
+    shipToParty?: { partyId?: string };
+    items?: unknown[];
+  };
+}
+
+/** Pull Vendor purchase orders created in [createdAfter, createdBefore], paged. */
+export async function fetchVendorPurchaseOrders(createdAfter: string, createdBefore: string): Promise<VendorPO[]> {
+  const out: VendorPO[] = [];
+  let nextToken: string | undefined;
+  let pages = 0;
+  do {
+    const qs = new URLSearchParams({
+      limit: "100",
+      createdAfter,
+      createdBefore,
+      sortOrder: "DESC",
+    });
+    if (nextToken) qs.set("nextToken", nextToken);
+    const res = await spFetch(`/vendor/orders/v1/purchaseOrders?${qs}`);
+    const text = await res.text();
+    if (!res.ok) throw new Error(`Vendor orders ${res.status}: ${text.slice(0, 250)}`);
+    const j = JSON.parse(text) as { payload?: { orders?: RawVendorOrder[]; pagination?: { nextToken?: string } } };
+    for (const o of j.payload?.orders ?? []) {
+      if (!o.purchaseOrderNumber) continue;
+      const d = o.orderDetails ?? {};
+      out.push({
+        poNumber: o.purchaseOrderNumber,
+        state: o.purchaseOrderState ?? null,
+        type: d.purchaseOrderType ?? null,
+        poDate: d.purchaseOrderDate ?? null,
+        stateChangedAt: d.purchaseOrderStateChangedDate ?? null,
+        sellingParty: d.sellingParty?.partyId ?? null,
+        shipToParty: d.shipToParty?.partyId ?? null,
+        itemCount: Array.isArray(d.items) ? d.items.length : 0,
+        raw: o,
+      });
+    }
+    nextToken = j.payload?.pagination?.nextToken;
+    pages += 1;
+  } while (nextToken && pages < 50);
+  return out;
+}
+
 // ── Reports API (the standard create → poll → download flow) ─────────────────
 
 export interface ReportDoc {

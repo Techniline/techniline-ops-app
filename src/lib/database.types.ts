@@ -2562,6 +2562,54 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_purchase_orders: {
+        Row: {
+          created_at: string
+          id: string
+          item_count: number | null
+          po_date: string | null
+          po_number: string
+          po_state: string | null
+          po_type: string | null
+          raw: Json | null
+          selling_party: string | null
+          ship_to_party: string | null
+          state_changed_at: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_count?: number | null
+          po_date?: string | null
+          po_number: string
+          po_state?: string | null
+          po_type?: string | null
+          raw?: Json | null
+          selling_party?: string | null
+          ship_to_party?: string | null
+          state_changed_at?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_count?: number | null
+          po_date?: string | null
+          po_number?: string
+          po_state?: string | null
+          po_type?: string | null
+          raw?: Json | null
+          selling_party?: string | null
+          ship_to_party?: string | null
+          state_changed_at?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_usage: {
         Row: {
           cost_usd: number | null
