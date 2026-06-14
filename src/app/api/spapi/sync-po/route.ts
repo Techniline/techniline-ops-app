@@ -27,15 +27,8 @@ async function authorize(request: Request, svcReady: { url: string; service: str
   return isManager({ id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile);
 }
 
-export async function POST(request: Request): Promise<Response> {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !service) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
-  if (!(await authorize(request, { url, service }))) {
-    return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-  }
+async function runSync(url: string, service: string): Promise<Response> {
   if (!spapiConfigured()) return Response.json({ ok: false, error: "SP-API not configured." }, { status: 500 });
-
   const svc = createClient(url, service, { auth: { persistSession: false } });
 
   // Window: from last sync (−1 day overlap) else lookback. PO date can change
@@ -77,4 +70,28 @@ export async function POST(request: Request): Promise<Response> {
 
   await svc.from("app_settings").upsert({ key: LAST_SYNC_KEY, value: nowIso }, { onConflict: "key" });
   return Response.json({ ok: true, fetched: pos.length, upserted, lastSync: nowIso });
+}
+
+/** Manual sync — manager session or cron secret. */
+export async function POST(request: Request): Promise<Response> {
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !service) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
+  if (!(await authorize(request, { url, service }))) {
+    return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+  }
+  return runSync(url, service);
+}
+
+/** Scheduled sync — Vercel Cron hits this with GET + the CRON_SECRET bearer. */
+export async function GET(request: Request): Promise<Response> {
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !service) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!process.env.CRON_SECRET || token !== process.env.CRON_SECRET) {
+    return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+  }
+  return runSync(url, service);
 }

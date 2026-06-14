@@ -3,6 +3,10 @@
     {
       "path": "/api/amazon-ingest-poll",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/spapi/sync-po",
+      "schedule": "30 6 * * *"
     }
   ]
 }
