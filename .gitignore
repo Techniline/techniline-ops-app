@@ -55,3 +55,8 @@ next-env.d.ts
 
 # local email drafts
 docs/*.eml
+
+# stray credential / screenshot files (never commit secrets)
+Client identifier*.txt
+*.png
+amazon*.png
