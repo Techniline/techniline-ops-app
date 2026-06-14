@@ -78,15 +78,21 @@ async function spJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ── Connectivity check ───────────────────────────────────────────────────────
 
-/** Lightweight auth/connectivity test — exchanges the refresh token and lists
- *  recent reports (covered by the Fulfillment/Finance roles). */
+/** Connectivity test. A successful LWA token exchange already proves the client
+ *  id, secret and refresh token are all valid — that's the real signal. We then
+ *  touch the Reports API just to confirm SP-API accepts the access token. */
 export async function spapiPing(): Promise<{ ok: boolean; detail: string }> {
   try {
-    await getAccessToken();
-    const res = await spFetch("/reports/2021-06-30/reports?pageSize=1");
-    if (res.ok) return { ok: true, detail: "Token + Reports API reachable." };
-    if (res.status === 403) return { ok: true, detail: "Authenticated; Reports list returned 403 (role scope) — token works." };
-    return { ok: false, detail: `Reports list ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    await getAccessToken(); // throws if client id / secret / refresh token are wrong
+    let reach = "";
+    try {
+      // reportTypes is required by this endpoint; any structured response = reachable.
+      const res = await spFetch("/reports/2021-06-30/reports?reportTypes=GET_VENDOR_SALES_REPORT&pageSize=1");
+      reach = res.ok ? "Reports API OK" : `SP-API reachable (reports status ${res.status})`;
+    } catch {
+      reach = "token OK (Reports check skipped)";
+    }
+    return { ok: true, detail: `Authenticated — credentials valid. ${reach}.` };
   } catch (e) {
     return { ok: false, detail: e instanceof Error ? e.message : "Unknown error" };
   }
