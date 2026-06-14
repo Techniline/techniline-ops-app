@@ -8,7 +8,7 @@ export type { Tables, TablesInsert, TablesUpdate, Enums } from "./database.types
 import type { Tables } from "./database.types";
 
 /** Capabilities that gate access to feature areas of the app (app-level, not a DB concept). */
-export type Capability = "checklist" | "finance" | "cocoblu" | "lp_tracker" | "logistics";
+export type Capability = "checklist" | "finance" | "cocoblu" | "lp_tracker" | "logistics" | "seller_central";
 
 /** A row in `public.users`, derived from the generated types. */
 export type UserProfile = Tables<"users">;

@@ -47,6 +47,12 @@ export function canViewFinance(profile: ProfileArg): boolean {
   return hasCapability(profile, "finance");
 }
 
+/** Amazon Seller Central (finance + orders/fulfillment) — finance users plus
+ *  anyone explicitly granted the seller_central capability (e.g. Aaron). */
+export function canViewSellerCentral(profile: ProfileArg): boolean {
+  return hasCapability(profile, "finance") || hasCapability(profile, "seller_central");
+}
+
 export function canViewCocoblu(profile: ProfileArg): boolean {
   return hasCapability(profile, "cocoblu");
 }

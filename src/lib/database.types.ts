@@ -2625,6 +2625,108 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_finance_groups: {
+        Row: {
+          converted_total: number | null
+          created_at: string
+          currency: string | null
+          end_time: string | null
+          fund_transfer_date: string | null
+          group_id: string
+          id: string
+          original_total: number | null
+          raw: Json | null
+          start_time: string | null
+          status: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          converted_total?: number | null
+          created_at?: string
+          currency?: string | null
+          end_time?: string | null
+          fund_transfer_date?: string | null
+          group_id: string
+          id?: string
+          original_total?: number | null
+          raw?: Json | null
+          start_time?: string | null
+          status?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          converted_total?: number | null
+          created_at?: string
+          currency?: string | null
+          end_time?: string | null
+          fund_transfer_date?: string | null
+          group_id?: string
+          id?: string
+          original_total?: number | null
+          raw?: Json | null
+          start_time?: string | null
+          status?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      seller_returns: {
+        Row: {
+          asin: string | null
+          created_at: string
+          detailed_disposition: string | null
+          fulfillment_center: string | null
+          id: string
+          order_id: string | null
+          quantity: number | null
+          raw: Json | null
+          reason: string | null
+          return_date: string | null
+          sku: string | null
+          source_key: string
+          status: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          asin?: string | null
+          created_at?: string
+          detailed_disposition?: string | null
+          fulfillment_center?: string | null
+          id?: string
+          order_id?: string | null
+          quantity?: number | null
+          raw?: Json | null
+          reason?: string | null
+          return_date?: string | null
+          sku?: string | null
+          source_key: string
+          status?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          asin?: string | null
+          created_at?: string
+          detailed_disposition?: string | null
+          fulfillment_center?: string | null
+          id?: string
+          order_id?: string | null
+          quantity?: number | null
+          raw?: Json | null
+          reason?: string | null
+          return_date?: string | null
+          sku?: string | null
+          source_key?: string
+          status?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_usage: {
         Row: {
           cost_usd: number | null

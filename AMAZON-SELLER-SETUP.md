@@ -1,0 +1,69 @@
+# Amazon Seller Central (SP-API) — database setup
+
+Run once in the Supabase SQL editor. Stores synced Seller Central **finance
+settlements** and **FBA customer returns**. Read by managers + the seller_central
+grantees (Maricel, Aaron); the sync job writes via the service role.
+
+> Env (already set in Vercel): `SELLER_SPAPI_CLIENT_ID`, `SELLER_SPAPI_CLIENT_SECRET`,
+> `SELLER_SPAPI_REFRESH_TOKEN`. Marketplace defaults to UAE `A2VIGQ35RCS4UG`.
+
+```sql
+-- ── Finance: settlement / financial event groups ────────────────────────────
+create table if not exists public.seller_finance_groups (
+  id uuid primary key default gen_random_uuid(),
+  group_id text not null unique,
+  status text,
+  start_time timestamptz,
+  end_time timestamptz,
+  fund_transfer_date timestamptz,
+  currency text,
+  original_total numeric,
+  converted_total numeric,
+  raw jsonb,
+  synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists seller_fin_start_idx on public.seller_finance_groups (start_time desc);
+
+-- ── Orders / Fulfillment: FBA customer returns ──────────────────────────────
+create table if not exists public.seller_returns (
+  id uuid primary key default gen_random_uuid(),
+  source_key text not null unique,
+  order_id text,
+  sku text,
+  asin text,
+  return_date timestamptz,
+  quantity integer,
+  reason text,
+  status text,
+  fulfillment_center text,
+  detailed_disposition text,
+  raw jsonb,
+  synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists seller_ret_date_idx on public.seller_returns (return_date desc);
+create index if not exists seller_ret_order_idx on public.seller_returns (order_id);
+
+-- ── RLS: managers/admin + Maricel + Aaron may read ──────────────────────────
+alter table public.seller_finance_groups enable row level security;
+alter table public.seller_returns enable row level security;
+
+drop policy if exists seller_fin_read on public.seller_finance_groups;
+create policy seller_fin_read on public.seller_finance_groups for select to authenticated
+  using (public.current_user_role() in ('manager','admin')
+         or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
+         or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
+
+drop policy if exists seller_ret_read on public.seller_returns;
+create policy seller_ret_read on public.seller_returns for select to authenticated
+  using (public.current_user_role() in ('manager','admin')
+         or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
+         or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
+
+-- last-sync marker
+insert into public.app_settings (key, value) values ('seller_last_sync', null)
+on conflict (key) do nothing;
+```
