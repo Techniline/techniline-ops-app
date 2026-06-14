@@ -62,7 +62,11 @@ create table if not exists public.seller_order_docs (
   updated_at timestamptz not null default now()
 );
 
--- ── Orders / Fulfillment: FBA customer returns ──────────────────────────────
+-- ── Returns: NOT synced (kept only for history / possible future use) ───────
+-- The seller returns sync was removed (the MFN returns report needs the Direct
+-- to Consumer Shipping role, which Amazon declined). Returns are logged manually
+-- in Marketplace Returns. This table is harmless to keep or to drop.
+-- ── (legacy) FBA / MFN returns table ────────────────────────────────────────
 create table if not exists public.seller_returns (
   id uuid primary key default gen_random_uuid(),
   source_key text not null unique,

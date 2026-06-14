@@ -1,5 +1,18 @@
 # Plan — unlock restricted SP-API roles (returns report + buyer messages)
 
+> **STATUS: CLOSED — not pursued (June 2026).**
+> Inventory & Order Tracking was approved, but the MFN returns report also needs
+> **Direct to Consumer Shipping (Restricted)**. That request (case 20834285831)
+> was **declined** — Amazon requires controls we don't have (annual penetration
+> test, enforced password expiry/rotation, code scanning, bi-weekly audit-log
+> reviews). We chose not to invest in those for this feature. **Buyer-message
+> reading has no SP-API at all.** Returns are therefore handled by **manual
+> logging in Marketplace Returns**, and the returns-sync code has been removed.
+> The notes below are retained only for history.
+
+---
+
+
 Two things our Seller app can't do today, both blocked by the **same gate**:
 
 | Want | Needs role | Today |

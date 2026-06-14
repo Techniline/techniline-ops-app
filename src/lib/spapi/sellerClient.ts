@@ -5,12 +5,12 @@
  *   SELLER_SPAPI_MARKETPLACE_IDS (optional; comma-separated; defaults to UAE + KSA)
  * Region: UAE → Europe endpoint. Never import from client components.
  *
- * Granted roles: Finance and Accounting + Amazon Fulfillment. The Orders API
- * (per-order tracking) needs the restricted "Inventory and Order Tracking" role
- * via Amazon app review — calls that need it will return 403 until then.
+ * Granted roles: Finance and Accounting, Amazon Fulfillment, Inventory and
+ * Order Tracking, Buyer Communication. We sync Orders + Finance. Returns reports
+ * are NOT synced: the seller-fulfilled (MFN) returns report needs the restricted
+ * "Direct to Consumer Shipping" role, which Amazon declined (Jun 2026). Returns
+ * are captured manually in the Marketplace Returns page instead.
  */
-import { gunzipSync } from "node:zlib";
-
 const HOST = "sellingpartnerapi-eu.amazon.com";
 const LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
 
@@ -245,133 +245,4 @@ export async function fetchSellerOrders(lastUpdatedAfter: string): Promise<Selle
     pages += 1;
   } while (nextToken && pages < 30);
   return out;
-}
-
-// ── Reports API (create → poll → download) ───────────────────────────────────
-
-interface ReportDoc {
-  reportDocumentId: string;
-  url: string;
-  compressionAlgorithm?: string;
-}
-
-async function createReport(reportType: string, opts?: { dataStartTime?: string; dataEndTime?: string }): Promise<string> {
-  const j = await sellerJson<{ reportId: string }>("/reports/2021-06-30/reports", {
-    method: "POST",
-    body: JSON.stringify({
-      reportType,
-      marketplaceIds: sellerMarketplaceIds(),
-      ...(opts?.dataStartTime ? { dataStartTime: opts.dataStartTime } : {}),
-      ...(opts?.dataEndTime ? { dataEndTime: opts.dataEndTime } : {}),
-    }),
-  });
-  return j.reportId;
-}
-
-/** Create a report, poll until done (bounded), and return its raw text (TSV). */
-export async function fetchReport(
-  reportType: string,
-  opts?: { dataStartTime?: string; dataEndTime?: string; maxWaitMs?: number }
-): Promise<string> {
-  const reportId = await createReport(reportType, opts);
-  const deadline = Date.now() + (opts?.maxWaitMs ?? 90_000);
-  for (let attempt = 0; Date.now() < deadline; attempt++) {
-    const r = await sellerJson<{ processingStatus: string; reportDocumentId?: string }>(
-      `/reports/2021-06-30/reports/${reportId}`
-    );
-    if (r.processingStatus === "DONE" && r.reportDocumentId) {
-      const doc = await sellerJson<ReportDoc>(`/reports/2021-06-30/documents/${r.reportDocumentId}`);
-      const res = await fetch(doc.url);
-      if (!res.ok) throw new Error(`Report document download ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      return doc.compressionAlgorithm === "GZIP" ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
-    }
-    if (r.processingStatus === "CANCELLED" || r.processingStatus === "FATAL") {
-      throw new Error(`Report ${reportType} ${r.processingStatus}`);
-    }
-    await new Promise((res) => setTimeout(res, Math.min(2000 + attempt * 1000, 8000)));
-  }
-  throw new Error(`Report ${reportType} timed out`);
-}
-
-/** Parse a tab-separated SP-API report into row objects keyed by header. */
-export function parseTsv(text: string): Record<string, string>[] {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
-  if (lines.length < 2) return [];
-  const headers = lines[0].split("\t").map((h) => h.trim());
-  return lines.slice(1).map((line) => {
-    const cells = line.split("\t");
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => (row[h] = (cells[i] ?? "").trim()));
-    return row;
-  });
-}
-
-export interface SellerReturn {
-  source: "fba" | "mfn";
-  orderId: string | null;
-  sku: string | null;
-  asin: string | null;
-  returnDate: string | null;
-  quantity: number | null;
-  reason: string | null;
-  status: string | null;
-  fulfillmentCenter: string | null;
-  detailedDisposition: string | null;
-  raw: Record<string, string>;
-}
-
-/** Case/format-tolerant lookup across candidate header names in a TSV row. */
-function field(row: Record<string, string>, ...names: string[]): string | null {
-  const lower: Record<string, string> = {};
-  for (const [k, v] of Object.entries(row)) lower[k.toLowerCase().trim()] = v;
-  for (const n of names) {
-    const v = lower[n.toLowerCase()];
-    if (v != null && v !== "") return v;
-  }
-  return null;
-}
-function numOrNull(v: string | null): number | null {
-  if (v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** FBA customer returns report → typed rows
- *  (GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA). */
-export async function fetchFbaCustomerReturns(dataStartTime: string): Promise<SellerReturn[]> {
-  const text = await fetchReport("GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA", { dataStartTime, maxWaitMs: 100_000 });
-  return parseTsv(text).map((r) => ({
-    source: "fba" as const,
-    orderId: r["order-id"] || r["amazon-order-id"] || null,
-    sku: r["sku"] || r["seller-sku"] || null,
-    asin: r["asin"] || null,
-    returnDate: r["return-date"] || null,
-    quantity: r["quantity"] ? Number(r["quantity"]) : null,
-    reason: r["reason"] || null,
-    status: r["status"] || null,
-    fulfillmentCenter: r["fulfillment-center-id"] || null,
-    detailedDisposition: r["detailed-disposition"] || null,
-    raw: r,
-  }));
-}
-
-/** Seller-fulfilled (MFN) returns report → typed rows. This is the data behind
- *  Seller Central's Manage Returns list (GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE).
- *  Header names vary, so we match tolerantly. */
-export async function fetchMfnReturns(dataStartTime: string): Promise<SellerReturn[]> {
-  const text = await fetchReport("GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE", { dataStartTime, maxWaitMs: 100_000 });
-  return parseTsv(text).map((r) => ({
-    source: "mfn" as const,
-    orderId: field(r, "order-id", "order id", "amazon-order-id", "amazon order id"),
-    sku: field(r, "merchant-sku", "merchant sku", "sku", "seller-sku"),
-    asin: field(r, "asin"),
-    returnDate: field(r, "return-request-date", "return request date", "return-date", "return date"),
-    quantity: numOrNull(field(r, "return-quantity", "return quantity", "quantity")),
-    reason: field(r, "return-reason", "return reason", "reason"),
-    status: field(r, "return-request-status", "return request status", "status", "resolution"),
-    fulfillmentCenter: null,
-    detailedDisposition: field(r, "resolution", "detailed-disposition", "label-type", "label type"),
-    raw: r,
-  }));
 }

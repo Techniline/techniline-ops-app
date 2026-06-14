@@ -75,7 +75,7 @@ function Content() {
     try {
       const r = await syncSeller();
       const warn = r.warnings.length ? ` (${r.warnings.join("; ")})` : "";
-      setMsg(`Synced ${r.orders} order(s), ${r.finance} settlement group(s) and ${r.returns} return(s) from Amazon Seller.${warn}`);
+      setMsg(`Synced ${r.orders} order(s) and ${r.finance} settlement group(s) from Amazon Seller.${warn}`);
       setLastSync(r.lastSync);
       await load();
     } catch (e) {

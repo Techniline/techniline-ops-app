@@ -24,41 +24,9 @@ import {
   type ReturnItem,
   type ReturnRow,
 } from "@/lib/logistics/marketplace";
-import { fetchSellerReturns, syncSeller, type SellerReturnRow } from "@/lib/spapi/seller";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
-}
-
-/** A displayed row — a manual marketplace return, or a read-only synced Amazon
- *  return mapped into the same shape (flagged `_synced`). */
-type Row = ReturnRow & { _synced?: boolean; _syncStatus?: string | null };
-
-function isoDate(v: string | null): string | null {
-  if (!v) return null;
-  return v.length > 10 ? v.slice(0, 10) : v;
-}
-
-/** Map a synced Amazon return into the marketplace-returns display shape. */
-function fromSellerReturn(s: SellerReturnRow): Row {
-  return {
-    id: s.id,
-    channel: "amazon_seller",
-    return_ref: s.order_id,
-    order_ref: s.order_id,
-    asin: s.asin,
-    sku: s.sku,
-    product: s.detailed_disposition ?? null,
-    qty: s.quantity,
-    received_date: isoDate(s.return_date),
-    reason: s.reason,
-    condition: null,
-    physical_status: null,
-    location: null,
-    doc_status: null,
-    _synced: true,
-    _syncStatus: s.status ?? (s.source ? s.source.toUpperCase() : null),
-  } as unknown as Row;
 }
 
 type Draft = Partial<ReturnRow>;
@@ -79,7 +47,7 @@ function DocBadge({ value }: { value: string }) {
 }
 
 export default function MarketplaceReturnsPage() {
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<ReturnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [products, setProducts] = useState<ReturnItem[]>([{ ...EMPTY_ITEM }]);
@@ -136,33 +104,14 @@ export default function MarketplaceReturnsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Manual warehouse returns + synced Amazon returns (read-only), merged into
-      // one list. Synced fetch is fail-soft so the page works even before the
-      // seller tables exist / sync runs.
-      const manual = await fetchReturns(filters);
-      let synced: Row[] = [];
-      // Synced Amazon rows are channel "amazon_seller"; only show them when the
-      // channel filter is unset or set to Amazon Seller, and never under
-      // "Docs pending only" (they have no documentation workflow).
-      const channelAllows = !channel || channel === "amazon_seller";
-      if (channelAllows && !docPending) {
-        try {
-          synced = (await fetchSellerReturns(search)).map(fromSellerReturn);
-        } catch {
-          synced = [];
-        }
-      }
-      const merged = [...manual, ...synced].sort((a, b) =>
-        (b.received_date ?? "").localeCompare(a.received_date ?? "")
-      );
-      setRows(merged);
+      setRows(await fetchReturns(filters));
       setErr(null);
     } catch (e) {
       setErr(errMsg(e));
     } finally {
       setLoading(false);
     }
-  }, [filters, channel, docPending, search]);
+  }, [filters]);
 
   useEffect(() => {
     void load();
@@ -207,22 +156,6 @@ export default function MarketplaceReturnsPage() {
     }
   }
 
-  const [syncing, setSyncing] = useState(false);
-  async function syncAmazon() {
-    setSyncing(true);
-    setErr(null);
-    setMsg(null);
-    try {
-      const r = await syncSeller();
-      setMsg(`Synced from Amazon — ${r.orders} order(s), ${r.returns} return(s).${r.warnings.length ? " Note: " + r.warnings.join("; ") : ""}`);
-      await load();
-    } catch (e) {
-      setErr(errMsg(e));
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function remove(id: string) {
     if (!confirm("Delete this return record?")) return;
     setBusy(true);
@@ -239,18 +172,13 @@ export default function MarketplaceReturnsPage() {
   return (
     <LogisticsShell
       title="Marketplace Returns"
-      subtitle="All returns by channel — manual warehouse logging (Amazon / Noon / Cocoblu) + synced Amazon returns + documentation."
+      subtitle="Warehouse-logged returns (Amazon DF / Seller / Flex, Noon, Cocoblu) + documentation."
       page="marketplace"
       wide
       actions={
-        <div className="flex items-center gap-2">
-          <button type="button" className={btnSecondary} disabled={syncing} onClick={syncAmazon}>
-            {syncing ? "Syncing…" : "Sync Amazon"}
-          </button>
-          <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
-            + Log return
-          </button>
-        </div>
+        <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
+          + Log return
+        </button>
       }
     >
       {msg ? (
@@ -365,25 +293,14 @@ export default function MarketplaceReturnsPage() {
         </label>
       </div>
 
-      <CustomizableTable<Row>
+      <CustomizableTable<ReturnRow>
         viewKey="logistics_returns_view"
         rows={rows}
         loading={loading}
         emptyText="No returns logged yet."
         defaultHidden={["order", "asin", "condition", "location"]}
         columns={[
-          {
-            id: "channel",
-            label: "Channel",
-            cell: (r) => (
-              <span className="flex items-center gap-1.5">
-                {rLabel(CHANNELS, r.channel)}
-                {r._synced ? (
-                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">sync</span>
-                ) : null}
-              </span>
-            ),
-          },
+          { id: "channel", label: "Channel", cell: (r) => rLabel(CHANNELS, r.channel) },
           { id: "rma", label: "Return ID", cell: (r) => r.return_ref ?? "—" },
           { id: "order", label: "Order #", cell: (r) => r.order_ref ?? "—" },
           { id: "asin", label: "ASIN", cell: (r) => r.asin ?? "—" },
@@ -404,21 +321,18 @@ export default function MarketplaceReturnsPage() {
           { id: "qty", label: "Qty", className: "tabular-nums", cell: (r) => r.qty ?? 1 },
           { id: "received", label: "Return date", cell: (r) => r.received_date ?? "—" },
           { id: "condition", label: "Condition", cell: (r) => rLabel(CONDITIONS, r.condition) },
-          { id: "physical", label: "Physical", cell: (r) => (r._synced ? r._syncStatus ?? "—" : rLabel(PHYSICAL_STATUS, r.physical_status)) },
-          { id: "location", label: "Location", cell: (r) => (r._synced ? "—" : labelFor(SOURCE_LOCATIONS, r.location)) },
-          { id: "docs", label: "Docs", cell: (r) => (r._synced ? <span className="text-xs text-slate-400">—</span> : <DocBadge value={r.doc_status} />) },
+          { id: "physical", label: "Physical", cell: (r) => rLabel(PHYSICAL_STATUS, r.physical_status) },
+          { id: "location", label: "Location", cell: (r) => labelFor(SOURCE_LOCATIONS, r.location) },
+          { id: "docs", label: "Docs", cell: (r) => <DocBadge value={r.doc_status} /> },
           {
             id: "actions",
             label: "Actions",
-            cell: (r) =>
-              r._synced ? (
-                <span className="whitespace-nowrap text-xs text-slate-400">Synced (read-only)</span>
-              ) : (
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <button type="button" className="text-indigo-600 hover:underline" onClick={() => openDraft(r)}>Edit</button>
-                  <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
-                </div>
-              ),
+            cell: (r) => (
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <button type="button" className="text-indigo-600 hover:underline" onClick={() => openDraft(r)}>Edit</button>
+                <button type="button" className="text-rose-600 hover:underline" onClick={() => remove(r.id)}>Delete</button>
+              </div>
+            ),
           },
         ]}
       />
