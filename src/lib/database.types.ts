@@ -2782,6 +2782,7 @@ export type Database = {
           reason: string | null
           return_date: string | null
           sku: string | null
+          source: string | null
           source_key: string
           status: string | null
           synced_at: string
@@ -2799,6 +2800,7 @@ export type Database = {
           reason?: string | null
           return_date?: string | null
           sku?: string | null
+          source?: string | null
           source_key: string
           status?: string | null
           synced_at?: string
@@ -2816,6 +2818,7 @@ export type Database = {
           reason?: string | null
           return_date?: string | null
           sku?: string | null
+          source?: string | null
           source_key?: string
           status?: string | null
           synced_at?: string

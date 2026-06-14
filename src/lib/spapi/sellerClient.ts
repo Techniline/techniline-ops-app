@@ -299,6 +299,7 @@ export function parseTsv(text: string): Record<string, string>[] {
 }
 
 export interface SellerReturn {
+  source: "fba" | "mfn";
   orderId: string | null;
   sku: string | null;
   asin: string | null;
@@ -311,11 +312,28 @@ export interface SellerReturn {
   raw: Record<string, string>;
 }
 
-/** FBA customer returns report → typed rows. Column names follow the
- *  GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA flat-file schema. */
+/** Case/format-tolerant lookup across candidate header names in a TSV row. */
+function field(row: Record<string, string>, ...names: string[]): string | null {
+  const lower: Record<string, string> = {};
+  for (const [k, v] of Object.entries(row)) lower[k.toLowerCase().trim()] = v;
+  for (const n of names) {
+    const v = lower[n.toLowerCase()];
+    if (v != null && v !== "") return v;
+  }
+  return null;
+}
+function numOrNull(v: string | null): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** FBA customer returns report → typed rows
+ *  (GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA). */
 export async function fetchFbaCustomerReturns(dataStartTime: string): Promise<SellerReturn[]> {
   const text = await fetchReport("GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA", { dataStartTime, maxWaitMs: 100_000 });
   return parseTsv(text).map((r) => ({
+    source: "fba" as const,
     orderId: r["order-id"] || r["amazon-order-id"] || null,
     sku: r["sku"] || r["seller-sku"] || null,
     asin: r["asin"] || null,
@@ -325,6 +343,26 @@ export async function fetchFbaCustomerReturns(dataStartTime: string): Promise<Se
     status: r["status"] || null,
     fulfillmentCenter: r["fulfillment-center-id"] || null,
     detailedDisposition: r["detailed-disposition"] || null,
+    raw: r,
+  }));
+}
+
+/** Seller-fulfilled (MFN) returns report → typed rows. This is the data behind
+ *  Seller Central's Manage Returns list (GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE).
+ *  Header names vary, so we match tolerantly. */
+export async function fetchMfnReturns(dataStartTime: string): Promise<SellerReturn[]> {
+  const text = await fetchReport("GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE", { dataStartTime, maxWaitMs: 100_000 });
+  return parseTsv(text).map((r) => ({
+    source: "mfn" as const,
+    orderId: field(r, "order-id", "order id", "amazon-order-id", "amazon order id"),
+    sku: field(r, "merchant-sku", "merchant sku", "sku", "seller-sku"),
+    asin: field(r, "asin"),
+    returnDate: field(r, "return-request-date", "return request date", "return-date", "return date"),
+    quantity: numOrNull(field(r, "return-quantity", "return quantity", "quantity")),
+    reason: field(r, "return-reason", "return reason", "reason"),
+    status: field(r, "return-request-status", "return request status", "status", "resolution"),
+    fulfillmentCenter: null,
+    detailedDisposition: field(r, "resolution", "detailed-disposition", "label-type", "label type"),
     raw: r,
   }));
 }

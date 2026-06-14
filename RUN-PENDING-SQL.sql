@@ -149,10 +149,11 @@ create table if not exists public.seller_order_docs (
   updated_at timestamptz not null default now()
 );
 
--- C4. FBA customer returns
+-- C4. Returns (FBA customer returns + seller-fulfilled MFN returns)
 create table if not exists public.seller_returns (
   id uuid primary key default gen_random_uuid(),
   source_key text not null unique,
+  source text,
   order_id text,
   sku text,
   asin text,
@@ -167,6 +168,7 @@ create table if not exists public.seller_returns (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.seller_returns add column if not exists source text;  -- fba | mfn (for already-created tables)
 create index if not exists seller_ret_date_idx on public.seller_returns (return_date desc);
 create index if not exists seller_ret_order_idx on public.seller_returns (order_id);
 

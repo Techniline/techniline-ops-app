@@ -254,6 +254,7 @@ function Content() {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10">
               <tr>
+                <th className={thCell}>Type</th>
                 <th className={thCell}>Order ID</th>
                 <th className={thCell}>SKU</th>
                 <th className={thCell}>ASIN</th>
@@ -266,12 +267,17 @@ function Content() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
+                <tr><td className={tdCell} colSpan={9}>Loading…</td></tr>
               ) : returns.length === 0 ? (
-                <tr><td className={tdCell} colSpan={8}>No returns yet — click <strong>Sync now</strong>.</td></tr>
+                <tr><td className={tdCell} colSpan={9}>No returns yet — click <strong>Sync now</strong>.</td></tr>
               ) : (
                 returns.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className={tdCell}>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.source === "mfn" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}>
+                        {r.source ? r.source.toUpperCase() : "—"}
+                      </span>
+                    </td>
                     <td className={`${tdCell} font-medium`}>{r.order_id ?? "—"}</td>
                     <td className={tdCell}>{r.sku ?? "—"}</td>
                     <td className={tdCell}>{r.asin ?? "—"}</td>

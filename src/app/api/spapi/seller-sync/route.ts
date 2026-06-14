@@ -4,8 +4,10 @@ import { isManager } from "@/lib/permissions";
 import {
   fetchFbaCustomerReturns,
   fetchFinancialEventGroups,
+  fetchMfnReturns,
   fetchSellerOrders,
   sellerConfigured,
+  type SellerReturn,
 } from "@/lib/spapi/sellerClient";
 import type { UserProfile } from "@/lib/types";
 
@@ -103,31 +105,42 @@ async function runSync(url: string, service: string): Promise<Response> {
     result.warnings.push(`orders: ${e instanceof Error ? e.message : "failed"}`);
   }
 
-  // Returns — FBA customer returns (Amazon Fulfillment role)
-  try {
-    const returns = await fetchFbaCustomerReturns(startedAfter);
-    if (returns.length) {
-      const rows = returns.map((r) => ({
-        source_key: [r.orderId, r.sku, r.returnDate, r.fulfillmentCenter].filter(Boolean).join("|") || JSON.stringify(r.raw).slice(0, 200),
-        order_id: r.orderId,
-        sku: r.sku,
-        asin: r.asin,
-        return_date: r.returnDate,
-        quantity: r.quantity,
-        reason: r.reason,
-        status: r.status,
-        fulfillment_center: r.fulfillmentCenter,
-        detailed_disposition: r.detailedDisposition,
-        raw: r.raw as never,
-        synced_at: nowIso,
-        updated_at: nowIso,
-      }));
-      const { error } = await svc.from("seller_returns").upsert(rows, { onConflict: "source_key" });
-      if (error) result.warnings.push(`returns: ${error.message}`);
-      else result.returns = rows.length;
+  // Returns — FBA customer returns + seller-fulfilled (MFN) returns. Each report
+  // is fetched independently so one failing (e.g. role/access) doesn't lose the
+  // other. MFN is what Seller Central's Manage Returns list shows.
+  const returns: SellerReturn[] = [];
+  for (const [label, fn] of [
+    ["FBA returns", fetchFbaCustomerReturns],
+    ["MFN returns", fetchMfnReturns],
+  ] as const) {
+    try {
+      returns.push(...(await fn(startedAfter)));
+    } catch (e) {
+      result.warnings.push(`${label}: ${e instanceof Error ? e.message : "failed"}`);
     }
-  } catch (e) {
-    result.warnings.push(`returns: ${e instanceof Error ? e.message : "failed"}`);
+  }
+  if (returns.length) {
+    const rows = returns.map((r) => ({
+      source_key:
+        [r.source, r.orderId, r.sku, r.returnDate, r.fulfillmentCenter].filter(Boolean).join("|") ||
+        `${r.source}|${JSON.stringify(r.raw).slice(0, 200)}`,
+      source: r.source,
+      order_id: r.orderId,
+      sku: r.sku,
+      asin: r.asin,
+      return_date: r.returnDate,
+      quantity: r.quantity,
+      reason: r.reason,
+      status: r.status,
+      fulfillment_center: r.fulfillmentCenter,
+      detailed_disposition: r.detailedDisposition,
+      raw: r.raw as never,
+      synced_at: nowIso,
+      updated_at: nowIso,
+    }));
+    const { error } = await svc.from("seller_returns").upsert(rows, { onConflict: "source_key" });
+    if (error) result.warnings.push(`returns upsert: ${error.message}`);
+    else result.returns = rows.length;
   }
 
   await svc.from("app_settings").upsert({ key: LAST_SYNC_KEY, value: nowIso }, { onConflict: "key" });
