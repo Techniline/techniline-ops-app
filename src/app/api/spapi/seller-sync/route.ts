@@ -18,7 +18,13 @@ export const maxDuration = 300;
 const LAST_SYNC_KEY = "seller_last_sync";
 const DEFAULT_LOOKBACK_DAYS = 30;
 
-/** Authorize: a manager session OR the cron secret. */
+/** Non-manager users explicitly allowed to trigger a sync (Aaron, Kesh). */
+const SYNC_UIDS = new Set([
+  "cbb81b27-8756-4f2d-bfe0-04211c27092c", // Aaron
+  "4f0eaff3-3ce3-44de-8ed9-aa84246fc538", // Kesh
+]);
+
+/** Authorize: a manager / Aaron / Kesh session, or the cron secret. */
 async function authorize(request: Request, url: string, service: string): Promise<boolean> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -29,6 +35,7 @@ async function authorize(request: Request, url: string, service: string): Promis
   const auth = createClient(url, anon, { auth: { persistSession: false } });
   const { data, error } = await auth.auth.getUser(token);
   if (error || !data.user) return false;
+  if (SYNC_UIDS.has(data.user.id)) return true;
   const svc = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
   return isManager({ id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile);

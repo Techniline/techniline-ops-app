@@ -24,7 +24,7 @@ import {
   type ReturnItem,
   type ReturnRow,
 } from "@/lib/logistics/marketplace";
-import { fetchSellerReturns, type SellerReturnRow } from "@/lib/spapi/seller";
+import { fetchSellerReturns, syncSeller, type SellerReturnRow } from "@/lib/spapi/seller";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -207,6 +207,22 @@ export default function MarketplaceReturnsPage() {
     }
   }
 
+  const [syncing, setSyncing] = useState(false);
+  async function syncAmazon() {
+    setSyncing(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await syncSeller();
+      setMsg(`Synced from Amazon — ${r.orders} order(s), ${r.returns} return(s).${r.warnings.length ? " Note: " + r.warnings.join("; ") : ""}`);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete this return record?")) return;
     setBusy(true);
@@ -227,9 +243,14 @@ export default function MarketplaceReturnsPage() {
       page="marketplace"
       wide
       actions={
-        <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
-          + Log return
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className={btnSecondary} disabled={syncing} onClick={syncAmazon}>
+            {syncing ? "Syncing…" : "Sync Amazon"}
+          </button>
+          <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
+            + Log return
+          </button>
+        </div>
       }
     >
       {msg ? (

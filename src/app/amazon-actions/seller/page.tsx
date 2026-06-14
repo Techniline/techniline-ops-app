@@ -12,15 +12,13 @@ import { canViewSellerFinance, canViewSellerOrders, isManager } from "@/lib/perm
 import {
   fetchSellerFinance,
   fetchSellerOrders,
-  fetchSellerReturns,
   sellerLastSync,
   syncSeller,
   type SellerFinanceRow,
   type SellerOrderRow,
-  type SellerReturnRow,
 } from "@/lib/spapi/seller";
 
-type Tab = "finance" | "orders" | "messages" | "returns";
+type Tab = "finance" | "orders" | "messages";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
@@ -42,7 +40,6 @@ function Content() {
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
   const [channel, setChannel] = useState<string>("all");
-  const [returns, setReturns] = useState<SellerReturnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
@@ -55,8 +52,7 @@ function Content() {
     try {
       if (tab === "finance") setFinance(await fetchSellerFinance(search));
       else if (tab === "orders") setOrders(await fetchSellerOrders(search));
-      else if (tab === "returns") setReturns(await fetchSellerReturns(search));
-      // "messages" has no data source yet (pending Buyer Communication role)
+      // "messages" deep-links to Seller Central; "returns" moved to Marketplace Returns
       setErr(null);
     } catch (e) {
       setErr(errMsg(e));
@@ -119,7 +115,6 @@ function Content() {
           <>
             <button type="button" onClick={() => setTab("orders")} className={tabBtn("orders", "Orders")}>Orders / Fulfillment</button>
             <button type="button" onClick={() => setTab("messages")} className={tabBtn("messages", "Messages")}>Buyer Messages</button>
-            <button type="button" onClick={() => setTab("returns")} className={tabBtn("returns", "Returns")}>Returns</button>
           </>
         ) : null}
       </div>
@@ -233,7 +228,7 @@ function Content() {
           </table>
           </div>
         </>
-      ) : tab === "messages" ? (
+      ) : (
         <div className={`${tableWrap} px-4 py-6 text-sm text-slate-600 dark:text-slate-300`}>
           <p className="font-medium text-slate-800 dark:text-slate-100">Buyer messages open in Seller Central</p>
           <p className="mt-2 max-w-2xl text-slate-500">
@@ -249,54 +244,11 @@ function Content() {
             Open buyer messages in Seller Central ↗
           </a>
         </div>
-      ) : (
-        <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
-          <table className="min-w-full text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr>
-                <th className={thCell}>Type</th>
-                <th className={thCell}>Order ID</th>
-                <th className={thCell}>SKU</th>
-                <th className={thCell}>ASIN</th>
-                <th className={thCell}>Return date</th>
-                <th className={thCell}>Qty</th>
-                <th className={thCell}>Reason</th>
-                <th className={thCell}>Disposition</th>
-                <th className={thCell}>FC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td className={tdCell} colSpan={9}>Loading…</td></tr>
-              ) : returns.length === 0 ? (
-                <tr><td className={tdCell} colSpan={9}>No returns yet — click <strong>Sync now</strong>.</td></tr>
-              ) : (
-                returns.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className={tdCell}>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.source === "mfn" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}>
-                        {r.source ? r.source.toUpperCase() : "—"}
-                      </span>
-                    </td>
-                    <td className={`${tdCell} font-medium`}>{r.order_id ?? "—"}</td>
-                    <td className={tdCell}>{r.sku ?? "—"}</td>
-                    <td className={tdCell}>{r.asin ?? "—"}</td>
-                    <td className={tdCell}>{fmt(r.return_date)}</td>
-                    <td className={`${tdCell} tabular-nums`}>{r.quantity ?? "—"}</td>
-                    <td className={tdCell}>{r.reason ?? "—"}</td>
-                    <td className={tdCell}>{r.detailed_disposition ?? "—"}</td>
-                    <td className={tdCell}>{r.fulfillment_center ?? "—"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       )}
 
       <p className="mt-2 text-xs text-slate-400">
-        Orders, finance settlements, and FBA returns come from Seller Central via SP-API. Auto-syncs daily; use Sync now for an immediate
-        refresh. Order rows show status, fulfillment channel and shipment counts; buyer personal data is not included.
+        Orders &amp; finance settlements sync from Seller Central via SP-API. Returns now live in <strong>Marketplace Returns</strong>
+        (Logistics → Channels). Auto-syncs daily; use Sync now for an immediate refresh.
       </p>
     </div>
   );
