@@ -113,7 +113,11 @@ export function Sidebar({
     { heading: "Logistics", items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon, show: can("dashboard") }] },
     {
       heading: "Channels",
-      items: [{ href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon, show: can("orders") }],
+      items: [
+        { href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon, show: can("orders") },
+        { href: "/logistics/amazon-fulfillment", label: "Amazon (Seller + Flex)", icon: ActionsIcon, show: can("amazon_fulfillment") },
+        { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
+      ],
     },
     {
       heading: "Deliveries",
@@ -128,13 +132,6 @@ export function Sidebar({
         { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon, show: can("prt") },
         { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon, show: can("reports") },
         { href: "/logistics/masters", label: "Master Data", icon: ResellerIcon, show: can("masters") },
-      ],
-    },
-    {
-      heading: "Marketplace",
-      items: [
-        { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
-        { href: "/logistics/amazon-fulfillment", label: "Amazon Fulfillment", icon: ShopifyIcon, show: can("amazon_fulfillment") },
       ],
     },
   ];
