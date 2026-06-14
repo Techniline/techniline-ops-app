@@ -201,7 +201,7 @@ create policy seller_fin_read on public.seller_finance_groups for select to auth
 
 drop policy if exists seller_ret_read on public.seller_returns;
 create policy seller_ret_read on public.seller_returns for select to authenticated
-  using (public.current_user_role() in ('manager','admin')
+  using (public.current_user_role() in ('manager','admin','logistics')  -- + Kesh (Marketplace Returns)
          or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
          or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
 
