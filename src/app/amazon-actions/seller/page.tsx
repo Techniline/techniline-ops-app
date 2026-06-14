@@ -39,6 +39,7 @@ function Content() {
   const [tab, setTab] = useState<Tab>("finance");
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
+  const [channel, setChannel] = useState<string>("all");
   const [returns, setReturns] = useState<SellerReturnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -163,7 +164,25 @@ function Content() {
           </table>
         </div>
       ) : tab === "orders" ? (
-        <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
+        <>
+          {(() => {
+            const channels = Array.from(new Set(orders.map((o) => o.fulfillment_channel).filter(Boolean) as string[]));
+            if (channels.length < 2) return null;
+            const chip = (key: string, label: string) =>
+              `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                channel === key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+              }`;
+            return (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-400">Fulfillment:</span>
+                <button type="button" onClick={() => setChannel("all")} className={chip("all", "All")}>All</button>
+                {channels.map((c) => (
+                  <button key={c} type="button" onClick={() => setChannel(c)} className={chip(c, c)}>{c}</button>
+                ))}
+              </div>
+            );
+          })()}
+          <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10">
               <tr>
@@ -178,12 +197,16 @@ function Content() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>
-              ) : orders.length === 0 ? (
-                <tr><td className={tdCell} colSpan={8}>No orders yet — click <strong>Sync now</strong>.</td></tr>
-              ) : (
-                orders.map((r) => (
+              {(() => {
+                const shown = orders.filter((o) => channel === "all" || o.fulfillment_channel === channel);
+                if (loading) return <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>;
+                if (shown.length === 0)
+                  return (
+                    <tr><td className={tdCell} colSpan={8}>
+                      {orders.length === 0 ? <>No orders yet — click <strong>Sync now</strong>.</> : "No orders in this fulfillment channel."}
+                    </td></tr>
+                  );
+                return shown.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className={`${tdCell} font-medium`}>{r.amazon_order_id}</td>
                     <td className={tdCell}>{fmt(r.purchase_date)}</td>
@@ -194,11 +217,12 @@ function Content() {
                     <td className={`${tdCell} tabular-nums`}>{money(r.order_total, r.currency)}</td>
                     <td className={tdCell}>{fmt(r.last_update_date)}</td>
                   </tr>
-                ))
-              )}
+                ));
+              })()}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       ) : (
         <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
           <table className="min-w-full text-sm">
