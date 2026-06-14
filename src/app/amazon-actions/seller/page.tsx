@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
+import { SellerConnectionCheck } from "@/components/SellerConnectionCheck";
 import { btnPrimary, inputClass, tableWrap, tdCell, thCell } from "@/components/ui";
+import { isManager } from "@/lib/permissions";
 import {
   fetchSellerFinance,
   fetchSellerReturns,
@@ -30,6 +33,7 @@ function money(n: number | null, ccy: string | null): string {
 }
 
 function Content() {
+  const { profile } = useAuth();
   const [tab, setTab] = useState<Tab>("finance");
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [returns, setReturns] = useState<SellerReturnRow[]>([]);
@@ -96,6 +100,8 @@ function Content() {
           </div>
         }
       />
+
+      {isManager(profile) ? <SellerConnectionCheck /> : null}
 
       <div className="mb-3 flex gap-2">
         <button type="button" onClick={() => setTab("finance")} className={tabBtn("finance", "Finance")}>Finance</button>
