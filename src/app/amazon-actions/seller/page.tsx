@@ -235,12 +235,19 @@ function Content() {
         </>
       ) : tab === "messages" ? (
         <div className={`${tableWrap} px-4 py-6 text-sm text-slate-600 dark:text-slate-300`}>
-          <p className="font-medium text-slate-800 dark:text-slate-100">Buyer messages — pending Amazon approval</p>
+          <p className="font-medium text-slate-800 dark:text-slate-100">Buyer messages open in Seller Central</p>
           <p className="mt-2 max-w-2xl text-slate-500">
-            Buyer–seller messages need Amazon&apos;s restricted <strong>Buyer Communication</strong> role, which is granted only after an
-            app review (it exposes buyer personal data). Once that role is approved this tab will list buyer messages automatically — no
-            further setup on your side. See AMAZON-SELLER-MESSAGING-PLAN.md for the steps to request it.
+            Reading buyer messages inside this app needs Amazon&apos;s restricted Buyer Communication role (a public app-listing review),
+            so for now we link straight to your Seller Central message inbox — your team can read and reply there.
           </p>
+          <a
+            href="https://sellercentral.amazon.ae/messaging/inbox"
+            target="_blank"
+            rel="noreferrer"
+            className={`${btnPrimary} mt-4 inline-flex items-center gap-1.5`}
+          >
+            Open buyer messages in Seller Central ↗
+          </a>
         </div>
       ) : (
         <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
