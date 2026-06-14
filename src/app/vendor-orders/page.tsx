@@ -7,11 +7,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import {
+  fetchPoRelated,
   fetchVendorPOs,
   parsePOItems,
   syncVendorPOs,
   updateVendorPO,
   vendorPoLastSync,
+  type PoRelatedItem,
   type VendorPORow,
 } from "@/lib/spapi/vendorOrders";
 
@@ -37,6 +39,14 @@ function StateBadge({ value }: { value: string | null }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{value ?? "—"}</span>;
 }
 
+const KIND_TONE: Record<PoRelatedItem["kind"], string> = {
+  Return: "bg-amber-100 text-amber-700",
+  Dispute: "bg-violet-100 text-violet-700",
+  Shortage: "bg-orange-100 text-orange-700",
+  Cancellation: "bg-rose-100 text-rose-700",
+  Remittance: "bg-emerald-100 text-emerald-700",
+};
+
 function money(n: number | null, ccy: string | null): string {
   if (n == null) return "—";
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -53,6 +63,7 @@ function PoDetailModal({
   onSaved: (row: VendorPORow) => void;
 }) {
   const items = parsePOItems(po.raw);
+  const [related, setRelated] = useState<PoRelatedItem[] | null>(null);
   const [bookingDate, setBookingDate] = useState(po.booking_date ?? "");
   const [bookingRef, setBookingRef] = useState(po.booking_ref ?? "");
   const [status, setStatus] = useState(po.internal_status ?? "");
@@ -60,6 +71,14 @@ function PoDetailModal({
   const [note, setNote] = useState(po.internal_note ?? "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchPoRelated(po.po_number)
+      .then((r) => { if (alive) setRelated(r); })
+      .catch(() => { if (alive) setRelated([]); });
+    return () => { alive = false; };
+  }, [po.po_number]);
 
   async function save() {
     setSaving(true);
@@ -136,6 +155,41 @@ function PoDetailModal({
               Estimated PO value: <strong>{money(totalCost, items[0]?.currency ?? null)}</strong>
             </p>
           ) : null}
+
+          {/* Related activity across the system, keyed by PO number */}
+          <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Related activity</h3>
+          {related === null ? (
+            <p className="mb-5 text-sm text-slate-400">Loading related records…</p>
+          ) : related.length === 0 ? (
+            <p className="mb-5 text-sm text-slate-400">No returns, disputes, shortages, cancellations or remittance deductions reference this PO.</p>
+          ) : (
+            <div className={`${tableWrap} mb-5`}>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className={thCell}>Type</th>
+                    <th className={thCell}>Reference</th>
+                    <th className={thCell}>Status</th>
+                    <th className={thCell}>Amount (AED)</th>
+                    <th className={thCell}>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {related.map((it, i) => (
+                    <tr key={`${it.kind}-${it.ref}-${i}`}>
+                      <td className={tdCell}>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_TONE[it.kind]}`}>{it.kind}</span>
+                      </td>
+                      <td className={`${tdCell} font-medium`}>{it.ref}</td>
+                      <td className={tdCell}>{it.status ?? "—"}</td>
+                      <td className={`${tdCell} tabular-nums`}>{it.amount != null ? money(it.amount, null) : "—"}</td>
+                      <td className={tdCell}>{fmt(it.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Internal fields */}
           <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Internal tracking</h3>

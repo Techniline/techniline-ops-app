@@ -62,6 +62,85 @@ export function parsePOItems(raw: unknown): VendorPOItem[] {
   });
 }
 
+/** A record from another module (return/dispute/etc.) that cites this PO. */
+export interface PoRelatedItem {
+  kind: "Return" | "Dispute" | "Shortage" | "Cancellation" | "Remittance";
+  ref: string;
+  status: string | null;
+  amount: number | null;
+  date: string | null;
+}
+
+/**
+ * Gather everything across the system that references a PO number — returns,
+ * disputes, shortage claims, PO cancellations, and remittance deductions — so
+ * the PO detail view shows the full story in one place. Read-only; each source
+ * keeps its own module/workflow.
+ */
+export async function fetchPoRelated(poNumber: string): Promise<PoRelatedItem[]> {
+  const po = poNumber.trim();
+  if (!po) return [];
+  const out: PoRelatedItem[] = [];
+
+  const [ret, dis, acts, ded] = await Promise.all([
+    supabase
+      .from("returns")
+      .select("return_id,status,refund_aed,recovery_amt_aed,date_received")
+      .eq("po_number", po),
+    supabase
+      .from("disputes")
+      .select("dispute_number,dispute_status,invoice_amount_aed,approved_amount_aed,created_at")
+      .eq("po_number", po),
+    supabase
+      .from("expected_actions")
+      .select("type,ref_number,status,aed_amount,email_received_at")
+      .eq("po_number", po)
+      .in("type", ["shortage_claim", "po_cancellation"]),
+    supabase
+      .from("remittance_deductions")
+      .select("charge_type,remittance_ref,status,amount_aed,approved_amount_aed,created_at")
+      .eq("po_number", po),
+  ]);
+
+  for (const r of ret.data ?? []) {
+    out.push({
+      kind: "Return",
+      ref: r.return_id ?? "—",
+      status: r.status ?? null,
+      amount: r.refund_aed ?? r.recovery_amt_aed ?? null,
+      date: r.date_received ?? null,
+    });
+  }
+  for (const d of dis.data ?? []) {
+    out.push({
+      kind: "Dispute",
+      ref: d.dispute_number ?? "—",
+      status: d.dispute_status ?? null,
+      amount: d.approved_amount_aed ?? d.invoice_amount_aed ?? null,
+      date: d.created_at ?? null,
+    });
+  }
+  for (const a of acts.data ?? []) {
+    out.push({
+      kind: a.type === "po_cancellation" ? "Cancellation" : "Shortage",
+      ref: a.ref_number ?? "—",
+      status: a.status ?? null,
+      amount: a.aed_amount ?? null,
+      date: a.email_received_at ?? null,
+    });
+  }
+  for (const m of ded.data ?? []) {
+    out.push({
+      kind: "Remittance",
+      ref: m.charge_type ?? m.remittance_ref ?? "—",
+      status: m.status ?? null,
+      amount: m.approved_amount_aed ?? m.amount_aed ?? null,
+      date: m.created_at ?? null,
+    });
+  }
+  return out;
+}
+
 /** Editable internal fields maintained on a PO (never overwritten by sync). */
 export interface VendorPOPatch {
   booking_date?: string | null;
