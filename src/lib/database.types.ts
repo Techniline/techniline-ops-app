@@ -2625,6 +2625,27 @@ export type Database = {
         }
         Relationships: []
       }
+      company_holidays: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          holiday_date: string
+          label: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          holiday_date: string
+          label?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          holiday_date?: string
+          label?: string | null
+        }
+        Relationships: []
+      }
       seller_finance_groups: {
         Row: {
           converted_total: number | null

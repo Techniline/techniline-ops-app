@@ -21,6 +21,7 @@ import {
   type TaskStatus,
 } from "@/lib/checklist";
 import { addLeave, deleteLeave, fetchLeave, type LeaveRow } from "@/lib/leave";
+import { addHoliday, fetchHolidays, removeHoliday, type HolidayRow } from "@/lib/checklist/holidays";
 import { canViewUser, isManager } from "@/lib/permissions";
 import {
   fetchDealLogs,
@@ -743,9 +744,93 @@ function ResellerTaskCard({
   );
 }
 
+/** Manager tool: mark/clear company holidays (no checklist generated those days). */
+function HolidayModal({
+  holidays,
+  onClose,
+  onChanged,
+}: {
+  holidays: HolidayRow[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [date, setDate] = useState(todayISODate());
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function add() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await addHoliday(date, label);
+      setLabel("");
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to add holiday.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(d: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await removeHoliday(d);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to remove holiday.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={onClose}>
+      <div className={`${surface} w-full max-w-md p-5`} onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Company holidays</h2>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
+        </div>
+        <p className="mb-3 text-xs text-slate-500">On a holiday, no checklist is generated for anyone and nothing counts as missed.</p>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-slate-500">Date
+            <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <input className={`${inputClass} flex-1`} placeholder="Label (e.g. Eid)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <button type="button" className={btnPrimary} disabled={busy} onClick={add}>{busy ? "…" : "Add"}</button>
+        </div>
+
+        {err ? <p className="mt-2 text-xs text-rose-600">{err}</p> : null}
+
+        <ul className="mt-4 divide-y divide-slate-200 dark:divide-slate-800">
+          {holidays.length === 0 ? (
+            <li className="py-2 text-sm text-slate-400">No holidays set.</li>
+          ) : (
+            holidays.map((h) => (
+              <li key={h.holiday_date} className="flex items-center justify-between py-2 text-sm">
+                <span>
+                  {new Date(h.holiday_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                  {h.label ? <span className="ml-2 text-slate-400">{h.label}</span> : null}
+                </span>
+                <button type="button" disabled={busy} onClick={() => remove(h.holiday_date)} className="text-rose-600 hover:underline disabled:opacity-50">
+                  Remove
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function ChecklistContent() {
   const { profile } = useAuth();
   const [showLeave, setShowLeave] = useState(false);
+  const [showHolidays, setShowHolidays] = useState(false);
+  const [holidays, setHolidays] = useState<HolidayRow[]>([]);
 
   const [tasks, setTasks] = useState<DailyTaskWithDefinition[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -787,12 +872,14 @@ function ChecklistContent() {
 
     // Work-log submissions + names are fail-soft (empty until the submissions
     // read policy is applied) — they never block the checklist itself.
-    const [subs, names] = await Promise.all([
+    const [subs, names, hols] = await Promise.all([
       fetchSubmissionsForTasks(taskRows.map((t) => t.id)),
       fetchUserNames(),
+      fetchHolidays(),
     ]);
     setSubmissions(subs);
     setUserNames(names);
+    setHolidays(hols);
 
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -880,11 +967,24 @@ function ChecklistContent() {
         title="Today's Checklist"
         subtitle={todayLabel()}
         actions={
-          <button type="button" onClick={() => setShowLeave(true)} className={btnSecondary}>
-            Leave / absence
-          </button>
+          <div className="flex items-center gap-2">
+            {managerView ? (
+              <button type="button" onClick={() => setShowHolidays(true)} className={btnSecondary}>
+                Holidays
+              </button>
+            ) : null}
+            <button type="button" onClick={() => setShowLeave(true)} className={btnSecondary}>
+              Leave / absence
+            </button>
+          </div>
         }
       />
+
+      {holidays.some((h) => h.holiday_date === todayISODate()) ? (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          🎉 Public holiday today — no checklist is generated, and nothing counts as missed.
+        </div>
+      ) : null}
 
       {showLeave ? (
         <LeaveModal
@@ -893,6 +993,14 @@ function ChecklistContent() {
           userNames={userNameById}
           onClose={() => setShowLeave(false)}
           onChanged={() => { setShowLeave(false); setActionError(null); void load(); }}
+        />
+      ) : null}
+
+      {showHolidays ? (
+        <HolidayModal
+          holidays={holidays}
+          onClose={() => setShowHolidays(false)}
+          onChanged={() => { setActionError(null); void load(); }}
         />
       ) : null}
 
