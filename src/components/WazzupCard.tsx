@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { surface } from "@/components/ui";
+import { supabase } from "@/lib/supabaseClient";
 import { fetchWazzupStats, type WazzupStats } from "@/lib/wazzup";
 
 const WAZZUP_URL = "https://crm.zoho.com/crm/org712284897/tab/WebTab1";
@@ -28,41 +29,48 @@ export function WazzupCard() {
     };
   }, []);
 
-  function alertNewChats(count: number) {
-    setToast(`${count} new chat${count === 1 ? "" : "s"} waiting — reply within 15 min`);
-    window.setTimeout(() => setToast(null), 9000);
-    if (!muted) {
-      try {
-        const u = new SpeechSynthesisUtterance(count === 1 ? "New chat waiting, please reply" : `${count} new chats waiting, please reply`);
-        u.rate = 1; u.volume = 1;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-      } catch { /* speech not available */ }
-    }
-    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      try { new Notification("New chat waiting", { body: "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
-    }
-  }
-
+  // Always-latest refresh closure (captures current `muted`), called by both the
+  // realtime subscription and the fallback poll.
+  const applyRef = useRef<() => void>(() => {});
   useEffect(() => {
-    let alive = true;
-    const run = () =>
-      fetchWazzupStats().then((r) => {
-        if (!alive) return;
-        setS(r);
-        // tab-title badge
-        document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
-        // new-chat alert when pending increases (skip the very first load)
-        if (prevPending.current != null && r.pendingChats > prevPending.current) {
-          alertNewChats(r.pendingChats - prevPending.current);
+    applyRef.current = async () => {
+      const r = await fetchWazzupStats();
+      setS(r);
+      document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
+      if (prevPending.current != null && r.pendingChats > prevPending.current) {
+        const count = r.pendingChats - prevPending.current;
+        setToast(`${count} new chat${count === 1 ? "" : "s"} waiting — reply within 15 min`);
+        window.setTimeout(() => setToast(null), 9000);
+        if (!muted) {
+          try {
+            const u = new SpeechSynthesisUtterance(count === 1 ? "New chat waiting, please reply" : `${count} new chats waiting, please reply`);
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+          } catch { /* speech not available */ }
         }
-        prevPending.current = r.pendingChats;
-      });
-    void run();
-    const id = setInterval(run, 30_000);
-    return () => { alive = false; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [muted]);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try { new Notification("New chat waiting", { body: "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
+        }
+      }
+      prevPending.current = r.pendingChats;
+    };
+  });
+
+  // Realtime: a new message inserted by the webhook pushes to us in ~1s.
+  useEffect(() => {
+    const ch = supabase
+      .channel("wazzup_live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wazzup_messages" }, () => applyRef.current())
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, []);
+
+  // Fallback poll (covers any missed realtime event) — every 60s, less aggressive now.
+  useEffect(() => {
+    applyRef.current();
+    const id = setInterval(() => applyRef.current(), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   function toggleMute() {
     setMuted((m) => { localStorage.setItem("wz_muted", m ? "0" : "1"); return !m; });
