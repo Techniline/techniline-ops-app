@@ -13,9 +13,11 @@ import {
   fetchSellerOrderDocs,
   fetchSellerOrders,
   fulfillmentLabel,
+  importAmazonDelivery,
   needsFulfillment,
   syncSeller,
   updateSellerOrderDoc,
+  type AmazonDeliveryImportSummary,
   type SellerOrderDocLogRow,
   type SellerOrderDocRow,
   type SellerOrderRow,
@@ -46,6 +48,12 @@ function DocModal({
   const [srt, setSrt] = useState(doc?.srt_number ?? "");
   const [status, setStatus] = useState(doc?.doc_status ?? "");
   const [note, setNote] = useState(doc?.return_note ?? "");
+  const [delivStatus, setDelivStatus] = useState(doc?.delivery_status ?? "");
+  const [delivDate, setDelivDate] = useState(doc?.delivery_date ?? "");
+  const [retDate, setRetDate] = useState(doc?.amazon_return_date ?? "");
+  const [tracking, setTracking] = useState(doc?.tracking_number ?? "");
+  const [charge, setCharge] = useState(doc?.delivery_charge != null ? String(doc.delivery_charge) : "");
+  const [address, setAddress] = useState(doc?.delivery_address ?? "");
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -79,6 +87,12 @@ function DocModal({
           srt_number: srt || null,
           doc_status: status || null,
           return_note: note || null,
+          delivery_status: delivStatus || null,
+          delivery_date: delivDate || null,
+          amazon_return_date: retDate || null,
+          tracking_number: tracking || null,
+          delivery_charge: charge.trim() === "" ? null : Number(charge),
+          delivery_address: address || null,
         },
         comment.trim()
       );
@@ -121,6 +135,33 @@ function DocModal({
             <span className="mb-1 block text-xs font-medium text-slate-500">SRT number</span>
             <input className={`${inputClass} w-full`} value={srt} onChange={(e) => setSrt(e.target.value)} />
           </label>
+          <div className="sm:col-span-2 mt-1 border-t border-slate-200 pt-3 dark:border-slate-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Delivery (from Amazon delivery list)</p>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Delivery status</span>
+            <input className={`${inputClass} w-full`} value={delivStatus} onChange={(e) => setDelivStatus(e.target.value)} placeholder="e.g. Done" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Delivery date</span>
+            <input type="date" className={`${inputClass} w-full`} value={delivDate ?? ""} onChange={(e) => setDelivDate(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Tracking no.</span>
+            <input className={`${inputClass} w-full`} value={tracking} onChange={(e) => setTracking(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Delivery charge</span>
+            <input className={`${inputClass} w-full`} value={charge} onChange={(e) => setCharge(e.target.value)} inputMode="decimal" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Amazon return date</span>
+            <input type="date" className={`${inputClass} w-full`} value={retDate ?? ""} onChange={(e) => setRetDate(e.target.value)} />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Delivery address</span>
+            <input className={`${inputClass} w-full`} value={address} onChange={(e) => setAddress(e.target.value)} />
+          </label>
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
             <textarea className={`${inputClass} w-full`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -156,6 +197,81 @@ function DocModal({
   );
 }
 
+function ImportModal({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [summary, setSummary] = useState<AmazonDeliveryImportSummary | null>(null);
+  const [done, setDone] = useState<number | null>(null);
+
+  async function run(apply: boolean) {
+    if (!file) { setErr("Choose the Amazon delivery list (.xlsx) first."); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await importAmazonDelivery(file, apply);
+      setSummary(r.summary);
+      if (apply) { setDone(r.written ?? 0); onApplied(); }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const unmatchedTotal = summary ? Object.values(summary.unmatchedBySheet).reduce((a, b) => a + b, 0) : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+      <div className={`${surface} w-full max-w-lg`}>
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import Amazon delivery list</h2>
+            <p className="text-xs text-slate-500">Backfills delivery status / dates / tracking / PRT / SRT onto matching orders. The synced order data is never changed.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setSummary(null); setDone(null); }}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-slate-300 dark:file:bg-slate-800"
+          />
+          {err ? <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+
+          {summary ? (
+            <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+              <div className="grid grid-cols-2 gap-y-1">
+                <span className="text-slate-500">Orders in workbook</span><span className="text-right font-medium">{summary.distinctOrders}</span>
+                <span className="text-slate-500">Matched to synced orders</span><span className="text-right font-medium text-emerald-600">{summary.matched}</span>
+                <span className="text-slate-500">{done == null ? "Will fill" : "Filled"}</span><span className="text-right font-medium">{done ?? summary.willWrite}</span>
+                <span className="text-slate-500">Unmatched (skipped)</span><span className="text-right font-medium text-amber-600">{unmatchedTotal}</span>
+              </div>
+              {Object.keys(summary.rowsBySheet).length ? (
+                <p className="mt-2 text-xs text-slate-400">Rows by sheet: {Object.entries(summary.rowsBySheet).map(([k, v]) => `${k} ${v}`).join(" · ")}</p>
+              ) : null}
+              {unmatchedTotal > 0 && summary.sampleUnmatched.length ? (
+                <p className="mt-1 text-xs text-slate-400">Unmatched e.g.: {summary.sampleUnmatched.slice(0, 6).join(", ")}{unmatchedTotal > 6 ? "…" : ""}</p>
+              ) : null}
+              {done != null ? <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">✓ Imported {done} order(s).</p> : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <button type="button" onClick={onClose} className={btnSecondary} disabled={busy}>Close</button>
+          {done == null ? (
+            <>
+              <button type="button" onClick={() => run(false)} className={btnSecondary} disabled={busy || !file}>{busy ? "Working…" : "Preview"}</button>
+              <button type="button" onClick={() => run(true)} className={btnPrimary} disabled={busy || !summary || summary.willWrite === 0}>{busy ? "Working…" : `Apply${summary ? ` (${summary.willWrite})` : ""}`}</button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Content() {
   const { profile } = useAuth();
   const canEdit = isManager(profile) || DOC_EDITOR_UIDS.includes(profile?.id ?? "");
@@ -166,6 +282,7 @@ function Content() {
   const [search, setSearch] = useState("");
   const [channel, setChannel] = useState("all");
   const [editing, setEditing] = useState<SellerOrderRow | null>(null);
+  const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -211,7 +328,7 @@ function Content() {
   const shown = orders.filter((o) => channel === "all" || fulfillmentLabel(o) === channel);
   const unfulfilled = shown.filter(needsFulfillment).sort(byDateDesc);
   const closed = shown.filter((o) => !needsFulfillment(o)).sort(byDateDesc);
-  const colSpan = canEdit ? 9 : 8;
+  const colSpan = canEdit ? 11 : 10;
 
   const head = (
     <thead className="sticky top-0 z-10">
@@ -221,6 +338,8 @@ function Content() {
         <th className={thCell}>Status</th>
         <th className={thCell}>Channel</th>
         <th className={thCell}>Invoice</th>
+        <th className={thCell}>Delivery</th>
+        <th className={thCell}>Tracking</th>
         <th className={thCell}>PRT</th>
         <th className={thCell}>SRT</th>
         <th className={thCell}>Return status</th>
@@ -237,6 +356,12 @@ function Content() {
         <td className={tdCell}><StatusPill order={o} /></td>
         <td className={tdCell}>{fulfillmentLabel(o)}</td>
         <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
+        <td className={tdCell}>
+          {d?.delivery_status ? (
+            <span className="whitespace-nowrap">{d.delivery_status}{d.delivery_date ? <span className="text-slate-400"> · {fmt(d.delivery_date)}</span> : null}</span>
+          ) : "—"}
+        </td>
+        <td className={tdCell}>{d?.tracking_number ?? "—"}</td>
         <td className={tdCell}>{d?.prt_number ?? "—"}</td>
         <td className={tdCell}>{d?.srt_number ?? "—"}</td>
         <td className={tdCell}>{d?.doc_status ?? "—"}</td>
@@ -253,7 +378,12 @@ function Content() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-end">
+      <div className="mb-3 flex items-center justify-end gap-2">
+        {canEdit ? (
+          <button type="button" onClick={() => setImporting(true)} className={btnSecondary}>
+            Import delivery list
+          </button>
+        ) : null}
         <button type="button" onClick={syncNow} disabled={syncing} className={btnPrimary}>
           {syncing ? "Syncing…" : "Sync now"}
         </button>
@@ -317,6 +447,10 @@ function Content() {
       <p className="mt-3 text-xs text-slate-400">
         Amazon Seller + Flex orders, with return paperwork (invoice / PRT / SRT) {canEdit ? "you can edit here" : "maintained by Maricel"}.
       </p>
+
+      {importing ? (
+        <ImportModal onClose={() => setImporting(false)} onApplied={() => void load()} />
+      ) : null}
 
       {editing ? (
         <DocModal

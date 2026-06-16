@@ -19,6 +19,12 @@ function clean(v: unknown): string | null {
   return s === "" ? null : s;
 }
 
+function cleanNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(String(v).replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Upsert the return paperwork for one Amazon order. Maricel or a manager only. */
 export async function POST(request: Request): Promise<Response> {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -52,7 +58,17 @@ export async function POST(request: Request): Promise<Response> {
     return_note: clean(body.return_note),
     doc_status: clean(body.doc_status),
   };
-  const patch = { amazon_order_id: amazonOrderId, ...fields, updated_by: u.user.id, updated_at: new Date().toISOString() };
+  // Operational delivery fields (not audit-logged — the log table tracks only the
+  // return-doc fields above).
+  const delivery = {
+    delivery_status: clean(body.delivery_status),
+    delivery_date: clean(body.delivery_date),
+    amazon_return_date: clean(body.amazon_return_date),
+    tracking_number: clean(body.tracking_number),
+    delivery_charge: cleanNum(body.delivery_charge),
+    delivery_address: clean(body.delivery_address),
+  };
+  const patch = { amazon_order_id: amazonOrderId, ...fields, ...delivery, updated_by: u.user.id, updated_at: new Date().toISOString() };
   const { data, error } = await svc
     .from("seller_order_docs")
     .upsert(patch as never, { onConflict: "amazon_order_id" })

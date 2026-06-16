@@ -58,6 +58,46 @@ export interface SellerOrderDocPatch {
   srt_number?: string | null;
   return_note?: string | null;
   doc_status?: string | null;
+  delivery_status?: string | null;
+  delivery_date?: string | null;
+  amazon_return_date?: string | null;
+  tracking_number?: string | null;
+  delivery_charge?: number | null;
+  delivery_address?: string | null;
+}
+
+export interface AmazonDeliveryImportSummary {
+  rowsBySheet: Record<string, number>;
+  distinctOrders: number;
+  ordersInSystem: number;
+  matched: number;
+  willWrite: number;
+  unmatchedBySheet: Record<string, number>;
+  sampleUnmatched: string[];
+  sampleWrite: { amazon_order_id: string }[];
+}
+
+/** Upload the Amazon Seller Delivery List workbook; preview (apply=false) or
+ *  backfill (apply=true) delivery/return data into seller_order_docs. */
+export async function importAmazonDelivery(
+  file: File,
+  apply: boolean
+): Promise<{ dryRun: boolean; written?: number; summary: AmazonDeliveryImportSummary }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/logistics/import-amazon-delivery?apply=${apply ? "1" : "0"}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+  return { dryRun: !!j.dryRun, written: j.written as number | undefined, summary: j.summary as AmazonDeliveryImportSummary };
 }
 
 export type SellerOrderDocLogRow = Tables<"seller_order_doc_log">;

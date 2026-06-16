@@ -2784,37 +2784,55 @@ export type Database = {
       seller_order_docs: {
         Row: {
           amazon_order_id: string
+          amazon_return_date: string | null
           created_at: string
+          delivery_address: string | null
+          delivery_charge: number | null
+          delivery_date: string | null
+          delivery_status: string | null
           doc_status: string | null
           id: string
           invoice_number: string | null
           prt_number: string | null
           return_note: string | null
           srt_number: string | null
+          tracking_number: string | null
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           amazon_order_id: string
+          amazon_return_date?: string | null
           created_at?: string
+          delivery_address?: string | null
+          delivery_charge?: number | null
+          delivery_date?: string | null
+          delivery_status?: string | null
           doc_status?: string | null
           id?: string
           invoice_number?: string | null
           prt_number?: string | null
           return_note?: string | null
           srt_number?: string | null
+          tracking_number?: string | null
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
           amazon_order_id?: string
+          amazon_return_date?: string | null
           created_at?: string
+          delivery_address?: string | null
+          delivery_charge?: number | null
+          delivery_date?: string | null
+          delivery_status?: string | null
           doc_status?: string | null
           id?: string
           invoice_number?: string | null
           prt_number?: string | null
           return_note?: string | null
           srt_number?: string | null
+          tracking_number?: string | null
           updated_at?: string
           updated_by?: string | null
         }

@@ -209,8 +209,24 @@ create policy seller_ret_read on public.seller_returns for select to authenticat
 insert into public.app_settings (key, value) values ('seller_last_sync', null)
 on conflict (key) do nothing;
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║ G. AMAZON DELIVERY LIST — operational delivery/return fields on order docs  ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- Adds the columns the "Import delivery list" tool (Logistics → Amazon
+-- Fulfillment) fills from the Amazon Seller Delivery List workbook. These live
+-- on seller_order_docs (manual docs) — the API-synced seller_orders is untouched.
+
+alter table public.seller_order_docs
+  add column if not exists delivery_status    text,
+  add column if not exists delivery_date       date,
+  add column if not exists amazon_return_date  date,
+  add column if not exists tracking_number     text,
+  add column if not exists delivery_charge      numeric,
+  add column if not exists delivery_address     text;
+
 -- ============================================================================
 -- Done. Expected: 0 errors. Then open the app: Checklist shows 0 tasks on
 -- Sunday; Vendor PO detail saves invoice/booking; Amazon Seller Central →
--- "Sync now" populates Orders/Finance/Returns.
+-- "Sync now" populates Orders/Finance/Returns; Amazon Fulfillment →
+-- "Import delivery list" backfills delivery status/tracking/PRT/SRT.
 -- ============================================================================
