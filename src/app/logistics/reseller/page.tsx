@@ -92,39 +92,47 @@ const CARRIER_BY: Record<string, { value: string; label: string; color: string }
   CARRIERS.map((c) => [c.value, c])
 );
 
-/** Read-only branded badge for the table: logo on a white pill with a brand
- *  border, falling back to a solid brand-coloured name badge if no logo file. */
+/** Branded wordmark for a carrier — styled to evoke each logo, no image needed. */
+function CarrierMark({ value }: { value: string }) {
+  if (value === "porter") {
+    return <span className="font-semibold uppercase tracking-wide">Porter<sup className="ml-0.5 text-[7px]">●</sup></span>;
+  }
+  if (value === "max") {
+    return <span className="tracking-wide"><span className="font-bold">MAX</span><span className="font-normal opacity-90"> Express</span></span>;
+  }
+  if (value === "techniline") {
+    return <span className="font-semibold">Techniline</span>;
+  }
+  return <>{value}</>;
+}
+
+/** Read-only solid brand badge for the table. */
 function CarrierBadge({ value }: { value: string | null }) {
   const c = value ? CARRIER_BY[value] : undefined;
-  const [imgOk, setImgOk] = useState(true);
   if (!c) {
     return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{value || "—"}</span>;
   }
-  if (imgOk) {
-    return (
-      <span className="inline-flex items-center rounded-full border bg-white px-2 py-1" style={{ borderColor: c.color }}>
-        <img src={`/couriers/${c.value}.png`} alt={c.label} onError={() => setImgOk(false)} className="h-4 w-auto max-w-[80px] object-contain" />
-      </span>
-    );
-  }
-  return <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: c.color }}>{c.label}</span>;
+  return (
+    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] text-white" style={{ background: c.color }}>
+      <CarrierMark value={c.value} />
+    </span>
+  );
 }
 
-/** Selectable carrier chip for the form (logo or brand name, brand ring when active). */
+/** Selectable carrier chip for the form (solid brand fill when active, tint when not). */
 function CarrierChip({ c, active, onClick }: { c: { value: string; label: string; color: string }; active: boolean; onClick: () => void }) {
-  const [imgOk, setImgOk] = useState(true);
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex h-10 items-center justify-center rounded-full border bg-white px-4 transition"
-      style={{ borderColor: c.color, boxShadow: active ? `0 0 0 2px ${c.color}` : undefined, opacity: active ? 1 : 0.7 }}
+      className="flex h-9 items-center justify-center rounded-full px-4 text-sm transition"
+      style={
+        active
+          ? { background: c.color, color: "#fff", boxShadow: `0 0 0 2px ${c.color}` }
+          : { background: "transparent", color: c.color, border: `1px solid ${c.color}`, opacity: 0.85 }
+      }
     >
-      {imgOk ? (
-        <img src={`/couriers/${c.value}.png`} alt={c.label} onError={() => setImgOk(false)} className="h-5 w-auto max-w-[90px] object-contain" />
-      ) : (
-        <span className="text-sm font-semibold" style={{ color: c.color }}>{c.label}</span>
-      )}
+      <CarrierMark value={c.value} />
     </button>
   );
 }
