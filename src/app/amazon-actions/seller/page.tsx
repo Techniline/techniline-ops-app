@@ -32,6 +32,19 @@ function money(n: number | null, ccy: string | null): string {
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Friendly fulfillment label. AFN = FBA; MFN splits into Easy Ship (has an
+ *  EasyShipShipmentStatus marker) vs Self Ship. ("Flex" is Amazon's driver
+ *  program, not a fulfillment type, so it isn't used here.) */
+function fulfillmentLabel(o: SellerOrderRow): string {
+  const ch = (o.fulfillment_channel ?? "").toUpperCase();
+  if (ch === "AFN") return "FBA";
+  if (ch === "MFN") {
+    const raw = (o.raw ?? null) as { EasyShipShipmentStatus?: string } | null;
+    return raw?.EasyShipShipmentStatus ? "Easy Ship" : "Self Ship";
+  }
+  return o.fulfillment_channel ?? "—";
+}
+
 /** A merchant-fulfilled (MFN) order the seller still needs to ship. FBA (AFN) is
  *  Amazon's to fulfill, so it's excluded. */
 function needsFulfillment(o: SellerOrderRow): boolean {
@@ -181,7 +194,7 @@ function Content() {
       ) : tab === "orders" ? (
         <>
           {(() => {
-            const channels = Array.from(new Set(orders.map((o) => o.fulfillment_channel).filter(Boolean) as string[]));
+            const channels = Array.from(new Set(orders.map(fulfillmentLabel).filter((c) => c !== "—")));
             if (channels.length < 2) return null;
             const chip = (key: string, label: string) =>
               `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
@@ -198,7 +211,7 @@ function Content() {
             );
           })()}
           {(() => {
-            const inChannel = orders.filter((o) => channel === "all" || o.fulfillment_channel === channel);
+            const inChannel = orders.filter((o) => channel === "all" || fulfillmentLabel(o) === channel);
             const n = inChannel.filter(needsFulfillment).length;
             if (n === 0) return null;
             return (
@@ -233,7 +246,7 @@ function Content() {
             <tbody>
               {(() => {
                 const shown = orders
-                  .filter((o) => channel === "all" || o.fulfillment_channel === channel)
+                  .filter((o) => channel === "all" || fulfillmentLabel(o) === channel)
                   .filter((o) => !unfulfilledOnly || needsFulfillment(o))
                   // Surface unfulfilled orders first so they don't get lost.
                   .sort(
@@ -259,7 +272,7 @@ function Content() {
                         <span className="text-slate-600 dark:text-slate-300">{r.order_status ?? "—"}</span>
                       )}
                     </td>
-                    <td className={tdCell}>{r.fulfillment_channel ?? "—"}</td>
+                    <td className={tdCell}>{fulfillmentLabel(r)}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_shipped ?? "—"}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_unshipped ?? "—"}</td>
                     <td className={`${tdCell} tabular-nums`}>{money(r.order_total, r.currency)}</td>
