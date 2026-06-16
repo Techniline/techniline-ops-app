@@ -8,64 +8,27 @@ import { fetchWazzupStats, type WazzupStats } from "@/lib/wazzup";
 
 const WAZZUP_URL = "https://crm.zoho.com/crm/org712284897/tab/WebTab1";
 
-/** Dashboard "Chats" card with prominent pending alerts: live browser-tab badge,
- *  a toast + spoken voice alert when new chats arrive, and a pulsing red pending
- *  tile. Works while the dashboard tab is open. Polls every 30s. */
+/** Dashboard "Chats" card: live numbers (pending, oldest wait, new today, 15-min
+ *  KPI) with a pulsing red pending tile and the waiting customer's name. Polls
+ *  every 15s. The actual toast/voice/tab-badge alerting lives in the app-wide
+ *  <WazzupAlerts/> watcher so it fires on every page, not just here. */
 export function WazzupCard() {
   const [s, setS] = useState<WazzupStats | null>(null);
   const [muted, setMuted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">("unsupported");
   const [refreshing, setRefreshing] = useState(false);
-  const baseTitle = useRef<string>("");
 
-  // restore mute pref + base title + notification permission on mount
+  // restore mute pref + notification permission on mount
   useEffect(() => {
     setMuted(localStorage.getItem("wz_muted") === "1");
-    baseTitle.current = document.title.replace(/^\(\d+\)\s*/, "");
     if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
-    return () => {
-      document.title = baseTitle.current; // restore tab title when leaving
-    };
   }, []);
 
-  // Latest-closure alert (captures current `muted`): toast + voice + OS popup,
-  // with the customer's name when we have it.
-  const notifyRef = useRef<(name?: string | null) => void>(() => {});
-  useEffect(() => {
-    notifyRef.current = (name) => {
-      setToast(name ? `${name} · reply within 15 min` : "Reply within 15 min");
-      window.setTimeout(() => setToast(null), 9000);
-      if (!muted) {
-        try {
-          const u = new SpeechSynthesisUtterance(name ? `New chat waiting from ${name}, please reply` : "New chat waiting, please reply");
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(u);
-        } catch { /* speech not available */ }
-      }
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try { new Notification("New chat waiting", { body: name ? `${name} · reply within 15 min` : "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
-      }
-    };
-  });
-
-  // Refresh numbers + tab badge, and alert (by name) when a brand-new inbound
-  // chat appears — driven by the data, so it works with or without realtime.
-  const prevNewestAt = useRef<string | null>(null);
+  // Refresh the displayed numbers. Alerting is handled globally by <WazzupAlerts/>.
   const applyRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    applyRef.current = async () => {
-      const r = await fetchWazzupStats();
-      setS(r);
-      document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
-      const ni = r.newestInbound;
-      if (ni?.at) {
-        if (prevNewestAt.current != null && ni.at > prevNewestAt.current && !ni.answered) {
-          notifyRef.current(ni.name);
-        }
-        prevNewestAt.current = ni.at;
-      }
-    };
+    applyRef.current = async () => { setS(await fetchWazzupStats()); };
   });
 
   // Fast poll (every 15s) — primary mechanism. Realtime is a bonus nudge on top.

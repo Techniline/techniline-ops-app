@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { Logo, MenuIcon } from "./icons";
 import { Sidebar } from "./Sidebar";
+import { WazzupAlerts } from "./WazzupAlerts";
 
 /**
  * Shared chrome for protected pages. Desktop: a collapsible sidebar rail.
@@ -16,6 +17,9 @@ export function AppShell({ children, fullWidth }: { children: ReactNode; fullWid
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-slate-950">
+      {/* App-wide WhatsApp/Wazzup alerts (managers + Aaron), on every page */}
+      <WazzupAlerts />
+
       {/* Mobile backdrop */}
       {mobileOpen ? (
         <div
