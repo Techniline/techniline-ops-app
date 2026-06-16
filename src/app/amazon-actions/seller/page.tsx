@@ -32,12 +32,12 @@ function money(n: number | null, ccy: string | null): string {
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** Friendly fulfillment label. AFN = FBA; MFN splits into Easy Ship (has an
- *  EasyShipShipmentStatus marker) vs Self Ship. ("Flex" is Amazon's driver
- *  program, not a fulfillment type, so it isn't used here.) */
+/** Fulfillment label in the team's vocabulary. AFN (technically FBA) is shown as
+ *  "Flex" per the team's naming; MFN splits into Easy Ship (has an
+ *  EasyShipShipmentStatus marker) vs Self Ship. */
 function fulfillmentLabel(o: SellerOrderRow): string {
   const ch = (o.fulfillment_channel ?? "").toUpperCase();
-  if (ch === "AFN") return "FBA";
+  if (ch === "AFN") return "Flex";
   if (ch === "MFN") {
     const raw = (o.raw ?? null) as { EasyShipShipmentStatus?: string } | null;
     return raw?.EasyShipShipmentStatus ? "Easy Ship" : "Self Ship";
