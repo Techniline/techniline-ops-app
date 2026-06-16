@@ -16,6 +16,7 @@ export function WazzupCard() {
   const [muted, setMuted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [refreshing, setRefreshing] = useState(false);
   const prevPending = useRef<number | null>(null);
   const baseTitle = useRef<string>("");
 
@@ -31,7 +32,7 @@ export function WazzupCard() {
 
   // Always-latest refresh closure (captures current `muted`), called by both the
   // realtime subscription and the fallback poll.
-  const applyRef = useRef<() => void>(() => {});
+  const applyRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     applyRef.current = async () => {
       const r = await fetchWazzupStats();
@@ -65,12 +66,17 @@ export function WazzupCard() {
     return () => { void supabase.removeChannel(ch); };
   }, []);
 
-  // Fallback poll (covers any missed realtime event) — every 60s, less aggressive now.
+  // Fallback poll (covers any missed realtime event).
   useEffect(() => {
-    applyRef.current();
-    const id = setInterval(() => applyRef.current(), 60_000);
+    void applyRef.current();
+    const id = setInterval(() => void applyRef.current(), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  async function refreshNow() {
+    setRefreshing(true);
+    try { await applyRef.current(); } finally { setRefreshing(false); }
+  }
 
   function toggleMute() {
     setMuted((m) => { localStorage.setItem("wz_muted", m ? "0" : "1"); return !m; });
@@ -112,6 +118,9 @@ export function WazzupCard() {
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Chats (WhatsApp / Wazzup)
         </h2>
         <div className="flex items-center gap-3 text-xs">
+          <button type="button" onClick={refreshNow} disabled={refreshing} title="Refresh now" className="font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:hover:text-slate-300">
+            {refreshing ? "Refreshing…" : "↻ Refresh"}
+          </button>
           {notifPerm === "default" ? (
             <button type="button" onClick={enableAlerts} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Enable pop-up alerts</button>
           ) : null}
