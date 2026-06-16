@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnSecondary, surface } from "@/components/ui";
 import { AaronDealsBand } from "@/components/AaronDealsBand";
+import { WazzupCard } from "@/components/WazzupCard";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
 import { RemittanceTasksBand } from "@/components/RemittanceTasksBand";
 import { ZohoPipelineBand } from "@/components/ZohoPipelineBand";
@@ -991,6 +992,9 @@ function DashboardContent() {
           </div>
         }
       />
+
+      {/* Chats (WhatsApp / Wazzup) — Aaron + managers */}
+      {managerView || profile.id === AARON_ID ? <WazzupCard /> : null}
 
       {/* Needs attention + categorized metrics */}
       <KpiDashboard profile={profile} />

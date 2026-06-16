@@ -2631,6 +2631,48 @@ export type Database = {
         }
         Relationships: []
       }
+      wazzup_messages: {
+        Row: {
+          body: string | null
+          chat_id: string | null
+          chat_type: string | null
+          contact_name: string | null
+          created_at: string
+          direction: string | null
+          id: string
+          message_at: string | null
+          message_id: string | null
+          raw: Json | null
+          response_minutes: number | null
+        }
+        Insert: {
+          body?: string | null
+          chat_id?: string | null
+          chat_type?: string | null
+          contact_name?: string | null
+          created_at?: string
+          direction?: string | null
+          id?: string
+          message_at?: string | null
+          message_id?: string | null
+          raw?: Json | null
+          response_minutes?: number | null
+        }
+        Update: {
+          body?: string | null
+          chat_id?: string | null
+          chat_type?: string | null
+          contact_name?: string | null
+          created_at?: string
+          direction?: string | null
+          id?: string
+          message_at?: string | null
+          message_id?: string | null
+          raw?: Json | null
+          response_minutes?: number | null
+        }
+        Relationships: []
+      }
       company_holidays: {
         Row: {
           created_at: string
