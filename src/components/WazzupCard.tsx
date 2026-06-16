@@ -37,7 +37,7 @@ export function WazzupCard() {
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Chats (WhatsApp / Wazzup)
         </h2>
-        <a href="https://crm.zoho.com" target="_blank" rel="noreferrer" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">Open Wazzup →</a>
+        <a href="https://crm.zoho.com/crm/org712284897/tab/WebTab1" target="_blank" rel="noreferrer" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">Open Wazzup →</a>
       </div>
       {s === null ? (
         <p className="text-sm text-slate-400">Loading…</p>
