@@ -147,7 +147,11 @@ export function WazzupCard() {
           >
             <p className={`text-[11px] font-semibold uppercase tracking-wide ${pending > 0 ? "text-rose-600 dark:text-rose-300" : "text-slate-500"}`}>Pending chats</p>
             <p className={`mt-1 text-2xl font-bold tabular-nums ${pending > 0 ? "text-rose-600 dark:text-rose-300" : "text-slate-900 dark:text-slate-100"}`}>{pending}</p>
-            <p className={`text-xs ${pending > 0 ? "text-rose-500" : "text-slate-400"}`}>awaiting reply</p>
+            <p className={`text-xs ${pending > 0 ? "text-rose-500" : "text-slate-400"}`}>
+              {pending > 0 && s && s.pendingNames.length
+                ? `waiting: ${s.pendingNames.slice(0, 2).join(", ")}${s.pendingNames.length > 2 ? ` +${s.pendingNames.length - 2}` : ""}`
+                : "awaiting reply"}
+            </p>
           </div>
           {tile("Oldest waiting", s.oldestWaitingMin ? `${s.oldestWaitingMin}m` : "—", waitTone, s.oldestWaitingMin > 15 ? "over 15 min" : "within SLA")}
           {tile("New today", String(s.newToday), "text-slate-900 dark:text-slate-100", "chats")}
