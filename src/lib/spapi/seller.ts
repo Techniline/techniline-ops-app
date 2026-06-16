@@ -4,6 +4,25 @@ import type { Tables } from "@/lib/types";
 export type SellerFinanceRow = Tables<"seller_finance_groups">;
 export type SellerOrderRow = Tables<"seller_orders">;
 
+/** Fulfillment label in the team's vocabulary: AFN (FBA) shown as "Flex"; MFN
+ *  splits into Easy Ship (has an EasyShipShipmentStatus marker) vs Self Ship. */
+export function fulfillmentLabel(o: SellerOrderRow): string {
+  const ch = (o.fulfillment_channel ?? "").toUpperCase();
+  if (ch === "AFN") return "Flex";
+  if (ch === "MFN") {
+    const raw = (o.raw ?? null) as { EasyShipShipmentStatus?: string } | null;
+    return raw?.EasyShipShipmentStatus ? "Easy Ship" : "Self Ship";
+  }
+  return o.fulfillment_channel ?? "—";
+}
+
+/** Any order with unshipped items that isn't already shipped or cancelled. */
+export function needsFulfillment(o: SellerOrderRow): boolean {
+  const st = (o.order_status ?? "").toLowerCase();
+  if (st === "shipped" || st.includes("cancel")) return false;
+  return (o.items_unshipped ?? 0) > 0;
+}
+
 export async function fetchSellerOrders(search?: string): Promise<SellerOrderRow[]> {
   let q = supabase.from("seller_orders").select("*").order("purchase_date", { ascending: false }).limit(1000);
   const s = search?.trim();

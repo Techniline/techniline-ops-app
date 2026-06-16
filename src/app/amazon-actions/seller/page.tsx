@@ -7,11 +7,14 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { SellerConnectionCheck } from "@/components/SellerConnectionCheck";
+import { StatusPill, channelChipClass } from "@/components/SellerOrderUi";
 import { btnPrimary, inputClass, tableWrap, tdCell, thCell } from "@/components/ui";
 import { canViewSellerFinance, canViewSellerOrders, isManager } from "@/lib/permissions";
 import {
   fetchSellerFinance,
   fetchSellerOrders,
+  fulfillmentLabel,
+  needsFulfillment,
   sellerLastSync,
   syncSeller,
   type SellerFinanceRow,
@@ -31,51 +34,6 @@ function money(n: number | null, ccy: string | null): string {
   if (n == null) return "—";
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-
-/** Fulfillment label in the team's vocabulary. AFN (technically FBA) is shown as
- *  "Flex" per the team's naming; MFN splits into Easy Ship (has an
- *  EasyShipShipmentStatus marker) vs Self Ship. */
-function fulfillmentLabel(o: SellerOrderRow): string {
-  const ch = (o.fulfillment_channel ?? "").toUpperCase();
-  if (ch === "AFN") return "Flex";
-  if (ch === "MFN") {
-    const raw = (o.raw ?? null) as { EasyShipShipmentStatus?: string } | null;
-    return raw?.EasyShipShipmentStatus ? "Easy Ship" : "Self Ship";
-  }
-  return o.fulfillment_channel ?? "—";
-}
-
-/** Any order with unshipped items that isn't already shipped or cancelled —
- *  flagged as unfulfilled regardless of channel (Flex / Easy Ship / Self Ship). */
-function needsFulfillment(o: SellerOrderRow): boolean {
-  const st = (o.order_status ?? "").toLowerCase();
-  if (st === "shipped" || st.includes("cancel")) return false;
-  return (o.items_unshipped ?? 0) > 0;
-}
-
-/** Colored status pill: unfulfilled = orange, shipped = green, cancelled = red. */
-function StatusPill({ order }: { order: SellerOrderRow }) {
-  const pill = "rounded-full px-2 py-0.5 text-[11px] font-semibold";
-  if (needsFulfillment(order)) {
-    return <span className={`${pill} bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300`}>Unfulfilled</span>;
-  }
-  const st = (order.order_status ?? "").toLowerCase();
-  const tone =
-    st === "shipped"
-      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-      : st.includes("cancel")
-        ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
-        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-  return <span className={`${pill} ${tone}`}>{order.order_status ?? "—"}</span>;
-}
-
-/** Per-channel chip colours (active = filled, inactive = tint). */
-const CHIP_TONE: Record<string, { on: string; off: string }> = {
-  all: { on: "bg-indigo-600 text-white", off: "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" },
-  Flex: { on: "bg-blue-600 text-white", off: "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300" },
-  "Easy Ship": { on: "bg-violet-600 text-white", off: "bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950 dark:text-violet-300" },
-  "Self Ship": { on: "bg-teal-600 text-white", off: "bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-300" },
-};
 
 function Content() {
   const { profile } = useAuth();
@@ -219,16 +177,12 @@ function Content() {
           {(() => {
             const channels = Array.from(new Set(orders.map(fulfillmentLabel).filter((c) => c !== "—")));
             if (channels.length < 2) return null;
-            const chip = (key: string) => {
-              const t = CHIP_TONE[key] ?? CHIP_TONE.all;
-              return `rounded-full px-3 py-1 text-xs font-medium transition-colors ${channel === key ? t.on : t.off}`;
-            };
             return (
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-slate-400">Fulfillment:</span>
-                <button type="button" onClick={() => setChannel("all")} className={chip("all")}>All</button>
+                <button type="button" onClick={() => setChannel("all")} className={channelChipClass(channel === "all", "all")}>All</button>
                 {channels.map((c) => (
-                  <button key={c} type="button" onClick={() => setChannel(c)} className={chip(c)}>{c}</button>
+                  <button key={c} type="button" onClick={() => setChannel(c)} className={channelChipClass(channel === c, c)}>{c}</button>
                 ))}
               </div>
             );

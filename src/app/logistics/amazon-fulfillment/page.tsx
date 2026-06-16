@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
+import { StatusPill, channelChipClass } from "@/components/SellerOrderUi";
 import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import { isManager } from "@/lib/permissions";
 import {
   fetchSellerOrderDocs,
   fetchSellerOrders,
+  fulfillmentLabel,
+  needsFulfillment,
   syncSeller,
   updateSellerOrderDoc,
   type SellerOrderDocRow,
@@ -156,15 +159,52 @@ function Content() {
   }
 
   const channels = useMemo(
-    () => Array.from(new Set(orders.map((o) => o.fulfillment_channel).filter(Boolean) as string[])),
+    () => Array.from(new Set(orders.map(fulfillmentLabel).filter((c) => c !== "—"))),
     [orders]
   );
-  const shown = orders.filter((o) => channel === "all" || o.fulfillment_channel === channel);
+  const byDateDesc = (a: SellerOrderRow, b: SellerOrderRow) => (b.purchase_date ?? "").localeCompare(a.purchase_date ?? "");
+  const shown = orders.filter((o) => channel === "all" || fulfillmentLabel(o) === channel);
+  const unfulfilled = shown.filter(needsFulfillment).sort(byDateDesc);
+  const closed = shown.filter((o) => !needsFulfillment(o)).sort(byDateDesc);
+  const colSpan = canEdit ? 9 : 8;
 
-  const chip = (key: string) =>
-    `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-      channel === key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
-    }`;
+  const head = (
+    <thead className="sticky top-0 z-10">
+      <tr>
+        <th className={thCell}>Order ID</th>
+        <th className={thCell}>Date</th>
+        <th className={thCell}>Status</th>
+        <th className={thCell}>Channel</th>
+        <th className={thCell}>Invoice</th>
+        <th className={thCell}>PRT</th>
+        <th className={thCell}>SRT</th>
+        <th className={thCell}>Return status</th>
+        {canEdit ? <th className={thCell}></th> : null}
+      </tr>
+    </thead>
+  );
+  const rowFor = (o: SellerOrderRow) => {
+    const d = docs.get(o.amazon_order_id);
+    return (
+      <tr key={o.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(o) ? "bg-orange-50/40 dark:bg-orange-950/10" : ""}`}>
+        <td className={`${tdCell} font-medium`}>{o.amazon_order_id}</td>
+        <td className={tdCell}>{fmt(o.purchase_date)}</td>
+        <td className={tdCell}><StatusPill order={o} /></td>
+        <td className={tdCell}>{fulfillmentLabel(o)}</td>
+        <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
+        <td className={tdCell}>{d?.prt_number ?? "—"}</td>
+        <td className={tdCell}>{d?.srt_number ?? "—"}</td>
+        <td className={tdCell}>{d?.doc_status ?? "—"}</td>
+        {canEdit ? (
+          <td className={tdCell}>
+            <button type="button" onClick={() => setEditing(o)} className="text-indigo-600 hover:underline dark:text-indigo-400">
+              {d ? "Edit" : "Add docs"}
+            </button>
+          </td>
+        ) : null}
+      </tr>
+    );
+  };
 
   return (
     <div>
@@ -185,65 +225,52 @@ function Content() {
       />
 
       {channels.length > 1 ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Channel:</span>
-          <button type="button" onClick={() => setChannel("all")} className={chip("all")}>All</button>
+          <button type="button" onClick={() => setChannel("all")} className={channelChipClass(channel === "all", "all")}>All</button>
           {channels.map((c) => (
-            <button key={c} type="button" onClick={() => setChannel(c)} className={chip(c)}>{c}</button>
+            <button key={c} type="button" onClick={() => setChannel(c)} className={channelChipClass(channel === c, c)}>{c}</button>
           ))}
         </div>
       ) : null}
 
-      <div className={`${tableWrap} max-h-[72vh] overflow-auto`}>
-        <table className="min-w-full text-sm">
-          <thead className="sticky top-0 z-10">
-            <tr>
-              <th className={thCell}>Order ID</th>
-              <th className={thCell}>Date</th>
-              <th className={thCell}>Status</th>
-              <th className={thCell}>Channel</th>
-              <th className={thCell}>Invoice</th>
-              <th className={thCell}>PRT</th>
-              <th className={thCell}>SRT</th>
-              <th className={thCell}>Return status</th>
-              {canEdit ? <th className={thCell}></th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className={tdCell} colSpan={canEdit ? 9 : 8}>Loading…</td></tr>
-            ) : shown.length === 0 ? (
-              <tr><td className={tdCell} colSpan={canEdit ? 9 : 8}>No Amazon orders yet — sync from the Amazon Seller Central page.</td></tr>
+      {loading ? (
+        <div className={`${surface} p-6 text-center text-sm text-slate-500`}>Loading…</div>
+      ) : shown.length === 0 ? (
+        <div className={`${surface} p-6 text-center text-sm text-slate-500`}>No Amazon orders yet — click <strong>Sync now</strong>.</div>
+      ) : (
+        <>
+          <section className="mb-6">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+              <span className="inline-block h-2 w-2 rounded-full bg-orange-500" /> Needs action — unfulfilled
+              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700 dark:bg-orange-950 dark:text-orange-300">{unfulfilled.length}</span>
+            </h2>
+            {unfulfilled.length === 0 ? (
+              <p className="text-sm text-slate-400">Nothing unfulfilled right now. 🎉</p>
             ) : (
-              shown.map((o) => {
-                const d = docs.get(o.amazon_order_id);
-                return (
-                  <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className={`${tdCell} font-medium`}>{o.amazon_order_id}</td>
-                    <td className={tdCell}>{fmt(o.purchase_date)}</td>
-                    <td className={tdCell}>{o.order_status ?? "—"}</td>
-                    <td className={tdCell}>{o.fulfillment_channel ?? "—"}</td>
-                    <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
-                    <td className={tdCell}>{d?.prt_number ?? "—"}</td>
-                    <td className={tdCell}>{d?.srt_number ?? "—"}</td>
-                    <td className={tdCell}>{d?.doc_status ?? "—"}</td>
-                    {canEdit ? (
-                      <td className={tdCell}>
-                        <button type="button" onClick={() => setEditing(o)} className="text-indigo-600 hover:underline dark:text-indigo-400">
-                          {d ? "Edit" : "Add docs"}
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                );
-              })
+              <div className={`${tableWrap} overflow-auto`}>
+                <table className="min-w-full text-sm">{head}<tbody>{unfulfilled.map(rowFor)}</tbody></table>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-xs text-slate-400">
+          </section>
+
+          <section>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Fulfilled &amp; closed
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{closed.length}</span>
+            </h2>
+            <div className={`${tableWrap} max-h-[60vh] overflow-auto`}>
+              <table className="min-w-full text-sm">
+                {head}
+                <tbody>{closed.length === 0 ? <tr><td className={tdCell} colSpan={colSpan}>None.</td></tr> : closed.map(rowFor)}</tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+
+      <p className="mt-3 text-xs text-slate-400">
         Amazon Seller + Flex orders, with return paperwork (invoice / PRT / SRT) {canEdit ? "you can edit here" : "maintained by Maricel"}.
-        Orders sync from the Amazon Seller Central page.
       </p>
 
       {editing ? (
