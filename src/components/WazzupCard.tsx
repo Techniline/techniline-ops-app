@@ -1,23 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { surface } from "@/components/ui";
 import { fetchWazzupStats, type WazzupStats } from "@/lib/wazzup";
 
-/** Dashboard "Chats" card — pending/unanswered chats, oldest waiting time, new
- *  today, and % replied within 15 min (team-wide, from Wazzup). Refreshes on
- *  mount and every 2 minutes. */
+const WAZZUP_URL = "https://crm.zoho.com/crm/org712284897/tab/WebTab1";
+
+/** Dashboard "Chats" card with prominent pending alerts: live browser-tab badge,
+ *  a toast + spoken voice alert when new chats arrive, and a pulsing red pending
+ *  tile. Works while the dashboard tab is open. Polls every 30s. */
 export function WazzupCard() {
   const [s, setS] = useState<WazzupStats | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  const prevPending = useRef<number | null>(null);
+  const baseTitle = useRef<string>("");
+
+  // restore mute pref + base title + notification permission on mount
+  useEffect(() => {
+    setMuted(localStorage.getItem("wz_muted") === "1");
+    baseTitle.current = document.title.replace(/^\(\d+\)\s*/, "");
+    if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
+    return () => {
+      document.title = baseTitle.current; // restore tab title when leaving
+    };
+  }, []);
+
+  function alertNewChats(count: number) {
+    setToast(`${count} new chat${count === 1 ? "" : "s"} waiting — reply within 15 min`);
+    window.setTimeout(() => setToast(null), 9000);
+    if (!muted) {
+      try {
+        const u = new SpeechSynthesisUtterance(count === 1 ? "New chat waiting, please reply" : `${count} new chats waiting, please reply`);
+        u.rate = 1; u.volume = 1;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      } catch { /* speech not available */ }
+    }
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try { new Notification("New chat waiting", { body: "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
+    }
+  }
 
   useEffect(() => {
     let alive = true;
-    const run = () => fetchWazzupStats().then((r) => { if (alive) setS(r); });
+    const run = () =>
+      fetchWazzupStats().then((r) => {
+        if (!alive) return;
+        setS(r);
+        // tab-title badge
+        document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
+        // new-chat alert when pending increases (skip the very first load)
+        if (prevPending.current != null && r.pendingChats > prevPending.current) {
+          alertNewChats(r.pendingChats - prevPending.current);
+        }
+        prevPending.current = r.pendingChats;
+      });
     void run();
-    const id = setInterval(run, 120_000);
+    const id = setInterval(run, 30_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted]);
+
+  function toggleMute() {
+    setMuted((m) => { localStorage.setItem("wz_muted", m ? "0" : "1"); return !m; });
+  }
+  async function enableAlerts() {
+    if (typeof Notification === "undefined") return;
+    const p = await Notification.requestPermission();
+    setNotifPerm(p);
+  }
 
   const tile = (label: string, value: string, tone: string, sub?: string) => (
     <div className="rounded-xl bg-white/70 p-3 dark:bg-slate-900/40">
@@ -27,23 +81,51 @@ export function WazzupCard() {
     </div>
   );
 
-  const pendingTone = (s?.pendingChats ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-slate-100";
+  const pending = s?.pendingChats ?? 0;
   const waitTone = (s?.oldestWaitingMin ?? 0) > 15 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-slate-100";
   const pctTone = s?.repliedPct == null ? "text-slate-400" : s.repliedPct >= 90 ? "text-emerald-600 dark:text-emerald-400" : s.repliedPct >= 70 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
 
   return (
     <section className={`${surface} mt-6 p-4`}>
+      <style>{`@keyframes wzpulse{0%{box-shadow:0 0 0 0 rgba(225,29,72,.5)}70%{box-shadow:0 0 0 10px rgba(225,29,72,0)}100%{box-shadow:0 0 0 0 rgba(225,29,72,0)}}`}</style>
+
+      {toast ? (
+        <div className="fixed right-4 top-4 z-[60] flex max-w-sm items-center gap-3 rounded-lg border border-rose-300 bg-white px-4 py-3 shadow-lg dark:border-rose-900 dark:bg-slate-900" style={{ borderLeftWidth: 3, borderLeftColor: "#e11d48" }}>
+          <span aria-hidden="true" className="text-xl">🔔</span>
+          <div className="text-sm">
+            <p className="font-medium text-slate-900 dark:text-slate-100">New chat waiting</p>
+            <p className="text-xs text-slate-500">{toast}</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Chats (WhatsApp / Wazzup)
         </h2>
-        <a href="https://crm.zoho.com/crm/org712284897/tab/WebTab1" target="_blank" rel="noreferrer" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">Open Wazzup →</a>
+        <div className="flex items-center gap-3 text-xs">
+          {notifPerm === "default" ? (
+            <button type="button" onClick={enableAlerts} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Enable pop-up alerts</button>
+          ) : null}
+          <button type="button" onClick={toggleMute} title={muted ? "Unmute voice alert" : "Mute voice alert"} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+            {muted ? "🔕 Muted" : "🔔 Sound on"}
+          </button>
+          <a href={WAZZUP_URL} target="_blank" rel="noreferrer" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Open Wazzup →</a>
+        </div>
       </div>
+
       {s === null ? (
         <p className="text-sm text-slate-400">Loading…</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {tile("Pending chats", String(s.pendingChats), pendingTone, "awaiting reply")}
+          <div
+            className={`rounded-xl p-3 ${pending > 0 ? "bg-rose-50 dark:bg-rose-950/40" : "bg-white/70 dark:bg-slate-900/40"}`}
+            style={pending > 0 ? { animation: "wzpulse 1.8s infinite" } : undefined}
+          >
+            <p className={`text-[11px] font-semibold uppercase tracking-wide ${pending > 0 ? "text-rose-600 dark:text-rose-300" : "text-slate-500"}`}>Pending chats</p>
+            <p className={`mt-1 text-2xl font-bold tabular-nums ${pending > 0 ? "text-rose-600 dark:text-rose-300" : "text-slate-900 dark:text-slate-100"}`}>{pending}</p>
+            <p className={`text-xs ${pending > 0 ? "text-rose-500" : "text-slate-400"}`}>awaiting reply</p>
+          </div>
           {tile("Oldest waiting", s.oldestWaitingMin ? `${s.oldestWaitingMin}m` : "—", waitTone, s.oldestWaitingMin > 15 ? "over 15 min" : "within SLA")}
           {tile("New today", String(s.newToday), "text-slate-900 dark:text-slate-100", "chats")}
           {tile("Replied <15 min", s.repliedPct == null ? "—" : `${s.repliedPct}%`, pctTone, s.repliedTotal ? `of ${s.repliedTotal} (7d)` : "no data yet")}
