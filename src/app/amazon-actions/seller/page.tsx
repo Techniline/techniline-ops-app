@@ -32,6 +32,15 @@ function money(n: number | null, ccy: string | null): string {
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** A merchant-fulfilled (MFN) order the seller still needs to ship. FBA (AFN) is
+ *  Amazon's to fulfill, so it's excluded. */
+function needsFulfillment(o: SellerOrderRow): boolean {
+  if ((o.fulfillment_channel ?? "").toUpperCase() !== "MFN") return false;
+  const st = (o.order_status ?? "").toLowerCase();
+  if (st === "shipped" || st.includes("cancel")) return false;
+  return (o.items_unshipped ?? 0) > 0;
+}
+
 function Content() {
   const { profile } = useAuth();
   const showOrders = canViewSellerOrders(profile);
@@ -40,6 +49,7 @@ function Content() {
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
   const [channel, setChannel] = useState<string>("all");
+  const [unfulfilledOnly, setUnfulfilledOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
@@ -187,6 +197,25 @@ function Content() {
               </div>
             );
           })()}
+          {(() => {
+            const inChannel = orders.filter((o) => channel === "all" || o.fulfillment_channel === channel);
+            const n = inChannel.filter(needsFulfillment).length;
+            if (n === 0) return null;
+            return (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                <span className="font-medium text-amber-800 dark:text-amber-300">
+                  ⚠ {n} order{n > 1 ? "s" : ""} need fulfillment (unshipped)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setUnfulfilledOnly((v) => !v)}
+                  className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                >
+                  {unfulfilledOnly ? "Show all orders" : "Show only these"}
+                </button>
+              </div>
+            );
+          })()}
           <div className={`${tableWrap} max-h-[70vh] overflow-auto`}>
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -203,19 +232,33 @@ function Content() {
             </thead>
             <tbody>
               {(() => {
-                const shown = orders.filter((o) => channel === "all" || o.fulfillment_channel === channel);
+                const shown = orders
+                  .filter((o) => channel === "all" || o.fulfillment_channel === channel)
+                  .filter((o) => !unfulfilledOnly || needsFulfillment(o))
+                  // Surface unfulfilled orders first so they don't get lost.
+                  .sort(
+                    (a, b) =>
+                      (needsFulfillment(b) ? 1 : 0) - (needsFulfillment(a) ? 1 : 0) ||
+                      (b.purchase_date ?? "").localeCompare(a.purchase_date ?? "")
+                  );
                 if (loading) return <tr><td className={tdCell} colSpan={8}>Loading…</td></tr>;
                 if (shown.length === 0)
                   return (
                     <tr><td className={tdCell} colSpan={8}>
-                      {orders.length === 0 ? <>No orders yet — click <strong>Sync now</strong>.</> : "No orders in this fulfillment channel."}
+                      {orders.length === 0 ? <>No orders yet — click <strong>Sync now</strong>.</> : "No matching orders."}
                     </td></tr>
                   );
                 return shown.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <tr key={r.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(r) ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
                     <td className={`${tdCell} font-medium`}>{r.amazon_order_id}</td>
                     <td className={tdCell}>{fmt(r.purchase_date)}</td>
-                    <td className={tdCell}>{r.order_status ?? "—"}</td>
+                    <td className={tdCell}>
+                      {needsFulfillment(r) ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">Unfulfilled</span>
+                      ) : (
+                        <span className="text-slate-600 dark:text-slate-300">{r.order_status ?? "—"}</span>
+                      )}
+                    </td>
                     <td className={tdCell}>{r.fulfillment_channel ?? "—"}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_shipped ?? "—"}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_unshipped ?? "—"}</td>
