@@ -254,20 +254,34 @@ export function parseAmazonReturns(bytes: Uint8Array): AmazonReturnRecord[] {
       const orderId = str(r[c.orderId]);
       if (!orderId) continue;
 
-      const returnDate = c.returnDate != null ? isoDate(r[c.returnDate]) : null;
+      // The "Amazon Retun date" column is free text: often an SRT number, a date,
+      // and/or a note (e.g. "SRT/2600102 04.02.2026", "SRT/2600023", "11.03.2026 RCD").
+      const retCell = c.returnDate != null ? str(r[c.returnDate]) : null;
       const prt = c.prt != null ? str(r[c.prt]) : null;
-      const srt = c.srt != null ? str(r[c.srt]) : null;
+      let srt = c.srt != null ? str(r[c.srt]) : null;
       const status = c.status != null ? str(r[c.status]) : null;
       const statusIsReturn = !!status && RETURN_STATUS_RE.test(status);
 
-      if (!returnDate && !prt && !srt && !statusIsReturn) continue; // not a return
+      // A row is a return if any return signal is present.
+      if (!retCell && !prt && !srt && !statusIsReturn) continue;
 
-      // Best-effort received date: explicit return date, else a date in the status note.
-      let received = returnDate;
+      // Pull a date + SRT number out of the free-text return cell (or status).
+      const textSrc = retCell ?? status ?? "";
+      const dm = textSrc.match(/(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})/);
+      let received = dm ? isoDate(dm[1]) : c.returnDate != null ? isoDate(r[c.returnDate]) : null;
       if (!received && status) {
-        const m = status.match(/(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})/);
-        if (m) received = isoDate(m[1]);
+        const sm2 = status.match(/(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})/);
+        if (sm2) received = isoDate(sm2[1]);
       }
+      if (!srt && retCell) {
+        const sm = retCell.match(/SRT[\s/_-]*\d+/i);
+        if (sm) srt = sm[0].replace(/\s+/g, "").toUpperCase();
+      }
+
+      // Keep the raw return-cell text as a note when it carries more than a bare date.
+      let note: string | null = statusIsReturn ? status : null;
+      const bareDate = /^\s*\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}\s*$/.test(retCell ?? "");
+      if (retCell && !bareDate) note = note ? `${note}; ${retCell}` : retCell;
 
       out.push({
         channel: RETURN_CHANNEL[kind],
@@ -278,7 +292,7 @@ export function parseAmazonReturns(bytes: Uint8Array): AmazonReturnRecord[] {
         prt,
         srt,
         tracking: c.tracking != null ? str(r[c.tracking]) : null,
-        note: statusIsReturn ? status : null,
+        note,
       });
     }
   }
