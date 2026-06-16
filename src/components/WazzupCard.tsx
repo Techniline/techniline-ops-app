@@ -84,6 +84,21 @@ export function WazzupCard() {
     try { await applyRef.current(); } finally { setRefreshing(false); }
   }
 
+  // Explicit test — always shows the toast and speaks (the click satisfies the
+  // browser's audio-gesture requirement), regardless of the mute toggle.
+  function testAlert() {
+    setToast("Test customer · reply within 15 min");
+    window.setTimeout(() => setToast(null), 9000);
+    try {
+      const u = new SpeechSynthesisUtterance("New chat waiting from test customer, please reply");
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch { /* speech not available */ }
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try { new Notification("New chat waiting", { body: "Test customer · reply within 15 min", tag: "wazzup-test" }); } catch { /* ignore */ }
+    }
+  }
+
   function toggleMute() {
     setMuted((m) => { localStorage.setItem("wz_muted", m ? "0" : "1"); return !m; });
   }
@@ -124,6 +139,7 @@ export function WazzupCard() {
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Chats (WhatsApp / Wazzup)
         </h2>
         <div className="flex items-center gap-3 text-xs">
+          <button type="button" onClick={testAlert} title="Play a test alert" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">🔊 Test</button>
           <button type="button" onClick={refreshNow} disabled={refreshing} title="Refresh now" className="font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:hover:text-slate-300">
             {refreshing ? "Refreshing…" : "↻ Refresh"}
           </button>
