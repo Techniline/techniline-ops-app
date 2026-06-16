@@ -87,6 +87,7 @@ const CARRIERS = [
   { value: "techniline", label: "Techniline", color: "#0e8c99" },
   { value: "max", label: "MAX Express", color: "#e2231a" },
   { value: "porter", label: "Porter", color: "#0445da" },
+  { value: "lalamove", label: "Lalamove", color: "#f16622" },
 ] as const;
 const CARRIER_BY: Record<string, { value: string; label: string; color: string }> = Object.fromEntries(
   CARRIERS.map((c) => [c.value, c])
@@ -102,6 +103,9 @@ function CarrierMark({ value }: { value: string }) {
   }
   if (value === "techniline") {
     return <span className="font-semibold">Techniline</span>;
+  }
+  if (value === "lalamove") {
+    return <span className="font-semibold">Lalamove</span>;
   }
   return <>{value}</>;
 }
