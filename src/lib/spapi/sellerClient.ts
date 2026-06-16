@@ -214,14 +214,16 @@ interface RawOrder {
   OrderTotal?: { Amount?: string; CurrencyCode?: string };
 }
 
-/** Pull orders updated since `lastUpdatedAfter` (catches status changes), paged.
- *  The Orders API is heavily rate-limited (~1 req/min), so we cap pages. */
-export async function fetchSellerOrders(lastUpdatedAfter: string): Promise<SellerOrder[]> {
+/** Pull orders CREATED since `createdAfter`, paged. Querying by created date (vs
+ *  last-updated) ensures Pending-payment and older orders aren't missed. Orders
+ *  API returns all statuses including Pending. Heavily rate-limited (~1 req/min),
+ *  so we cap pages. */
+export async function fetchSellerOrders(createdAfter: string): Promise<SellerOrder[]> {
   const out: SellerOrder[] = [];
   let nextToken: string | undefined;
   let pages = 0;
   do {
-    const qs = new URLSearchParams({ MarketplaceIds: sellerMarketplaceIds().join(","), LastUpdatedAfter: lastUpdatedAfter });
+    const qs = new URLSearchParams({ MarketplaceIds: sellerMarketplaceIds().join(","), CreatedAfter: createdAfter });
     if (nextToken) qs.set("NextToken", nextToken);
     const j = await sellerJson<{ payload?: { Orders?: RawOrder[]; NextToken?: string } }>(`/orders/v0/orders?${qs}`);
     for (const o of j.payload?.Orders ?? []) {

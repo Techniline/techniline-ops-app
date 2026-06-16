@@ -44,6 +44,10 @@ async function runSync(url: string, service: string): Promise<Response> {
     ? new Date(new Date(last).getTime() - 24 * 3600 * 1000).toISOString()
     : new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
 
+  // Orders: always re-pull a rolling window by created date so Pending-payment
+  // and older orders are never missed (cheap at this volume; upsert dedupes).
+  const ordersCreatedAfter = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+
   const nowIso = new Date().toISOString();
   const result: { finance: number; orders: number; warnings: string[] } = {
     finance: 0,
@@ -78,7 +82,7 @@ async function runSync(url: string, service: string): Promise<Response> {
 
   // Orders — live order tracking / fulfillment (Orders API)
   try {
-    const orders = await fetchSellerOrders(startedAfter);
+    const orders = await fetchSellerOrders(ordersCreatedAfter);
     if (orders.length) {
       const rows = orders.map((o) => ({
         amazon_order_id: o.amazonOrderId,

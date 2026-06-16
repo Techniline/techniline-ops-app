@@ -7,19 +7,22 @@ import { LogisticsShell } from "@/components/logistics/LogisticsShell";
 import { StatusPill, channelChipClass } from "@/components/SellerOrderUi";
 import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import { isManager } from "@/lib/permissions";
+import { fetchUserNames } from "@/lib/checklist";
 import {
+  fetchSellerOrderDocLog,
   fetchSellerOrderDocs,
   fetchSellerOrders,
   fulfillmentLabel,
   needsFulfillment,
   syncSeller,
   updateSellerOrderDoc,
+  type SellerOrderDocLogRow,
   type SellerOrderDocRow,
   type SellerOrderRow,
 } from "@/lib/spapi/seller";
 
-/** Maricel owns the return documentation; managers can edit too. */
-const MARICEL_UID = "227fdb27-80b5-4040-ab14-4bb945068af7";
+/** Who can edit return docs (besides managers): Maricel + Kesh. */
+const DOC_EDITOR_UIDS = ["227fdb27-80b5-4040-ab14-4bb945068af7", "4f0eaff3-3ce3-44de-8ed9-aa84246fc538"];
 const DOC_STATUSES = ["", "Pending", "Invoiced", "PRT raised", "SRT raised", "Closed"] as const;
 
 function fmt(iso: string | null): string {
@@ -43,20 +46,42 @@ function DocModal({
   const [srt, setSrt] = useState(doc?.srt_number ?? "");
   const [status, setStatus] = useState(doc?.doc_status ?? "");
   const [note, setNote] = useState(doc?.return_note ?? "");
+  const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [log, setLog] = useState<SellerOrderDocLogRow[]>([]);
+  const [names, setNames] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([fetchSellerOrderDocLog(order.amazon_order_id), fetchUserNames()]).then(([l, n]) => {
+      if (alive) {
+        setLog(l);
+        setNames(n);
+      }
+    });
+    return () => { alive = false; };
+  }, [order.amazon_order_id]);
 
   async function save() {
+    if (!comment.trim()) {
+      setErr("Add a short comment describing this change (for the edit history).");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
-      const row = await updateSellerOrderDoc(order.amazon_order_id, {
-        invoice_number: invoice || null,
-        prt_number: prt || null,
-        srt_number: srt || null,
-        doc_status: status || null,
-        return_note: note || null,
-      });
+      const row = await updateSellerOrderDoc(
+        order.amazon_order_id,
+        {
+          invoice_number: invoice || null,
+          prt_number: prt || null,
+          srt_number: srt || null,
+          doc_status: status || null,
+          return_note: note || null,
+        },
+        comment.trim()
+      );
       onSaved(row);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed.");
@@ -98,9 +123,29 @@ function DocModal({
           </label>
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
-            <textarea className={`${inputClass} w-full`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+            <textarea className={`${inputClass} w-full`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Comment for this change (required)</span>
+            <input className={`${inputClass} w-full`} placeholder="e.g. Added invoice INV-2601706 from ledger" value={comment} onChange={(e) => setComment(e.target.value)} />
           </label>
           {err ? <div className="sm:col-span-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+
+          {log.length > 0 ? (
+            <div className="sm:col-span-2">
+              <p className="mb-1 text-xs font-medium text-slate-500">Edit history</p>
+              <ul className="max-h-40 space-y-1.5 overflow-auto rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800">
+                {log.map((e) => (
+                  <li key={e.id} className="text-slate-600 dark:text-slate-300">
+                    <span className="text-slate-400">{new Date(e.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    {" · "}
+                    <span className="font-medium">{names.get(e.changed_by ?? "") ?? "—"}</span>
+                    {e.comment ? <> — {e.comment}</> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
           <button type="button" onClick={onClose} className={btnSecondary} disabled={saving}>Close</button>
@@ -113,7 +158,7 @@ function DocModal({
 
 function Content() {
   const { profile } = useAuth();
-  const canEdit = isManager(profile) || profile?.id === MARICEL_UID;
+  const canEdit = isManager(profile) || DOC_EDITOR_UIDS.includes(profile?.id ?? "");
 
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
   const [docs, setDocs] = useState<Map<string, SellerOrderDocRow>>(new Map());

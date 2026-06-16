@@ -60,7 +60,13 @@ export interface SellerOrderDocPatch {
   doc_status?: string | null;
 }
 
-export async function updateSellerOrderDoc(amazonOrderId: string, patch: SellerOrderDocPatch): Promise<SellerOrderDocRow> {
+export type SellerOrderDocLogRow = Tables<"seller_order_doc_log">;
+
+export async function updateSellerOrderDoc(
+  amazonOrderId: string,
+  patch: SellerOrderDocPatch,
+  comment?: string
+): Promise<SellerOrderDocRow> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -69,11 +75,23 @@ export async function updateSellerOrderDoc(amazonOrderId: string, patch: SellerO
   const res = await fetch("/api/spapi/seller-order-doc", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ amazon_order_id: amazonOrderId, ...patch }),
+    body: JSON.stringify({ amazon_order_id: amazonOrderId, ...patch, comment }),
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; row?: SellerOrderDocRow };
   if (!res.ok || !j.ok || !j.row) throw new Error(j.error ?? `HTTP ${res.status}`);
   return j.row;
+}
+
+/** Edit history for one order's return docs, newest first. */
+export async function fetchSellerOrderDocLog(amazonOrderId: string): Promise<SellerOrderDocLogRow[]> {
+  const { data, error } = await supabase
+    .from("seller_order_doc_log")
+    .select("*")
+    .eq("amazon_order_id", amazonOrderId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return [];
+  return data ?? [];
 }
 
 export async function sellerLastSync(): Promise<string | null> {

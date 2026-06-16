@@ -48,7 +48,22 @@ create table if not exists public.seller_orders (
 create index if not exists seller_ord_date_idx on public.seller_orders (purchase_date desc);
 create index if not exists seller_ord_status_idx on public.seller_orders (order_status);
 
--- ── Return documentation (Maricel: invoice / PRT / SRT per Amazon order) ────
+-- ── Return-doc edit log (audit trail of who changed what, with a comment) ───
+create table if not exists public.seller_order_doc_log (
+  id uuid primary key default gen_random_uuid(),
+  amazon_order_id text not null,
+  changed_by uuid,
+  comment text,
+  invoice_number text,
+  prt_number text,
+  srt_number text,
+  doc_status text,
+  return_note text,
+  created_at timestamptz not null default now()
+);
+create index if not exists seller_doc_log_order_idx on public.seller_order_doc_log (amazon_order_id, created_at desc);
+
+-- ── Return documentation (invoice / PRT / SRT per Amazon order) ─────────────
 create table if not exists public.seller_order_docs (
   id uuid primary key default gen_random_uuid(),
   amazon_order_id text not null unique,
@@ -93,7 +108,15 @@ create index if not exists seller_ret_order_idx on public.seller_returns (order_
 alter table public.seller_finance_groups enable row level security;
 alter table public.seller_orders enable row level security;
 alter table public.seller_order_docs enable row level security;
+alter table public.seller_order_doc_log enable row level security;
 alter table public.seller_returns enable row level security;
+
+-- Doc edit log: readable by the same people who manage docs (Kesh/Maricel/mgrs)
+drop policy if exists seller_doc_log_read on public.seller_order_doc_log;
+create policy seller_doc_log_read on public.seller_order_doc_log for select to authenticated
+  using (public.current_user_role() in ('manager','admin','logistics')
+         or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
+         or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
 
 -- Orders: Aaron + Maricel + Kesh (warehouse) + managers
 drop policy if exists seller_ord_read on public.seller_orders;

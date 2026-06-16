@@ -2694,6 +2694,45 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_order_doc_log: {
+        Row: {
+          amazon_order_id: string
+          changed_by: string | null
+          comment: string | null
+          created_at: string
+          doc_status: string | null
+          id: string
+          invoice_number: string | null
+          prt_number: string | null
+          return_note: string | null
+          srt_number: string | null
+        }
+        Insert: {
+          amazon_order_id: string
+          changed_by?: string | null
+          comment?: string | null
+          created_at?: string
+          doc_status?: string | null
+          id?: string
+          invoice_number?: string | null
+          prt_number?: string | null
+          return_note?: string | null
+          srt_number?: string | null
+        }
+        Update: {
+          amazon_order_id?: string
+          changed_by?: string | null
+          comment?: string | null
+          created_at?: string
+          doc_status?: string | null
+          id?: string
+          invoice_number?: string | null
+          prt_number?: string | null
+          return_note?: string | null
+          srt_number?: string | null
+        }
+        Relationships: []
+      }
       seller_order_docs: {
         Row: {
           amazon_order_id: string

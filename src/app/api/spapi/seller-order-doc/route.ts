@@ -6,8 +6,12 @@ import type { UserProfile } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Maricel — owns Amazon return documentation (invoice / PRT / SRT). */
-const MARICEL_UID = "227fdb27-80b5-4040-ab14-4bb945068af7";
+/** Users allowed to edit Amazon return documentation (beyond managers): Maricel
+ *  and Kesh. */
+const DOC_EDITORS = new Set([
+  "227fdb27-80b5-4040-ab14-4bb945068af7", // Maricel
+  "4f0eaff3-3ce3-44de-8ed9-aa84246fc538", // Kesh
+]);
 
 function clean(v: unknown): string | null {
   if (v == null) return null;
@@ -33,29 +37,36 @@ export async function POST(request: Request): Promise<Response> {
   const svc = createClient(url, service, { auth: { persistSession: false } });
   const { data: row } = await svc.from("users").select("role").eq("id", u.user.id).maybeSingle();
   const profile = { id: u.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  if (!(isManager(profile) || u.user.id === MARICEL_UID)) {
-    return Response.json({ ok: false, error: "Forbidden — return documentation is managed by Maricel." }, { status: 403 });
+  if (!(isManager(profile) || DOC_EDITORS.has(u.user.id))) {
+    return Response.json({ ok: false, error: "Forbidden — you can't edit return documentation." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const amazonOrderId = clean(body.amazon_order_id);
   if (!amazonOrderId) return Response.json({ ok: false, error: "Missing order id." }, { status: 400 });
 
-  const patch = {
-    amazon_order_id: amazonOrderId,
+  const fields = {
     invoice_number: clean(body.invoice_number),
     prt_number: clean(body.prt_number),
     srt_number: clean(body.srt_number),
     return_note: clean(body.return_note),
     doc_status: clean(body.doc_status),
-    updated_by: u.user.id,
-    updated_at: new Date().toISOString(),
   };
+  const patch = { amazon_order_id: amazonOrderId, ...fields, updated_by: u.user.id, updated_at: new Date().toISOString() };
   const { data, error } = await svc
     .from("seller_order_docs")
     .upsert(patch as never, { onConflict: "amazon_order_id" })
     .select("*")
     .maybeSingle();
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+
+  // Append an audit-log entry (who changed what, with their comment + a snapshot).
+  await svc.from("seller_order_doc_log").insert({
+    amazon_order_id: amazonOrderId,
+    changed_by: u.user.id,
+    comment: clean(body.comment),
+    ...fields,
+  } as never);
+
   return Response.json({ ok: true, row: data });
 }
