@@ -23,6 +23,30 @@ function direction(m: WzMsg): "inbound" | "outbound" {
   return m.status === "inbound" ? "inbound" : "outbound";
 }
 
+/** Secret-guarded diagnostics: GET ?secret=…&debug=1 → counts + latest rows. */
+export async function GET(request: Request): Promise<Response> {
+  const sp = new URL(request.url).searchParams;
+  if (!process.env.WAZZUP_WEBHOOK_SECRET || sp.get("secret") !== process.env.WAZZUP_WEBHOOK_SECRET) {
+    return Response.json({ ok: false }, { status: 401 });
+  }
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !service) return Response.json({ ok: false, error: "db" });
+  const svc = createClient(url, service, { auth: { persistSession: false } });
+  const { count } = await svc.from("wazzup_messages").select("*", { count: "exact", head: true });
+  const { data: recent } = await svc
+    .from("wazzup_messages")
+    .select("direction, contact_name, message_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const { count: pending } = await svc
+    .from("wazzup_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("direction", "inbound")
+    .is("response_minutes", null);
+  return Response.json({ ok: true, total: count ?? 0, pendingInbound: pending ?? 0, recent: recent ?? [] });
+}
+
 export async function POST(request: Request): Promise<Response> {
   const secret = new URL(request.url).searchParams.get("secret");
   if (!process.env.WAZZUP_WEBHOOK_SECRET || secret !== process.env.WAZZUP_WEBHOOK_SECRET) {

@@ -17,7 +17,6 @@ export function WazzupCard() {
   const [toast, setToast] = useState<string | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">("unsupported");
   const [refreshing, setRefreshing] = useState(false);
-  const prevPending = useRef<number | null>(null);
   const baseTitle = useRef<string>("");
 
   // restore mute pref + base title + notification permission on mount
@@ -33,7 +32,6 @@ export function WazzupCard() {
   // Latest-closure alert (captures current `muted`): toast + voice + OS popup,
   // with the customer's name when we have it.
   const notifyRef = useRef<(name?: string | null) => void>(() => {});
-  const lastRtAlert = useRef(0);
   useEffect(() => {
     notifyRef.current = (name) => {
       setToast(name ? `${name} · reply within 15 min` : "Reply within 15 min");
@@ -51,46 +49,34 @@ export function WazzupCard() {
     };
   });
 
-  // Refresh the displayed numbers + tab-title badge (no alert here).
+  // Refresh numbers + tab badge, and alert (by name) when a brand-new inbound
+  // chat appears — driven by the data, so it works with or without realtime.
+  const prevNewestAt = useRef<string | null>(null);
   const applyRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     applyRef.current = async () => {
       const r = await fetchWazzupStats();
       setS(r);
       document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
-      prevPending.current = r.pendingChats;
+      const ni = r.newestInbound;
+      if (ni?.at) {
+        if (prevNewestAt.current != null && ni.at > prevNewestAt.current && !ni.answered) {
+          notifyRef.current(ni.name);
+        }
+        prevNewestAt.current = ni.at;
+      }
     };
   });
 
-  // Realtime: a new message pushes in ~1s — alert by customer name on inbound.
+  // Fast poll (every 15s) — primary mechanism. Realtime is a bonus nudge on top.
   useEffect(() => {
+    void applyRef.current();
+    const id = setInterval(() => void applyRef.current(), 15_000);
     const ch = supabase
       .channel("wazzup_live")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wazzup_messages" }, (payload) => {
-        const row = payload.new as { direction?: string; contact_name?: string | null };
-        void applyRef.current();
-        if (row?.direction === "inbound") {
-          lastRtAlert.current = Date.now();
-          notifyRef.current(row.contact_name ?? null);
-        }
-      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wazzup_messages" }, () => void applyRef.current())
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, []);
-
-  // Fallback poll — refresh, and a generic alert only if realtime didn't just fire.
-  useEffect(() => {
-    const tick = async () => {
-      const before = prevPending.current;
-      await applyRef.current();
-      const after = prevPending.current;
-      if (before != null && after != null && after > before && Date.now() - lastRtAlert.current > 15_000) {
-        notifyRef.current(null);
-      }
-    };
-    void tick();
-    const id = setInterval(() => void tick(), 30_000);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); void supabase.removeChannel(ch); };
   }, []);
 
   async function refreshNow() {

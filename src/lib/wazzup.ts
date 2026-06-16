@@ -6,12 +6,13 @@ export interface WazzupStats {
   newToday: number;
   repliedPct: number | null;
   repliedTotal: number;
+  newestInbound: { name: string | null; at: string | null; answered: boolean } | null;
 }
 
 /** Dashboard stats derived from the synced Wazzup message stream. Fail-soft:
  *  returns zeros if the table/data isn't there yet. */
 export async function fetchWazzupStats(): Promise<WazzupStats> {
-  const empty: WazzupStats = { pendingChats: 0, oldestWaitingMin: 0, newToday: 0, repliedPct: null, repliedTotal: 0 };
+  const empty: WazzupStats = { pendingChats: 0, oldestWaitingMin: 0, newToday: 0, repliedPct: null, repliedTotal: 0, newestInbound: null };
   try {
     // Pending = inbound messages with no reply yet (any age).
     const { data: pend } = await supabase
@@ -52,7 +53,17 @@ export async function fetchWazzupStats(): Promise<WazzupStats> {
       .limit(2000);
     const newToday = new Set((todayRows ?? []).map((r) => r.chat_id).filter(Boolean) as string[]).size;
 
-    return { pendingChats: chats.size, oldestWaitingMin, newToday, repliedPct, repliedTotal };
+    // Newest inbound message (to detect a brand-new chat + show who it's from).
+    const { data: latest } = await supabase
+      .from("wazzup_messages")
+      .select("contact_name, message_at, response_minutes")
+      .eq("direction", "inbound")
+      .order("message_at", { ascending: false })
+      .limit(1);
+    const li = latest?.[0];
+    const newestInbound = li ? { name: li.contact_name, at: li.message_at, answered: li.response_minutes != null } : null;
+
+    return { pendingChats: chats.size, oldestWaitingMin, newToday, repliedPct, repliedTotal, newestInbound };
   } catch {
     return empty;
   }
