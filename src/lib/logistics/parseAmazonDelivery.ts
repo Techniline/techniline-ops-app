@@ -188,3 +188,100 @@ export function parseAmazonDelivery(bytes: Uint8Array): AmazonDeliveryParse {
 
   return { records: [...byOrder.values()], rowsBySheet };
 }
+
+/** One return row to log into marketplace_returns. */
+export interface AmazonReturnRecord {
+  channel: string; // marketplace_returns channel value
+  orderId: string;
+  sku: string | null;
+  qty: number | null;
+  receivedDate: string | null;
+  prt: string | null;
+  srt: string | null;
+  tracking: string | null;
+  note: string | null;
+}
+
+/** marketplace_returns channel for each sheet kind. */
+const RETURN_CHANNEL: Record<AmazonDeliveryRecord["sheet"], string> = {
+  easy_ship: "amazon_easy_ship",
+  self_ship: "amazon_self_ship",
+  amazon_df: "amazon_df",
+};
+
+const RETURN_STATUS_RE = /cancel|return|recd|received|w\/h|warehous/i;
+
+/**
+ * Extract the RETURN rows from the delivery workbook (one record per item-row
+ * that has a return signal: a return date, a PRT/SRT number, or a status that
+ * mentions cancel/return/received-in-warehouse). Each is channelled by its sheet.
+ */
+export function parseAmazonReturns(bytes: Uint8Array): AmazonReturnRecord[] {
+  const wb = XLSX.read(bytes, { type: "array" });
+  const out: AmazonReturnRecord[] = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const kind = sheetKind(sheetName);
+    if (!kind) continue;
+    const ws = wb.Sheets[sheetName];
+    if (!ws) continue;
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false });
+
+    // Locate header + column indices.
+    let headerIdx = -1;
+    const c: Record<string, number> = {};
+    for (let i = 0; i < rows.length; i++) {
+      const labels = (rows[i] ?? []).map(norm);
+      if (labels.some((l) => l.includes("oder id") || l.includes("order id"))) {
+        headerIdx = i;
+        labels.forEach((label, idx) => {
+          if (label.includes("oder id") || label.includes("order id")) c.orderId = idx;
+          else if (label.includes("item code")) c.sku = idx;
+          else if (label === "qta" || label === "qty") c.qty = idx;
+          else if (label.includes("retun") || label.includes("return")) c.returnDate = idx;
+          else if (label === "prt") c.prt = idx;
+          else if (label === "srt") c.srt = idx;
+          else if (label.includes("tracking")) c.tracking = idx;
+          else if (label.includes("delivery status")) c.status = idx;
+        });
+        break;
+      }
+    }
+    if (headerIdx < 0 || c.orderId == null) continue;
+
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i] ?? [];
+      const orderId = str(r[c.orderId]);
+      if (!orderId) continue;
+
+      const returnDate = c.returnDate != null ? isoDate(r[c.returnDate]) : null;
+      const prt = c.prt != null ? str(r[c.prt]) : null;
+      const srt = c.srt != null ? str(r[c.srt]) : null;
+      const status = c.status != null ? str(r[c.status]) : null;
+      const statusIsReturn = !!status && RETURN_STATUS_RE.test(status);
+
+      if (!returnDate && !prt && !srt && !statusIsReturn) continue; // not a return
+
+      // Best-effort received date: explicit return date, else a date in the status note.
+      let received = returnDate;
+      if (!received && status) {
+        const m = status.match(/(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})/);
+        if (m) received = isoDate(m[1]);
+      }
+
+      out.push({
+        channel: RETURN_CHANNEL[kind],
+        orderId,
+        sku: c.sku != null ? str(r[c.sku]) : null,
+        qty: c.qty != null ? num(r[c.qty]) : null,
+        receivedDate: received,
+        prt,
+        srt,
+        tracking: c.tracking != null ? str(r[c.tracking]) : null,
+        note: statusIsReturn ? status : null,
+      });
+    }
+  }
+
+  return out;
+}

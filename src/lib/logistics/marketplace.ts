@@ -32,6 +32,8 @@ export function itemCount(r: Pick<ReturnRow, "items">): number {
 export const CHANNELS: { value: string; label: string }[] = [
   { value: "amazon_df", label: "Amazon DF" },
   { value: "amazon_seller", label: "Amazon Seller" },
+  { value: "amazon_easy_ship", label: "Amazon Easy Ship" },
+  { value: "amazon_self_ship", label: "Amazon Self Ship" },
   { value: "amazon_flex", label: "Amazon Flex" },
   { value: "noon", label: "Noon" },
   { value: "cocoblu", label: "Cocoblu" },
@@ -127,6 +129,37 @@ export async function saveReturnDocs(id: string, patch: Partial<ReturnRow>): Pro
     .update({ ...patch, documented_by: me, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+export interface ReturnImportSummary {
+  returnRows: number;
+  byChannel: Record<string, number>;
+  willInsert: number;
+  alreadyExists: number;
+  sample: { channel: string; order_ref: string; sku: string | null; received_date: string | null }[];
+}
+
+/** Upload the Amazon delivery list and preview (apply=false) or log (apply=true)
+ *  its return rows into marketplace_returns, channelled by sheet. */
+export async function importAmazonReturns(
+  file: File,
+  apply: boolean
+): Promise<{ dryRun: boolean; inserted?: number; summary: ReturnImportSummary }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/logistics/import-amazon-returns?apply=${apply ? "1" : "0"}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+  return { dryRun: !!j.dryRun, inserted: j.inserted as number | undefined, summary: j.summary as ReturnImportSummary };
 }
 
 export async function deleteReturn(id: string): Promise<void> {

@@ -15,18 +15,89 @@ import {
   RETURN_REASONS,
   deleteReturn,
   fetchReturns,
+  importAmazonReturns,
   itemCount,
   notifyReturnLogged,
   readItems,
   rLabel,
   saveReturn,
   type ReturnFilters,
+  type ReturnImportSummary,
   type ReturnItem,
   type ReturnRow,
 } from "@/lib/logistics/marketplace";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
+}
+
+function ImportReturnsModal({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ReturnImportSummary | null>(null);
+  const [done, setDone] = useState<number | null>(null);
+
+  async function run(apply: boolean) {
+    if (!file) { setErr("Choose the Amazon delivery list (.xlsx) first."); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await importAmazonReturns(file, apply);
+      setSummary(r.summary);
+      if (apply) { setDone(r.inserted ?? 0); onApplied(); }
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+      <div className={`${surface} w-full max-w-lg`}>
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import returns from delivery list</h2>
+            <p className="text-xs text-slate-500">Logs return rows (return date / PRT / SRT / cancelled) channelled by sheet, as closed historical records.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setSummary(null); setDone(null); }}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-slate-300 dark:file:bg-slate-800"
+          />
+          {err ? <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+
+          {summary ? (
+            <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+              <div className="grid grid-cols-2 gap-y-1">
+                <span className="text-slate-500">Return rows found</span><span className="text-right font-medium">{summary.returnRows}</span>
+                <span className="text-slate-500">{done == null ? "Will log" : "Logged"}</span><span className="text-right font-medium text-emerald-600">{done ?? summary.willInsert}</span>
+                <span className="text-slate-500">Already logged (skipped)</span><span className="text-right font-medium text-amber-600">{summary.alreadyExists}</span>
+              </div>
+              {Object.keys(summary.byChannel).length ? (
+                <p className="mt-2 text-xs text-slate-400">By channel: {Object.entries(summary.byChannel).map(([k, v]) => `${rLabel(CHANNELS, k)} ${v}`).join(" · ")}</p>
+              ) : null}
+              {done != null ? <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">✓ Logged {done} return(s).</p> : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <button type="button" onClick={onClose} className={btnSecondary} disabled={busy}>Close</button>
+          {done == null ? (
+            <>
+              <button type="button" onClick={() => run(false)} className={btnSecondary} disabled={busy || !file}>{busy ? "Working…" : "Preview"}</button>
+              <button type="button" onClick={() => run(true)} className={btnPrimary} disabled={busy || !summary || summary.willInsert === 0}>{busy ? "Working…" : `Apply${summary ? ` (${summary.willInsert})` : ""}`}</button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type Draft = Partial<ReturnRow>;
@@ -52,6 +123,7 @@ export default function MarketplaceReturnsPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [products, setProducts] = useState<ReturnItem[]>([{ ...EMPTY_ITEM }]);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -176,11 +248,20 @@ export default function MarketplaceReturnsPage() {
       page="marketplace"
       wide
       actions={
-        <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
-          + Log return
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className={btnSecondary} onClick={() => setImporting(true)}>
+            Import from delivery list
+          </button>
+          <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
+            + Log return
+          </button>
+        </div>
       }
     >
+      {importing ? (
+        <ImportReturnsModal onClose={() => setImporting(false)} onApplied={() => void load()} />
+      ) : null}
+
       {msg ? (
         <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div>
       ) : null}
