@@ -89,20 +89,43 @@ export function Sidebar({
   // A dedicated logistics user sees ONLY the Logistics portal — nothing else.
   const logisticsOnly = isLogisticsOnly(profile);
 
-  // General (non-logistics) items, gated by capability.
-  const generalItems: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
-    { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
-    { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
-    { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },
-    { href: "/cocoblu", label: "Cocoblu", icon: CocobluIcon, show: canViewCocoblu(profile) },
-    { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
-    { href: "/amazon-actions", label: "Amazon Actions", icon: ActionsIcon, show: canViewFinance(profile) },
-    { href: "/amazon-actions/seller", label: "Amazon Seller Central", icon: ShopifyIcon, show: canViewSellerCentral(profile) },
-    { href: "/returns", label: "Returns & Disputes (Finance)", icon: ReturnsIcon, show: canViewFinance(profile) },
-    { href: "/vendor-orders", label: "Vendor POs", icon: ShopifyIcon, show: canViewFinance(profile) },
-    { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
-  ].filter((i) => i.show);
+  // General (non-logistics) items, grouped into categories and gated by capability.
+  const generalSectionsRaw: NavSection[] = [
+    {
+      heading: "Overview",
+      items: [
+        { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
+        { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
+      ],
+    },
+    {
+      heading: "Daily",
+      items: [
+        { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
+        { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
+        { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },
+      ],
+    },
+    {
+      heading: "Amazon & Finance",
+      items: [
+        { href: "/amazon-actions", label: "Amazon Actions", icon: ActionsIcon, show: canViewFinance(profile) },
+        { href: "/amazon-actions/seller", label: "Amazon Seller Central", icon: ShopifyIcon, show: canViewSellerCentral(profile) },
+        { href: "/returns", label: "Returns & Disputes (Finance)", icon: ReturnsIcon, show: canViewFinance(profile) },
+        { href: "/vendor-orders", label: "Vendor POs", icon: ShopifyIcon, show: canViewFinance(profile) },
+      ],
+    },
+    {
+      heading: "Inventory",
+      items: [
+        { href: "/cocoblu", label: "Cocoblu", icon: CocobluIcon, show: canViewCocoblu(profile) },
+        { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
+      ],
+    },
+  ];
+  const generalSections: NavSection[] = generalSectionsRaw
+    .map((s) => ({ ...s, items: s.items.filter((i) => i.show !== false) }))
+    .filter((s) => s.items.length > 0);
 
   // Logistics portal — categorized into channels / deliveries / operations /
   // marketplace. Each item is filtered by the user's per-page grant so partial-
@@ -144,7 +167,7 @@ export function Sidebar({
   // Assemble the sections to render.
   const sections: NavSection[] = logisticsOnly
     ? logisticsSections
-    : [{ heading: "Menu", items: generalItems }, ...(canViewLogistics(profile) ? logisticsSections : [])];
+    : [...generalSections, ...(canViewLogistics(profile) ? logisticsSections : [])];
 
   async function handleSignOut() {
     setSigningOut(true);
