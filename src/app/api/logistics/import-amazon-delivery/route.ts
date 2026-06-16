@@ -128,11 +128,21 @@ export async function POST(request: Request): Promise<Response> {
 
   const nowIso = new Date().toISOString();
   let written = 0;
+  let firstError: string | null = null;
   for (const p of toWrite) {
     const { error } = await svc
       .from("seller_order_docs")
       .upsert({ ...p, updated_by: auth.uid, updated_at: nowIso } as never, { onConflict: "amazon_order_id" });
     if (!error) written += 1;
+    else if (!firstError) firstError = error.message;
+  }
+
+  // If nothing wrote (e.g. the migration columns don't exist yet), surface why.
+  if (written === 0 && firstError) {
+    return Response.json(
+      { ok: false, error: `Write failed: ${firstError}. If this mentions a missing column, run RUN-PENDING-SQL.sql (section G) in Supabase first.` },
+      { status: 500 }
+    );
   }
 
   await svc.from("logistics_activity_logs").insert({
