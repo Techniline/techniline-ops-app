@@ -2268,11 +2268,13 @@ export type Database = {
       reseller_deliveries: {
         Row: {
           city: string | null
+          collected_by: string | null
           contact_person: string | null
           courier: string | null
           created_at: string
           created_by: string | null
           delivery_address: string | null
+          fulfillment_type: string | null
           dispatch_date: string | null
           id: string
           items_summary: string | null
@@ -2297,11 +2299,13 @@ export type Database = {
         }
         Insert: {
           city?: string | null
+          collected_by?: string | null
           contact_person?: string | null
           courier?: string | null
           created_at?: string
           created_by?: string | null
           delivery_address?: string | null
+          fulfillment_type?: string | null
           dispatch_date?: string | null
           id?: string
           items_summary?: string | null
@@ -2326,11 +2330,13 @@ export type Database = {
         }
         Update: {
           city?: string | null
+          collected_by?: string | null
           contact_person?: string | null
           courier?: string | null
           created_at?: string
           created_by?: string | null
           delivery_address?: string | null
+          fulfillment_type?: string | null
           dispatch_date?: string | null
           id?: string
           items_summary?: string | null

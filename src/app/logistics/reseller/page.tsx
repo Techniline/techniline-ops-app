@@ -59,6 +59,8 @@ function printNote(r: ResellerRow) {
       ${fld("Total value", r.total_value != null ? `AED ${r.total_value.toFixed(2)}` : "")}
       ${fld("Payment method", r.payment_method ?? "")}
       ${fld("Reference", r.reference_no ?? "")}
+      ${fld("Type", r.fulfillment_type === "warehouse_pickup" ? "Warehouse pickup" : "Delivery")}
+      ${fld("Collected by", r.collected_by ?? "")}
       ${fld("Driver", r.driver_name ?? "")}
       ${fld("Driver phone", r.driver_phone ?? "")}
       ${fld("Vehicle number", r.vehicle_number ?? "")}
@@ -76,7 +78,7 @@ function printNote(r: ResellerRow) {
 }
 
 type Draft = Partial<ResellerRow>;
-const EMPTY: Draft = { status: "new" };
+const EMPTY: Draft = { status: "new", fulfillment_type: "delivery" };
 
 export default function ResellerDeliveriesPage() {
   const [rows, setRows] = useState<ResellerRow[]>([]);
@@ -248,8 +250,8 @@ export default function ResellerDeliveriesPage() {
 
   return (
     <LogisticsShell
-      title="Reseller Deliveries"
-      subtitle="Manual reseller delivery tracking."
+      title="Reseller Logistics"
+      subtitle="Manual reseller deliveries & warehouse pickups."
       page="reseller"
       actions={
         <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
@@ -308,8 +310,14 @@ export default function ResellerDeliveriesPage() {
             <input className={inputClass} placeholder="Driver phone" value={draft.driver_phone ?? ""} onChange={(e) => set("driver_phone", e.target.value)} />
             <input list="rd-vehicles" className={inputClass} placeholder="Vehicle number" value={draft.vehicle_number ?? ""} onChange={(e) => set("vehicle_number", e.target.value)} />
             <input className={inputClass} placeholder="Payment method" value={draft.payment_method ?? ""} onChange={(e) => set("payment_method", e.target.value)} />
+            <select className={inputClass} value={draft.fulfillment_type ?? "delivery"} onChange={(e) => set("fulfillment_type", e.target.value)}>
+              <option value="delivery">Delivery</option>
+              <option value="warehouse_pickup">Warehouse pickup</option>
+            </select>
+            <input className={inputClass} placeholder="Collected by (who picked up)" value={draft.collected_by ?? ""} onChange={(e) => set("collected_by", e.target.value)} />
             <input className={inputClass} placeholder="Courier (optional)" value={draft.courier ?? ""} onChange={(e) => set("courier", e.target.value)} />
-            <input className={inputClass} placeholder="Tracking number" value={draft.tracking_number ?? ""} onChange={(e) => set("tracking_number", e.target.value)} />
+            <input className={inputClass} placeholder="Tracking number (optional)" value={draft.tracking_number ?? ""} onChange={(e) => set("tracking_number", e.target.value)} />
+            <input className={inputClass} placeholder="Order / reference no (optional)" value={draft.reference_no ?? ""} onChange={(e) => set("reference_no", e.target.value)} />
             <label className="flex flex-col gap-1 text-xs text-slate-500">
               Scheduled delivery date
               <input className={inputClass} type="date" value={draft.scheduled_date ?? ""} onChange={(e) => set("scheduled_date", e.target.value || null)} />
@@ -358,6 +366,7 @@ export default function ResellerDeliveriesPage() {
         rowClassName={(r) => (overdueDays(r) > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40")}
         columns={[
           { id: "reseller", label: "Customer", cell: (r) => r.reseller_name ?? "—" },
+          { id: "type", label: "Type", cell: (r) => (r.fulfillment_type === "warehouse_pickup" ? "Pickup" : "Delivery") },
           { id: "invoice", label: "Invoice", cell: (r) => r.invoice_number ?? "—" },
           { id: "do", label: "DO", cell: (r) => r.do_number ?? "—" },
           { id: "city", label: "City", cell: (r) => r.city ?? "—" },

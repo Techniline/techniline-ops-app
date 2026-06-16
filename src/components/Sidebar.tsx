@@ -122,7 +122,7 @@ export function Sidebar({
     {
       heading: "Deliveries",
       items: [
-        { href: "/logistics/reseller", label: "Reseller Deliveries", icon: ResellerIcon, show: can("reseller") },
+        { href: "/logistics/reseller", label: "Reseller Logistics", icon: ResellerIcon, show: can("reseller") },
         { href: "/logistics/cargo", label: "Cargo Deliveries", icon: CargoIcon, show: can("cargo") },
       ],
     },
