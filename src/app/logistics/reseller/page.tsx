@@ -80,6 +80,55 @@ function printNote(r: ResellerRow) {
 type Draft = Partial<ResellerRow>;
 const EMPTY: Draft = { status: "new", fulfillment_type: "delivery" };
 
+/** Couriers / fulfillment carriers with their official brand colours. Logos, if
+ *  present at /public/couriers/<value>.png, render in the pill; otherwise a
+ *  brand-coloured name badge shows. */
+const CARRIERS = [
+  { value: "techniline", label: "Techniline", color: "#0e8c99" },
+  { value: "max", label: "MAX Express", color: "#e2231a" },
+  { value: "porter", label: "Porter", color: "#0445da" },
+] as const;
+const CARRIER_BY: Record<string, { value: string; label: string; color: string }> = Object.fromEntries(
+  CARRIERS.map((c) => [c.value, c])
+);
+
+/** Read-only branded badge for the table: logo on a white pill with a brand
+ *  border, falling back to a solid brand-coloured name badge if no logo file. */
+function CarrierBadge({ value }: { value: string | null }) {
+  const c = value ? CARRIER_BY[value] : undefined;
+  const [imgOk, setImgOk] = useState(true);
+  if (!c) {
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{value || "—"}</span>;
+  }
+  if (imgOk) {
+    return (
+      <span className="inline-flex items-center rounded-full border bg-white px-2 py-1" style={{ borderColor: c.color }}>
+        <img src={`/couriers/${c.value}.png`} alt={c.label} onError={() => setImgOk(false)} className="h-4 w-auto max-w-[80px] object-contain" />
+      </span>
+    );
+  }
+  return <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: c.color }}>{c.label}</span>;
+}
+
+/** Selectable carrier chip for the form (logo or brand name, brand ring when active). */
+function CarrierChip({ c, active, onClick }: { c: { value: string; label: string; color: string }; active: boolean; onClick: () => void }) {
+  const [imgOk, setImgOk] = useState(true);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-10 items-center justify-center rounded-full border bg-white px-4 transition"
+      style={{ borderColor: c.color, boxShadow: active ? `0 0 0 2px ${c.color}` : undefined, opacity: active ? 1 : 0.7 }}
+    >
+      {imgOk ? (
+        <img src={`/couriers/${c.value}.png`} alt={c.label} onError={() => setImgOk(false)} className="h-5 w-auto max-w-[90px] object-contain" />
+      ) : (
+        <span className="text-sm font-semibold" style={{ color: c.color }}>{c.label}</span>
+      )}
+    </button>
+  );
+}
+
 export default function ResellerDeliveriesPage() {
   const [rows, setRows] = useState<ResellerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -253,6 +302,7 @@ export default function ResellerDeliveriesPage() {
       title="Reseller Logistics"
       subtitle="Manual reseller deliveries & warehouse pickups."
       page="reseller"
+      wide
       actions={
         <button type="button" className={btnPrimary} onClick={() => openDraft({ ...EMPTY })}>
           + New delivery
@@ -315,7 +365,14 @@ export default function ResellerDeliveriesPage() {
               <option value="warehouse_pickup">Warehouse pickup</option>
             </select>
             <input className={inputClass} placeholder="Collected by (who picked up)" value={draft.collected_by ?? ""} onChange={(e) => set("collected_by", e.target.value)} />
-            <input className={inputClass} placeholder="Courier (optional)" value={draft.courier ?? ""} onChange={(e) => set("courier", e.target.value)} />
+            <div className="sm:col-span-2 lg:col-span-3">
+              <span className="mb-1 block text-xs text-slate-500">Courier / method</span>
+              <div className="flex flex-wrap gap-2">
+                {CARRIERS.map((c) => (
+                  <CarrierChip key={c.value} c={c} active={draft.courier === c.value} onClick={() => set("courier", draft.courier === c.value ? null : c.value)} />
+                ))}
+              </div>
+            </div>
             <input className={inputClass} placeholder="Tracking number (optional)" value={draft.tracking_number ?? ""} onChange={(e) => set("tracking_number", e.target.value)} />
             <input className={inputClass} placeholder="Order / reference no (optional)" value={draft.reference_no ?? ""} onChange={(e) => set("reference_no", e.target.value)} />
             <label className="flex flex-col gap-1 text-xs text-slate-500">
@@ -366,7 +423,16 @@ export default function ResellerDeliveriesPage() {
         rowClassName={(r) => (overdueDays(r) > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/40")}
         columns={[
           { id: "reseller", label: "Customer", cell: (r) => r.reseller_name ?? "—" },
-          { id: "type", label: "Type", cell: (r) => (r.fulfillment_type === "warehouse_pickup" ? "Pickup" : "Delivery") },
+          {
+            id: "type",
+            label: "Method",
+            cell: (r) =>
+              r.fulfillment_type === "warehouse_pickup" ? (
+                <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">Pickup</span>
+              ) : (
+                <CarrierBadge value={r.courier} />
+              ),
+          },
           { id: "invoice", label: "Invoice", cell: (r) => r.invoice_number ?? "—" },
           { id: "do", label: "DO", cell: (r) => r.do_number ?? "—" },
           { id: "city", label: "City", cell: (r) => r.city ?? "—" },
