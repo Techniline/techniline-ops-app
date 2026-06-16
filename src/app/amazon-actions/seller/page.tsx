@@ -53,6 +53,30 @@ function needsFulfillment(o: SellerOrderRow): boolean {
   return (o.items_unshipped ?? 0) > 0;
 }
 
+/** Colored status pill: unfulfilled = orange, shipped = green, cancelled = red. */
+function StatusPill({ order }: { order: SellerOrderRow }) {
+  const pill = "rounded-full px-2 py-0.5 text-[11px] font-semibold";
+  if (needsFulfillment(order)) {
+    return <span className={`${pill} bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300`}>Unfulfilled</span>;
+  }
+  const st = (order.order_status ?? "").toLowerCase();
+  const tone =
+    st === "shipped"
+      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+      : st.includes("cancel")
+        ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+  return <span className={`${pill} ${tone}`}>{order.order_status ?? "—"}</span>;
+}
+
+/** Per-channel chip colours (active = filled, inactive = tint). */
+const CHIP_TONE: Record<string, { on: string; off: string }> = {
+  all: { on: "bg-indigo-600 text-white", off: "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" },
+  Flex: { on: "bg-blue-600 text-white", off: "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300" },
+  "Easy Ship": { on: "bg-violet-600 text-white", off: "bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-950 dark:text-violet-300" },
+  "Self Ship": { on: "bg-teal-600 text-white", off: "bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-300" },
+};
+
 function Content() {
   const { profile } = useAuth();
   const showOrders = canViewSellerOrders(profile);
@@ -195,16 +219,16 @@ function Content() {
           {(() => {
             const channels = Array.from(new Set(orders.map(fulfillmentLabel).filter((c) => c !== "—")));
             if (channels.length < 2) return null;
-            const chip = (key: string, label: string) =>
-              `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                channel === key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
-              }`;
+            const chip = (key: string) => {
+              const t = CHIP_TONE[key] ?? CHIP_TONE.all;
+              return `rounded-full px-3 py-1 text-xs font-medium transition-colors ${channel === key ? t.on : t.off}`;
+            };
             return (
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-slate-400">Fulfillment:</span>
-                <button type="button" onClick={() => setChannel("all")} className={chip("all", "All")}>All</button>
+                <button type="button" onClick={() => setChannel("all")} className={chip("all")}>All</button>
                 {channels.map((c) => (
-                  <button key={c} type="button" onClick={() => setChannel(c)} className={chip(c, c)}>{c}</button>
+                  <button key={c} type="button" onClick={() => setChannel(c)} className={chip(c)}>{c}</button>
                 ))}
               </div>
             );
@@ -264,13 +288,7 @@ function Content() {
                   <tr key={r.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(r) ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
                     <td className={`${tdCell} font-medium`}>{r.amazon_order_id}</td>
                     <td className={tdCell}>{fmt(r.purchase_date)}</td>
-                    <td className={tdCell}>
-                      {needsFulfillment(r) ? (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">Unfulfilled</span>
-                      ) : (
-                        <span className="text-slate-600 dark:text-slate-300">{r.order_status ?? "—"}</span>
-                      )}
-                    </td>
+                    <td className={tdCell}><StatusPill order={r} /></td>
                     <td className={tdCell}>{fulfillmentLabel(r)}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_shipped ?? "—"}</td>
                     <td className={`${tdCell} tabular-nums`}>{r.items_unshipped ?? "—"}</td>

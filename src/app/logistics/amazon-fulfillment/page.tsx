@@ -9,6 +9,7 @@ import { isManager } from "@/lib/permissions";
 import {
   fetchSellerOrderDocs,
   fetchSellerOrders,
+  syncSeller,
   updateSellerOrderDoc,
   type SellerOrderDocRow,
   type SellerOrderRow,
@@ -118,6 +119,8 @@ function Content() {
   const [channel, setChannel] = useState("all");
   const [editing, setEditing] = useState<SellerOrderRow | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,6 +140,21 @@ function Content() {
     void load();
   }, [load]);
 
+  async function syncNow() {
+    setSyncing(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await syncSeller();
+      setMsg(`Synced ${r.orders} order(s) from Amazon.${r.warnings.length ? " Note: " + r.warnings.join("; ") : ""}`);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const channels = useMemo(
     () => Array.from(new Set(orders.map((o) => o.fulfillment_channel).filter(Boolean) as string[])),
     [orders]
@@ -150,6 +168,13 @@ function Content() {
 
   return (
     <div>
+      <div className="mb-3 flex items-center justify-end">
+        <button type="button" onClick={syncNow} disabled={syncing} className={btnPrimary}>
+          {syncing ? "Syncing…" : "Sync now"}
+        </button>
+      </div>
+
+      {msg ? <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div> : null}
       {err ? <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
 
       <input
