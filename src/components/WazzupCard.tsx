@@ -30,46 +30,66 @@ export function WazzupCard() {
     };
   }, []);
 
-  // Always-latest refresh closure (captures current `muted`), called by both the
-  // realtime subscription and the fallback poll.
+  // Latest-closure alert (captures current `muted`): toast + voice + OS popup,
+  // with the customer's name when we have it.
+  const notifyRef = useRef<(name?: string | null) => void>(() => {});
+  const lastRtAlert = useRef(0);
+  useEffect(() => {
+    notifyRef.current = (name) => {
+      setToast(name ? `${name} · reply within 15 min` : "Reply within 15 min");
+      window.setTimeout(() => setToast(null), 9000);
+      if (!muted) {
+        try {
+          const u = new SpeechSynthesisUtterance(name ? `New chat waiting from ${name}, please reply` : "New chat waiting, please reply");
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        } catch { /* speech not available */ }
+      }
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try { new Notification("New chat waiting", { body: name ? `${name} · reply within 15 min` : "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
+      }
+    };
+  });
+
+  // Refresh the displayed numbers + tab-title badge (no alert here).
   const applyRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     applyRef.current = async () => {
       const r = await fetchWazzupStats();
       setS(r);
       document.title = r.pendingChats > 0 ? `(${r.pendingChats}) ${baseTitle.current}` : baseTitle.current;
-      if (prevPending.current != null && r.pendingChats > prevPending.current) {
-        const count = r.pendingChats - prevPending.current;
-        setToast(`${count} new chat${count === 1 ? "" : "s"} waiting — reply within 15 min`);
-        window.setTimeout(() => setToast(null), 9000);
-        if (!muted) {
-          try {
-            const u = new SpeechSynthesisUtterance(count === 1 ? "New chat waiting, please reply" : `${count} new chats waiting, please reply`);
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(u);
-          } catch { /* speech not available */ }
-        }
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { new Notification("New chat waiting", { body: "Reply within 15 minutes", tag: "wazzup-pending" }); } catch { /* ignore */ }
-        }
-      }
       prevPending.current = r.pendingChats;
     };
   });
 
-  // Realtime: a new message inserted by the webhook pushes to us in ~1s.
+  // Realtime: a new message pushes in ~1s — alert by customer name on inbound.
   useEffect(() => {
     const ch = supabase
       .channel("wazzup_live")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wazzup_messages" }, () => applyRef.current())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wazzup_messages" }, (payload) => {
+        const row = payload.new as { direction?: string; contact_name?: string | null };
+        void applyRef.current();
+        if (row?.direction === "inbound") {
+          lastRtAlert.current = Date.now();
+          notifyRef.current(row.contact_name ?? null);
+        }
+      })
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
   }, []);
 
-  // Fallback poll (covers any missed realtime event).
+  // Fallback poll — refresh, and a generic alert only if realtime didn't just fire.
   useEffect(() => {
-    void applyRef.current();
-    const id = setInterval(() => void applyRef.current(), 30_000);
+    const tick = async () => {
+      const before = prevPending.current;
+      await applyRef.current();
+      const after = prevPending.current;
+      if (before != null && after != null && after > before && Date.now() - lastRtAlert.current > 15_000) {
+        notifyRef.current(null);
+      }
+    };
+    void tick();
+    const id = setInterval(() => void tick(), 30_000);
     return () => clearInterval(id);
   }, []);
 
