@@ -45,10 +45,9 @@ function fulfillmentLabel(o: SellerOrderRow): string {
   return o.fulfillment_channel ?? "—";
 }
 
-/** A merchant-fulfilled (MFN) order the seller still needs to ship. FBA (AFN) is
- *  Amazon's to fulfill, so it's excluded. */
+/** Any order with unshipped items that isn't already shipped or cancelled —
+ *  flagged as unfulfilled regardless of channel (Flex / Easy Ship / Self Ship). */
 function needsFulfillment(o: SellerOrderRow): boolean {
-  if ((o.fulfillment_channel ?? "").toUpperCase() !== "MFN") return false;
   const st = (o.order_status ?? "").toLowerCase();
   if (st === "shipped" || st.includes("cancel")) return false;
   return (o.items_unshipped ?? 0) > 0;
