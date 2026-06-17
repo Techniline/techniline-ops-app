@@ -234,10 +234,20 @@ alter table public.quality_log
   add column if not exists channel    text,
   add column if not exists order_ref  text;
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║ I. WAZZUP CHATS — "no reply needed" flag (in-app pending management)        ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- Lets Aaron clear a pending chat from the dashboard via "No reply needed"
+-- (the Manage popup on the Chats card). "Replied" stamps response_minutes instead.
+
+alter table public.wazzup_messages
+  add column if not exists no_reply_needed boolean not null default false;
+
 -- ============================================================================
 -- Done. Expected: 0 errors. Then open the app: Checklist shows 0 tasks on
 -- Sunday; Vendor PO detail saves invoice/booking; Amazon Seller Central →
 -- "Sync now" populates Orders/Finance/Returns; Amazon Fulfillment →
 -- "Import delivery list" backfills delivery status/tracking/PRT/SRT;
--- Analytics → Quality log captures channel + order/PO.
+-- Analytics → Quality log captures channel + order/PO; Chats card → "Manage"
+-- clears pending chats (replied / no reply needed).
 -- ============================================================================

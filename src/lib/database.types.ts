@@ -2648,6 +2648,7 @@ export type Database = {
           id: string
           message_at: string | null
           message_id: string | null
+          no_reply_needed: boolean
           raw: Json | null
           response_minutes: number | null
         }
@@ -2661,6 +2662,7 @@ export type Database = {
           id?: string
           message_at?: string | null
           message_id?: string | null
+          no_reply_needed?: boolean
           raw?: Json | null
           response_minutes?: number | null
         }
@@ -2674,6 +2676,7 @@ export type Database = {
           id?: string
           message_at?: string | null
           message_id?: string | null
+          no_reply_needed?: boolean
           raw?: Json | null
           response_minutes?: number | null
         }
