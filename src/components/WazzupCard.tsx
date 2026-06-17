@@ -20,6 +20,7 @@ export function WazzupCard() {
   const [refreshing, setRefreshing] = useState(false);
   const [managing, setManaging] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveErr, setResolveErr] = useState<string | null>(null);
 
   // restore mute pref + notification permission on mount
   useEffect(() => {
@@ -51,11 +52,13 @@ export function WazzupCard() {
 
   async function resolve(chatId: string, action: "replied" | "no_reply_needed") {
     setResolvingId(chatId);
+    setResolveErr(null);
     try {
       await resolveWazzupChat(chatId, action);
       await applyRef.current();
-    } catch { /* surfaced by leaving the row; keep popup open */ }
-    finally { setResolvingId(null); }
+    } catch (e) {
+      setResolveErr(e instanceof Error ? e.message : "Could not update — try again.");
+    } finally { setResolvingId(null); }
   }
 
   // Explicit test — always shows the toast and speaks (the click satisfies the
@@ -165,6 +168,9 @@ export function WazzupCard() {
               <button type="button" onClick={() => setManaging(false)} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
             </div>
             <div className="max-h-[60vh] overflow-auto px-5 py-3">
+              {resolveErr ? (
+                <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800">{resolveErr}</div>
+              ) : null}
               {!s || s.pending.length === 0 ? (
                 <p className="py-6 text-center text-sm text-slate-400">No one waiting. 🎉</p>
               ) : (
