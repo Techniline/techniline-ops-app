@@ -19,6 +19,7 @@ import {
   fetchStaff,
   fetchTrend,
   monthStr,
+  QUALITY_CHANNELS,
   saveReview,
   saveTarget,
   type Appraisal,
@@ -81,9 +82,12 @@ function AppraisalTab({ profile }: { profile: UserProfile }) {
   const [banner, setBanner] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [qCat, setQCat] = useState("");
+  const [qChannel, setQChannel] = useState<string>(QUALITY_CHANNELS[0]);
   const [qSev, setQSev] = useState("medium");
   const [qDesc, setQDesc] = useState("");
+  const [qOrder, setQOrder] = useState("");
+  const [qStaff, setQStaff] = useState<string>("");
+  const [qDate, setQDate] = useState<string>(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     (async () => {
@@ -127,8 +131,13 @@ function AppraisalTab({ profile }: { profile: UserProfile }) {
     } catch (e) { setErr(errMsg(e)); }
   }
   async function addQ(): Promise<void> {
-    if (!qDesc.trim()) return;
-    try { await addQuality({ userId, category: qCat, severity: qSev, description: qDesc, loggedBy: profile.id }); setQCat(""); setQDesc(""); setQSev("medium"); await load(); } catch (e) { setErr(errMsg(e)); }
+    if (!qDesc.trim()) { setErr("Add remarks describing what happened."); return; }
+    const staffId = qStaff || userId;
+    try {
+      await addQuality({ userId: staffId, channel: qChannel, severity: qSev, description: qDesc, orderRef: qOrder, occurredOn: qDate, loggedBy: profile.id });
+      setQDesc(""); setQOrder(""); setQSev("medium"); setQDate(new Date().toISOString().slice(0, 10));
+      await load();
+    } catch (e) { setErr(errMsg(e)); }
   }
 
   function exportPdf(): void {
@@ -140,7 +149,7 @@ function AppraisalTab({ profile }: { profile: UserProfile }) {
       rows: appraisal.metrics.map((m) => [m.label, m.display, m.target != null ? `${m.target} ${m.higherIsBetter ? "min" : "max"}` : "—"]),
     };
     const qualityHtml = quality.length
-      ? `<h3 style="margin:14px 0 4px">Quality log</h3><ul>${quality.map((q) => `<li>${q.occurred_on} · [${q.severity}] ${q.category ?? ""} — ${q.description ?? ""}</li>`).join("")}</ul>`
+      ? `<h3 style="margin:14px 0 4px">Quality log</h3><ul>${quality.map((q) => `<li>${q.occurred_on} · [${q.severity}] ${q.channel ?? q.category ?? ""}${q.order_ref ? ` · ${q.order_ref}` : ""} — ${q.description ?? ""}</li>`).join("")}</ul>`
       : "";
     const notesHtml = notes ? `<h3 style="margin:14px 0 4px">Manager notes</h3><p>${notes}</p>` : "";
     printReportHtml(table.title, renderTableReportHtml(table) + notesHtml + qualityHtml);
@@ -226,25 +235,75 @@ function AppraisalTab({ profile }: { profile: UserProfile }) {
           <div className={`${surface} mt-4 p-4`}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Quality / errors ({month})</p>
             {quality.length === 0 ? <p className="text-xs text-slate-400">No quality issues logged.</p> : (
-              <ul className="mb-3 flex flex-col gap-1 text-sm">
-                {quality.map((q) => (
-                  <li key={q.id} className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400">{q.occurred_on}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${q.severity === "high" ? "bg-red-100 text-red-700" : q.severity === "low" ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"}`}>{q.severity}</span>
-                    <span className="font-medium">{q.category}</span>
-                    <span className="text-slate-500">{q.description}</span>
-                    <button type="button" onClick={() => deleteQuality(q.id).then(load)} className="ml-auto text-[11px] text-slate-400 hover:text-red-600">remove</button>
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-4 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-900/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Date</th>
+                      <th className="px-3 py-2 text-left font-semibold">Severity</th>
+                      <th className="px-3 py-2 text-left font-semibold">Channel</th>
+                      <th className="px-3 py-2 text-left font-semibold">Order / PO</th>
+                      <th className="px-3 py-2 text-left font-semibold">Remarks</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {quality.map((q) => (
+                      <tr key={q.id} className="align-top">
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{q.occurred_on}</td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${q.severity === "high" ? "bg-red-100 text-red-700" : q.severity === "low" ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"}`}>{q.severity}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 font-medium">{q.channel ?? q.category ?? "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{q.order_ref ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{q.description ?? "—"}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button type="button" onClick={() => deleteQuality(q.id).then(load)} className="text-[11px] text-slate-400 hover:text-red-600">remove</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-            <div className="flex flex-wrap items-center gap-2">
-              <input className={`${inputClass} max-w-[160px]`} placeholder="Category (e.g. data error)" value={qCat} onChange={(e) => setQCat(e.target.value)} />
-              <select value={qSev} onChange={(e) => setQSev(e.target.value)} className={`${inputClass} max-w-[120px]`}>
-                <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
-              </select>
-              <input className={`${inputClass} flex-1`} placeholder="What happened" value={qDesc} onChange={(e) => setQDesc(e.target.value)} />
-              <button type="button" onClick={addQ} className={btnSecondary}>Log</button>
+
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Log an error</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Date of error</span>
+                  <input type="date" className={`${inputClass} w-full`} value={qDate} onChange={(e) => setQDate(e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Staff</span>
+                  <select className={`${inputClass} w-full`} value={qStaff || userId} onChange={(e) => setQStaff(e.target.value)}>
+                    {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Channel</span>
+                  <select className={`${inputClass} w-full`} value={qChannel} onChange={(e) => setQChannel(e.target.value)}>
+                    {QUALITY_CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Severity</span>
+                  <select className={`${inputClass} w-full`} value={qSev} onChange={(e) => setQSev(e.target.value)}>
+                    <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
+                  </select>
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Order no. / PO no.</span>
+                  <input className={`${inputClass} w-full`} placeholder="e.g. S24162 / 403-… / PO-…" value={qOrder} onChange={(e) => setQOrder(e.target.value)} />
+                </label>
+                <label className="block sm:col-span-3">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">Remarks</span>
+                  <textarea className={`${inputClass} w-full`} rows={2} placeholder="What happened / how it was resolved" value={qDesc} onChange={(e) => setQDesc(e.target.value)} />
+                </label>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button type="button" onClick={addQ} className={btnPrimary}>Log error</button>
+              </div>
             </div>
           </div>
         </>

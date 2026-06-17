@@ -224,9 +224,20 @@ alter table public.seller_order_docs
   add column if not exists delivery_charge      numeric,
   add column if not exists delivery_address     text;
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║ H. QUALITY / ERROR LOG — channel + order/PO reference                       ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- Adds the fields the improved Quality/Errors logger (Analytics → Appraisal)
+-- captures: which channel the error was on, and the order/PO number.
+
+alter table public.quality_log
+  add column if not exists channel    text,
+  add column if not exists order_ref  text;
+
 -- ============================================================================
 -- Done. Expected: 0 errors. Then open the app: Checklist shows 0 tasks on
 -- Sunday; Vendor PO detail saves invoice/booking; Amazon Seller Central →
 -- "Sync now" populates Orders/Finance/Returns; Amazon Fulfillment →
--- "Import delivery list" backfills delivery status/tracking/PRT/SRT.
+-- "Import delivery list" backfills delivery status/tracking/PRT/SRT;
+-- Analytics → Quality log captures channel + order/PO.
 -- ============================================================================

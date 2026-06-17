@@ -342,31 +342,37 @@ export type Database = {
       quality_log: {
         Row: {
           category: string | null
+          channel: string | null
           created_at: string
           description: string | null
           id: string
           logged_by: string | null
           occurred_on: string
+          order_ref: string | null
           severity: string
           user_id: string
         }
         Insert: {
           category?: string | null
+          channel?: string | null
           created_at?: string
           description?: string | null
           id?: string
           logged_by?: string | null
           occurred_on?: string
+          order_ref?: string | null
           severity?: string
           user_id: string
         }
         Update: {
           category?: string | null
+          channel?: string | null
           created_at?: string
           description?: string | null
           id?: string
           logged_by?: string | null
           occurred_on?: string
+          order_ref?: string | null
           severity?: string
           user_id?: string
         }

@@ -132,13 +132,38 @@ export async function fetchQuality(userId: string, month: string): Promise<Quali
   const { data } = await supabase.from("quality_log").select("*").eq("user_id", userId).gte("occurred_on", start).lt("occurred_on", next).order("occurred_on", { ascending: false });
   return data ?? [];
 }
-export async function addQuality(e: { userId: string; category: string; severity: string; description: string; loggedBy: string }): Promise<void> {
+export async function addQuality(e: {
+  userId: string;
+  channel: string;
+  severity: string;
+  description: string;
+  orderRef: string;
+  occurredOn: string;
+  loggedBy: string;
+}): Promise<void> {
   const { error } = await supabase.from("quality_log").insert({
-    user_id: e.userId, category: e.category.trim() || null, severity: e.severity,
-    description: e.description.trim() || null, logged_by: e.loggedBy, occurred_on: new Date().toISOString().slice(0, 10),
+    user_id: e.userId,
+    channel: e.channel.trim() || null,
+    severity: e.severity,
+    description: e.description.trim() || null,
+    order_ref: e.orderRef.trim() || null,
+    logged_by: e.loggedBy,
+    occurred_on: e.occurredOn || new Date().toISOString().slice(0, 10),
   });
   if (error) throw new Error(error.message);
 }
+
+/** Channels an error can be attributed to (for the Quality/Errors logger). */
+export const QUALITY_CHANNELS = [
+  "Musicmajlis",
+  "Amazon Seller",
+  "Amazon DF",
+  "Amazon Flex",
+  "Noon",
+  "Cocoblu",
+  "Vendor PO",
+  "Other",
+] as const;
 export async function deleteQuality(id: string): Promise<void> {
   await supabase.from("quality_log").delete().eq("id", id);
 }
