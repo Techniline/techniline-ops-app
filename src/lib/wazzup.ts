@@ -8,12 +8,31 @@ export interface WazzupStats {
   repliedTotal: number;
   newestInbound: { name: string | null; at: string | null; answered: boolean } | null;
   pendingNames: string[];
+  /** "wazzup" when the count came from Wazzup's unanswered counter (which
+   *  respects "No reply needed" / "Mark as read"), else our computed count. */
+  pendingSource: "wazzup" | "computed";
+}
+
+/** Wazzup's live unanswered counter (respects the "No reply needed" /
+ *  "Mark as read" buttons). null when not configured or unavailable. */
+async function fetchWazzupUnanswered(): Promise<number | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return null;
+    const r = await fetch("/api/wazzup/unanswered", { headers: { Authorization: `Bearer ${token}` } });
+    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; configured?: boolean; count?: number };
+    if (j.ok && j.configured && typeof j.count === "number") return j.count;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** Dashboard stats derived from the synced Wazzup message stream. Fail-soft:
  *  returns zeros if the table/data isn't there yet. */
 export async function fetchWazzupStats(): Promise<WazzupStats> {
-  const empty: WazzupStats = { pendingChats: 0, oldestWaitingMin: 0, newToday: 0, repliedPct: null, repliedTotal: 0, newestInbound: null, pendingNames: [] };
+  const empty: WazzupStats = { pendingChats: 0, oldestWaitingMin: 0, newToday: 0, repliedPct: null, repliedTotal: 0, newestInbound: null, pendingNames: [], pendingSource: "computed" };
   try {
     // Pending = inbound messages with no reply yet (any age).
     const { data: pend } = await supabase
@@ -66,7 +85,24 @@ export async function fetchWazzupStats(): Promise<WazzupStats> {
     const li = latest?.[0];
     const newestInbound = li ? { name: li.contact_name, at: li.message_at, answered: li.response_minutes != null } : null;
 
-    return { pendingChats: chatNames.size, oldestWaitingMin, newToday, repliedPct, repliedTotal, newestInbound, pendingNames };
+    // Prefer Wazzup's own unanswered counter for the headline count — it honours
+    // the "No reply needed" / "Mark as read" buttons. Keep our computed names as
+    // the helper list (trimmed so we never show more names than the live count).
+    const live = await fetchWazzupUnanswered();
+    if (live != null) {
+      return {
+        pendingChats: live,
+        oldestWaitingMin: live > 0 ? oldestWaitingMin : 0,
+        newToday,
+        repliedPct,
+        repliedTotal,
+        newestInbound,
+        pendingNames: pendingNames.slice(0, live),
+        pendingSource: "wazzup",
+      };
+    }
+
+    return { pendingChats: chatNames.size, oldestWaitingMin, newToday, repliedPct, repliedTotal, newestInbound, pendingNames, pendingSource: "computed" };
   } catch {
     return empty;
   }

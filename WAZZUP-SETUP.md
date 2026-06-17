@@ -4,6 +4,22 @@ Feeds the **Chats** card on the dashboard: pending (unanswered) chats, oldest
 waiting time, new chats today, and **% replied within 15 min** — team-wide,
 derived from Wazzup message webhooks.
 
+## Pending count that respects "No reply needed" / "Mark as read" (optional)
+
+The pending number is computed from messages by default. To make it honour the
+**"No reply needed"** and **"Mark as read"** buttons in the Wazzup chat, point it
+at Wazzup's own unanswered counter (`GET /v3/unanswered/{userId}`). Set two
+Vercel env vars (Production), then redeploy:
+
+- `WAZZUP_API_KEY` — the Wazzup integration API key.
+- `WAZZUP_USER_ID` — the Wazzup user whose counter to read (the shared-inbox
+  owner / Aaron). To find it: sign in to the app, then open
+  `/api/wazzup/unanswered?users=1` (it lists `{id, name}` for each Wazzup user).
+
+When both are set, the **Chats** card shows Wazzup's live counter ("X customers
+waiting") and the names list is kept as a helper. If unset, it falls back to the
+computed count — nothing breaks.
+
 ## 1. Database (run once in Supabase → SQL editor)
 
 ```sql
