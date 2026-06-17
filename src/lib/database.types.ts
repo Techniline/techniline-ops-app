@@ -2847,6 +2847,66 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_order_items: {
+        Row: {
+          amazon_order_id: string
+          asin: string | null
+          created_at: string
+          currency: string | null
+          id: string
+          item_price: number | null
+          item_tax: number | null
+          order_item_id: string
+          promotion_discount: number | null
+          quantity_ordered: number | null
+          quantity_shipped: number | null
+          raw: Json | null
+          seller_sku: string | null
+          shipping_price: number | null
+          shipping_tax: number | null
+          synced_at: string
+          title: string | null
+        }
+        Insert: {
+          amazon_order_id: string
+          asin?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          item_price?: number | null
+          item_tax?: number | null
+          order_item_id: string
+          promotion_discount?: number | null
+          quantity_ordered?: number | null
+          quantity_shipped?: number | null
+          raw?: Json | null
+          seller_sku?: string | null
+          shipping_price?: number | null
+          shipping_tax?: number | null
+          synced_at?: string
+          title?: string | null
+        }
+        Update: {
+          amazon_order_id?: string
+          asin?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          item_price?: number | null
+          item_tax?: number | null
+          order_item_id?: string
+          promotion_discount?: number | null
+          quantity_ordered?: number | null
+          quantity_shipped?: number | null
+          raw?: Json | null
+          seller_sku?: string | null
+          shipping_price?: number | null
+          shipping_tax?: number | null
+          synced_at?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
       seller_orders: {
         Row: {
           amazon_order_id: string

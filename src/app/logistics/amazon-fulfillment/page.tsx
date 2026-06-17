@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
@@ -11,6 +11,7 @@ import { fetchUserNames } from "@/lib/checklist";
 import {
   fetchSellerOrderDocLog,
   fetchSellerOrderDocs,
+  fetchSellerOrderItems,
   fetchSellerOrders,
   fulfillmentLabel,
   importAmazonDelivery,
@@ -20,6 +21,7 @@ import {
   type AmazonDeliveryImportSummary,
   type SellerOrderDocLogRow,
   type SellerOrderDocRow,
+  type SellerOrderItemRow,
   type SellerOrderRow,
 } from "@/lib/spapi/seller";
 
@@ -283,6 +285,8 @@ function Content() {
   const [channel, setChannel] = useState("all");
   const [editing, setEditing] = useState<SellerOrderRow | null>(null);
   const [importing, setImporting] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [items, setItems] = useState<Map<string, SellerOrderItemRow[] | "loading">>(new Map());
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -311,12 +315,27 @@ function Content() {
     setMsg(null);
     try {
       const r = await syncSeller();
-      setMsg(`Synced ${r.orders} order(s) from Amazon.${r.warnings.length ? " Note: " + r.warnings.join("; ") : ""}`);
+      setMsg(`Synced ${r.orders} order(s) + ${r.items} invoice line item(s) from Amazon.${r.warnings.length ? " Note: " + r.warnings.slice(0, 3).join("; ") : ""}`);
+      setItems(new Map()); // drop cached line items so expanded rows refetch
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Sync failed.");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function toggleItems(orderId: string) {
+    if (expanded === orderId) { setExpanded(null); return; }
+    setExpanded(orderId);
+    if (!items.has(orderId)) {
+      setItems((m) => new Map(m).set(orderId, "loading"));
+      try {
+        const rows = await fetchSellerOrderItems(orderId);
+        setItems((m) => new Map(m).set(orderId, rows));
+      } catch {
+        setItems((m) => new Map(m).set(orderId, []));
+      }
     }
   }
 
@@ -349,30 +368,77 @@ function Content() {
   );
   const rowFor = (o: SellerOrderRow) => {
     const d = docs.get(o.amazon_order_id);
+    const isOpen = expanded === o.amazon_order_id;
+    const its = items.get(o.amazon_order_id);
     return (
-      <tr key={o.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(o) ? "bg-orange-50/40 dark:bg-orange-950/10" : ""}`}>
-        <td className={`${tdCell} font-medium`}>{o.amazon_order_id}</td>
-        <td className={tdCell}>{fmt(o.purchase_date)}</td>
-        <td className={tdCell}><StatusPill order={o} /></td>
-        <td className={tdCell}>{fulfillmentLabel(o)}</td>
-        <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
-        <td className={tdCell}>
-          {d?.delivery_status ? (
-            <span className="whitespace-nowrap">{d.delivery_status}{d.delivery_date ? <span className="text-slate-400"> · {fmt(d.delivery_date)}</span> : null}</span>
-          ) : "—"}
-        </td>
-        <td className={tdCell}>{d?.tracking_number ?? "—"}</td>
-        <td className={tdCell}>{d?.prt_number ?? "—"}</td>
-        <td className={tdCell}>{d?.srt_number ?? "—"}</td>
-        <td className={tdCell}>{d?.doc_status ?? "—"}</td>
-        {canEdit ? (
-          <td className={tdCell}>
-            <button type="button" onClick={() => setEditing(o)} className="text-indigo-600 hover:underline dark:text-indigo-400">
-              {d ? "Edit" : "Add docs"}
+      <Fragment key={o.id}>
+        <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(o) ? "bg-orange-50/40 dark:bg-orange-950/10" : ""}`}>
+          <td className={`${tdCell} font-medium`}>
+            <button type="button" onClick={() => void toggleItems(o.amazon_order_id)} className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400" title="Show invoice line items">
+              <span className="text-slate-400">{isOpen ? "▾" : "▸"}</span>
+              {o.amazon_order_id}
             </button>
           </td>
+          <td className={tdCell}>{fmt(o.purchase_date)}</td>
+          <td className={tdCell}><StatusPill order={o} /></td>
+          <td className={tdCell}>{fulfillmentLabel(o)}</td>
+          <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
+          <td className={tdCell}>
+            {d?.delivery_status ? (
+              <span className="whitespace-nowrap">{d.delivery_status}{d.delivery_date ? <span className="text-slate-400"> · {fmt(d.delivery_date)}</span> : null}</span>
+            ) : "—"}
+          </td>
+          <td className={tdCell}>{d?.tracking_number ?? "—"}</td>
+          <td className={tdCell}>{d?.prt_number ?? "—"}</td>
+          <td className={tdCell}>{d?.srt_number ?? "—"}</td>
+          <td className={tdCell}>{d?.doc_status ?? "—"}</td>
+          {canEdit ? (
+            <td className={tdCell}>
+              <button type="button" onClick={() => setEditing(o)} className="text-indigo-600 hover:underline dark:text-indigo-400">
+                {d ? "Edit" : "Add docs"}
+              </button>
+            </td>
+          ) : null}
+        </tr>
+        {isOpen ? (
+          <tr className="bg-slate-50/70 dark:bg-slate-900/40">
+            <td className={tdCell} colSpan={colSpan}>
+              {its === "loading" || its === undefined ? (
+                <span className="text-xs text-slate-400">Loading line items…</span>
+              ) : its.length === 0 ? (
+                <span className="text-xs text-slate-400">No line items synced yet — run <strong>Sync now</strong> (Amazon backfills these in batches).</span>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-400">
+                        <th className="px-2 py-1 text-left font-medium">SKU</th>
+                        <th className="px-2 py-1 text-left font-medium">Item</th>
+                        <th className="px-2 py-1 text-right font-medium">Qty</th>
+                        <th className="px-2 py-1 text-right font-medium">Price</th>
+                        <th className="px-2 py-1 text-right font-medium">VAT</th>
+                        <th className="px-2 py-1 text-right font-medium">Shipping</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {its.map((it) => (
+                        <tr key={it.id} className="border-t border-slate-200/70 dark:border-slate-800">
+                          <td className="px-2 py-1 font-medium">{it.seller_sku ?? "—"}</td>
+                          <td className="px-2 py-1 text-slate-600 dark:text-slate-300">{it.title ?? "—"}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{it.quantity_ordered ?? "—"}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{it.item_price != null ? `${it.item_price.toFixed(2)} ${it.currency ?? ""}` : "—"}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{it.item_tax != null ? it.item_tax.toFixed(2) : "—"}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{it.shipping_price != null ? it.shipping_price.toFixed(2) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </td>
+          </tr>
         ) : null}
-      </tr>
+      </Fragment>
     );
   };
 

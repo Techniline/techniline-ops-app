@@ -243,11 +243,48 @@ alter table public.quality_log
 alter table public.wazzup_messages
   add column if not exists no_reply_needed boolean not null default false;
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║ J. AMAZON SELLER ORDER ITEMS — invoice line items per order                ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- Holds each order's line items (SKU, qty, price, VAT, shipping) pulled from the
+-- Amazon Orders API (getOrderItems) by the seller sync, shown expandable on the
+-- Amazon Fulfillment page. Read access mirrors seller_orders.
+
+create table if not exists public.seller_order_items (
+  id                  uuid primary key default gen_random_uuid(),
+  amazon_order_id     text not null,
+  order_item_id       text not null unique,
+  asin                text,
+  seller_sku          text,
+  title               text,
+  quantity_ordered    integer,
+  quantity_shipped    integer,
+  item_price          numeric,
+  item_tax            numeric,
+  shipping_price      numeric,
+  shipping_tax        numeric,
+  promotion_discount  numeric,
+  currency            text,
+  raw                 jsonb,
+  synced_at           timestamptz not null default now(),
+  created_at          timestamptz not null default now()
+);
+create index if not exists seller_order_items_order_idx on public.seller_order_items(amazon_order_id);
+
+alter table public.seller_order_items enable row level security;
+drop policy if exists seller_order_items_read on public.seller_order_items;
+create policy seller_order_items_read on public.seller_order_items for select to authenticated
+  using (public.current_user_role() in ('manager','admin','logistics')
+         or auth.uid() = '227fdb27-80b5-4040-ab14-4bb945068af7'    -- Maricel
+         or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
+-- writes are service-role only (the sync), so no insert/update policy is needed.
+
 -- ============================================================================
 -- Done. Expected: 0 errors. Then open the app: Checklist shows 0 tasks on
 -- Sunday; Vendor PO detail saves invoice/booking; Amazon Seller Central →
--- "Sync now" populates Orders/Finance/Returns; Amazon Fulfillment →
--- "Import delivery list" backfills delivery status/tracking/PRT/SRT;
+-- "Sync now" populates Orders/Finance/Returns + invoice line items;
+-- Amazon Fulfillment → "Import delivery list" backfills delivery/tracking/PRT/SRT
+-- and each order row expands to show its line items;
 -- Analytics → Quality log captures channel + order/PO; Chats card → "Manage"
 -- clears pending chats (replied / no reply needed).
 -- ============================================================================

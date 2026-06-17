@@ -41,6 +41,19 @@ export async function fetchSellerFinance(search?: string): Promise<SellerFinance
   return data ?? [];
 }
 
+export type SellerOrderItemRow = Tables<"seller_order_items">;
+
+/** Invoice line items for one order, synced from Amazon's Orders API. */
+export async function fetchSellerOrderItems(amazonOrderId: string): Promise<SellerOrderItemRow[]> {
+  const { data, error } = await supabase
+    .from("seller_order_items")
+    .select("*")
+    .eq("amazon_order_id", amazonOrderId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export type SellerOrderDocRow = Tables<"seller_order_docs">;
 
 /** Return documentation keyed by amazon_order_id. */
@@ -142,6 +155,7 @@ export async function sellerLastSync(): Promise<string | null> {
 export interface SellerSyncResult {
   finance: number;
   orders: number;
+  items: number;
   warnings: string[];
   lastSync: string;
 }
@@ -158,5 +172,5 @@ export async function syncSeller(): Promise<SellerSyncResult> {
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Partial<SellerSyncResult>;
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
-  return { finance: j.finance ?? 0, orders: j.orders ?? 0, warnings: j.warnings ?? [], lastSync: j.lastSync ?? "" };
+  return { finance: j.finance ?? 0, orders: j.orders ?? 0, items: j.items ?? 0, warnings: j.warnings ?? [], lastSync: j.lastSync ?? "" };
 }

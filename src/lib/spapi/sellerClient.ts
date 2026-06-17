@@ -248,3 +248,73 @@ export async function fetchSellerOrders(createdAfter: string): Promise<SellerOrd
   } while (nextToken && pages < 30);
   return out;
 }
+
+// ── Order items (invoice line items) ─────────────────────────────────────────
+
+export interface SellerOrderItem {
+  orderItemId: string;
+  asin: string | null;
+  sellerSku: string | null;
+  title: string | null;
+  quantityOrdered: number | null;
+  quantityShipped: number | null;
+  itemPrice: number | null;
+  itemTax: number | null;
+  shippingPrice: number | null;
+  shippingTax: number | null;
+  promotionDiscount: number | null;
+  currency: string | null;
+  raw: unknown;
+}
+
+interface RawMoney { Amount?: string; CurrencyCode?: string }
+interface RawOrderItem {
+  OrderItemId?: string;
+  ASIN?: string;
+  SellerSKU?: string;
+  Title?: string;
+  QuantityOrdered?: number;
+  QuantityShipped?: number;
+  ItemPrice?: RawMoney;
+  ItemTax?: RawMoney;
+  ShippingPrice?: RawMoney;
+  ShippingTax?: RawMoney;
+  PromotionDiscount?: RawMoney;
+}
+
+const money = (m?: RawMoney): number | null => (m?.Amount != null && m.Amount !== "" ? Number(m.Amount) : null);
+
+/** Line items for one order (the invoice contents: SKU, qty, price, VAT).
+ *  Paged via NextToken. Uses the Orders role (already granted). */
+export async function fetchOrderItems(amazonOrderId: string): Promise<SellerOrderItem[]> {
+  const out: SellerOrderItem[] = [];
+  let nextToken: string | undefined;
+  let pages = 0;
+  do {
+    const qs = nextToken ? `?NextToken=${encodeURIComponent(nextToken)}` : "";
+    const j = await sellerJson<{ payload?: { OrderItems?: RawOrderItem[]; NextToken?: string } }>(
+      `/orders/v0/orders/${encodeURIComponent(amazonOrderId)}/orderItems${qs}`
+    );
+    for (const it of j.payload?.OrderItems ?? []) {
+      if (!it.OrderItemId) continue;
+      out.push({
+        orderItemId: it.OrderItemId,
+        asin: it.ASIN ?? null,
+        sellerSku: it.SellerSKU ?? null,
+        title: it.Title ?? null,
+        quantityOrdered: it.QuantityOrdered ?? null,
+        quantityShipped: it.QuantityShipped ?? null,
+        itemPrice: money(it.ItemPrice),
+        itemTax: money(it.ItemTax),
+        shippingPrice: money(it.ShippingPrice),
+        shippingTax: money(it.ShippingTax),
+        promotionDiscount: money(it.PromotionDiscount),
+        currency: it.ItemPrice?.CurrencyCode ?? null,
+        raw: it,
+      });
+    }
+    nextToken = j.payload?.NextToken;
+    pages += 1;
+  } while (nextToken && pages < 10);
+  return out;
+}

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { isManager } from "@/lib/permissions";
-import { fetchFinancialEventGroups, fetchSellerOrders, sellerConfigured } from "@/lib/spapi/sellerClient";
+import { fetchFinancialEventGroups, fetchOrderItems, fetchSellerOrders, sellerConfigured } from "@/lib/spapi/sellerClient";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -49,9 +49,10 @@ async function runSync(url: string, service: string): Promise<Response> {
   const ordersCreatedAfter = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
 
   const nowIso = new Date().toISOString();
-  const result: { finance: number; orders: number; warnings: string[] } = {
+  const result: { finance: number; orders: number; items: number; warnings: string[] } = {
     finance: 0,
     orders: 0,
+    items: 0,
     warnings: [],
   };
 
@@ -106,6 +107,56 @@ async function runSync(url: string, service: string): Promise<Response> {
     }
   } catch (e) {
     result.warnings.push(`orders: ${e instanceof Error ? e.message : "failed"}`);
+  }
+
+  // Order line items (invoice contents) — fetch for orders that don't have them
+  // yet. getOrderItems is rate-limited (~0.5 req/s), so we throttle and cap the
+  // batch; the next run picks up where this left off. Backfill spans a few runs.
+  try {
+    const { data: allOrders } = await svc
+      .from("seller_orders")
+      .select("amazon_order_id")
+      .order("purchase_date", { ascending: false })
+      .limit(2000);
+    const { data: haveItems } = await svc.from("seller_order_items").select("amazon_order_id").limit(20000);
+    const done = new Set((haveItems ?? []).map((r) => (r as { amazon_order_id: string }).amazon_order_id));
+    const todo = (allOrders ?? [])
+      .map((o) => (o as { amazon_order_id: string }).amazon_order_id)
+      .filter((id) => !done.has(id))
+      .slice(0, 100); // cap per run to stay within rate limit + function time
+
+    for (const orderId of todo) {
+      try {
+        const items = await fetchOrderItems(orderId);
+        if (items.length) {
+          const rows = items.map((it) => ({
+            amazon_order_id: orderId,
+            order_item_id: it.orderItemId,
+            asin: it.asin,
+            seller_sku: it.sellerSku,
+            title: it.title,
+            quantity_ordered: it.quantityOrdered,
+            quantity_shipped: it.quantityShipped,
+            item_price: it.itemPrice,
+            item_tax: it.itemTax,
+            shipping_price: it.shippingPrice,
+            shipping_tax: it.shippingTax,
+            promotion_discount: it.promotionDiscount,
+            currency: it.currency,
+            raw: it.raw as never,
+            synced_at: nowIso,
+          }));
+          const { error } = await svc.from("seller_order_items").upsert(rows, { onConflict: "order_item_id" });
+          if (!error) result.items += rows.length;
+          else result.warnings.push(`items ${orderId}: ${error.message}`);
+        }
+      } catch (e) {
+        result.warnings.push(`items ${orderId}: ${e instanceof Error ? e.message.slice(0, 80) : "failed"}`);
+      }
+      await new Promise((r) => setTimeout(r, 1500)); // throttle for the rate limit
+    }
+  } catch (e) {
+    result.warnings.push(`items: ${e instanceof Error ? e.message : "failed"}`);
   }
 
   // Returns are NOT synced — the MFN returns report needs the Direct to Consumer
