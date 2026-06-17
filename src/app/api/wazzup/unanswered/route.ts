@@ -44,6 +44,27 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
+  // Read-only diagnostics: show what the account actually exposes (raw responses,
+  // no writes) so we can see if there are users and whether an account-wide
+  // unanswered counter works without a user id.
+  if (new URL(request.url).searchParams.get("probe") === "1") {
+    const out: Record<string, unknown> = {};
+    for (const [label, u] of [
+      ["users", "https://api.wazzup24.com/v3/users"],
+      ["unanswered_no_id", "https://api.wazzup24.com/v3/unanswered"],
+      ["channels", "https://api.wazzup24.com/v3/channels"],
+    ] as const) {
+      try {
+        const r = await fetch(u, { headers });
+        const text = await r.text();
+        out[label] = { status: r.status, body: text.slice(0, 1500) };
+      } catch (e) {
+        out[label] = { error: e instanceof Error ? e.message : "fetch failed" };
+      }
+    }
+    return Response.json({ ok: true, probe: out });
+  }
+
   const userId = process.env.WAZZUP_USER_ID;
   if (!userId) return Response.json({ ok: true, configured: false, needsUserId: true });
 
