@@ -47,7 +47,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
   const since30 = iso(now - 30 * DAY);
 
   // ── shared fetches (reuse the same sources the dashboard uses) ───────────────
-  const [wz, ordersRes, mmMetrics, mmTarget, recoveredCarts, remitRes, returnsRes, deductions] =
+  const [wz, ordersRes, mmMetrics, mmTarget, recoveredCarts, remitRes, docsRes, deductions] =
     await Promise.all([
       fetchWazzupStats().catch(() => null),
       supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", since30),
@@ -55,7 +55,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
       supabase.from("remittances").select("reconciled, created_at"),
-      supabase.from("marketplace_returns").select("created_at, updated_at, doc_status").gte("created_at", iso(now - 90 * DAY)),
+      supabase.from("seller_order_docs").select("doc_status, updated_at"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
 
@@ -137,16 +137,31 @@ export async function fetchScorecard(): Promise<Scorecard> {
     source: "remittances.reconciled vs ingest date.",
   });
 
-  // 2. Return documentation turnaround (lagging)
-  const returns = (returnsRes.data ?? []).filter((r) => ["submitted", "credited", "closed"].includes(r.doc_status));
-  const turnDays = returns.map((r) => (r.updated_at && r.created_at ? (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / DAY : null)).filter((n): n is number => n != null && n >= 0);
-  const avgTurn = turnDays.length ? turnDays.reduce((a, b) => a + b, 0) / turnDays.length : null;
+  // 2. Return documentation completed (leading) — the Amazon return paperwork
+  //    (invoice / PRT / SRT) Maricel maintains on the Amazon Fulfillment page.
+  const docs = docsRes.data ?? [];
+  const docClosed = docs.filter((d) => d.doc_status === "Closed").length;
+  const docPending = docs.filter((d) => d.doc_status && d.doc_status !== "Closed").length;
+  const docPct = pct(docClosed, docClosed + docPending);
   maricel.push({
-    key: "turnaround", label: "Return doc turnaround", icon: "🗂️", type: "lagging",
-    display: avgTurn == null ? "—" : `${avgTurn.toFixed(1)} days`, sub: `${turnDays.length} documented returns (90d)`,
-    target: "≤ 2 days", status: statusFor(avgTurn, 2, false), progress: avgTurn == null ? null : Math.max(0, Math.min(100, 100 - (avgTurn / 5) * 100)),
-    how: "Average days from a return being logged to its documentation being completed (submitted / credited / closed), over the last 90 days.",
-    source: "marketplace_returns (created → completed).",
+    key: "docs", label: "Return docs completed", icon: "🗂️", type: "leading",
+    display: docPct == null ? `${docClosed}` : `${docPct}%`, sub: `${docClosed} closed · ${docPending} pending`,
+    target: "≥ 90%", status: statusFor(docPct, 90, true), progress: docPct,
+    how: "Amazon return-document records marked Closed ÷ all started records (Closed + still in progress). The paperwork Maricel completes per order.",
+    source: "seller_order_docs.doc_status (Amazon Fulfillment page).",
+  });
+
+  // 3. Deduction turnaround — avg days from a deduction appearing to Maricel
+  //    closing it (real timestamps), last 90 days. (lagging)
+  const closedDed = deductions.filter((d) => d.status === "closed" && d.closed_at && d.created_at && now - new Date(d.closed_at as string).getTime() <= 90 * DAY);
+  const dedDays = closedDed.map((d) => (new Date(d.closed_at as string).getTime() - new Date(d.created_at).getTime()) / DAY).filter((n) => n >= 0);
+  const avgDed = dedDays.length ? dedDays.reduce((a, b) => a + b, 0) / dedDays.length : null;
+  maricel.push({
+    key: "ded_turn", label: "Deduction turnaround", icon: "⏱️", type: "lagging",
+    display: avgDed == null ? "—" : `${avgDed.toFixed(1)} days`, sub: `${dedDays.length} closed (90d)`,
+    target: "≤ 5 days", status: statusFor(avgDed, 5, false), progress: avgDed == null ? null : Math.max(0, Math.min(100, 100 - (avgDed / 10) * 100)),
+    how: "Average days from a deduction appearing on a remittance to Maricel closing (documenting) it, over the last 90 days.",
+    source: "remittance_deductions (created_at → closed_at).",
   });
 
   // 3 + 4. Recovery rate % and total recovered AED (lagging — the money)
