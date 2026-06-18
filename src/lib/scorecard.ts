@@ -54,8 +54,8 @@ export async function fetchScorecard(): Promise<Scorecard> {
       fetchMmMetrics().catch(() => null),
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
-      supabase.from("remittances").select("reconciled, created_at"),
-      supabase.from("seller_order_docs").select("doc_status, updated_at"),
+      supabase.from("remittances").select("remittance_ref, reconciled, created_at"),
+      supabase.from("seller_order_docs").select("invoice_number, prt_number, srt_number, doc_status"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
 
@@ -126,7 +126,9 @@ export async function fetchScorecard(): Promise<Scorecard> {
   const maricel: Kpi[] = [];
   // 1. Reconciliation within 3-day SLA (leading) — a payment must be marked
   //    reviewed within 3 days; one left open >3 days is a breach.
-  const remits = remitRes.data ?? [];
+  // Only real Amazon payment remittances (6+ digit refs) — drops "Payment Advice"
+  // and other non-payment rows so the SLA population is genuine, matching the band.
+  const remits = (remitRes.data ?? []).filter((r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref));
   const olderThan3 = remits.filter((r) => r.created_at && now - new Date(r.created_at).getTime() > 3 * DAY);
   const reviewedOld = olderThan3.filter((r) => r.reconciled === true).length;
   const breaches = olderThan3.length - reviewedOld; // open > 3 days, not reviewed
@@ -143,15 +145,14 @@ export async function fetchScorecard(): Promise<Scorecard> {
   // 2. Return documentation completed (leading) — the Amazon return paperwork
   //    (invoice / PRT / SRT) Maricel maintains on the Amazon Fulfillment page.
   const docs = docsRes.data ?? [];
+  const documented = docs.filter((d) => d.invoice_number || d.prt_number || d.srt_number).length;
   const docClosed = docs.filter((d) => d.doc_status === "Closed").length;
-  const docPending = docs.filter((d) => d.doc_status && d.doc_status !== "Closed").length;
-  const docPct = pct(docClosed, docClosed + docPending);
   maricel.push({
-    key: "docs", label: "Return docs completed", icon: "🗂️", type: "leading",
-    display: docPct == null ? `${docClosed}` : `${docPct}%`, sub: `${docClosed} closed · ${docPending} pending`,
-    target: "≥ 90%", status: statusFor(docPct, 90, true), progress: docPct,
-    how: "Amazon return-document records marked Closed ÷ all started records (Closed + still in progress). The paperwork Maricel completes per order.",
-    source: "seller_order_docs.doc_status (Amazon Fulfillment page).",
+    key: "docs", label: "Return docs prepared", icon: "🗂️", type: "leading",
+    display: `${documented}`, sub: `orders with invoice/PRT/SRT${docClosed ? ` · ${docClosed} closed` : ""}`,
+    target: undefined, status: "none", progress: null,
+    how: "Amazon orders where Maricel has filled return paperwork (invoice number, PRT, or SRT). Counts her actual documentation output, not the status flag.",
+    source: "seller_order_docs (invoice_number / prt_number / srt_number).",
   });
 
   // 3. Deduction turnaround — avg days from a deduction appearing to Maricel
