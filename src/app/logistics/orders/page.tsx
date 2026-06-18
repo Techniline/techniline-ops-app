@@ -48,7 +48,7 @@ function StatusBadge({ value }: { value: string }) {
 
 /** Payment (financial) status badge — paid green, pending amber, refunded/void red. */
 function PaymentBadge({ value }: { value: string | null }) {
-  if (!value) return <span className="text-slate-400">—</span>;
+  if (!value) return null;
   const v = value.toLowerCase();
   const tone =
     v === "paid"
@@ -89,8 +89,16 @@ const COLUMNS: Column[] = [
     className: "tabular-nums",
     cell: (o) => (o.order_value != null ? `${o.currency ?? "AED"} ${o.order_value.toFixed(2)}` : "—"),
   },
-  { id: "payment", label: "Payment", cell: (o) => o.payment_method ?? "—" },
-  { id: "payment_status", label: "Payment status", cell: (o) => <PaymentBadge value={o.financial_status} /> },
+  {
+    id: "payment",
+    label: "Payment",
+    cell: (o) => (
+      <span className="flex items-center gap-1.5">
+        <span>{o.payment_method ?? "—"}</span>
+        <PaymentBadge value={o.financial_status} />
+      </span>
+    ),
+  },
   { id: "phone", label: "Phone", cell: (o) => o.shipping_phone ?? "—" },
   { id: "method", label: "Method", cell: (o) => o.shipping_method ?? "—" },
   { id: "city", label: "City", cell: (o) => o.shipping_city ?? "—" },

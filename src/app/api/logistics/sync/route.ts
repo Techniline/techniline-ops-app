@@ -25,14 +25,20 @@ export async function POST(request: Request): Promise<Response> {
   const untilParam = params.get("until");
   const windowed = !!sinceParam; // historical backfill — don't touch last-sync
   let sinceIso: string;
+  // Historical backfill queries by created date; the incremental sync queries by
+  // UPDATED date so orders that change later (fulfilled, paid, cancelled) get
+  // re-pulled — Shopify's created-date window would never see those changes.
+  const by: "created" | "updated" = windowed ? "created" : "updated";
   if (sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)) {
     sinceIso = new Date(`${sinceParam}T00:00:00Z`).toISOString();
   } else {
     const { data: setting } = await svc.from("app_settings").select("value").eq("key", LAST_SYNC_KEY).maybeSingle();
     const last = (setting as { value?: string | null } | null)?.value ?? null;
-    sinceIso = last
-      ? new Date(new Date(last).getTime() - 6 * 3600 * 1000).toISOString()
-      : new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
+    // Cover at least the last 14 days of updated orders (self-heals recently
+    // changed orders), going further back if the last sync is older than that.
+    const sinceSinceLast = last ? new Date(last).getTime() - 6 * 3600 * 1000 : Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 3600 * 1000;
+    const minWindow = Date.now() - 14 * 24 * 3600 * 1000;
+    sinceIso = new Date(Math.min(sinceSinceLast, minWindow)).toISOString();
   }
   const untilIso =
     untilParam && /^\d{4}-\d{2}-\d{2}$/.test(untilParam)
@@ -41,7 +47,7 @@ export async function POST(request: Request): Promise<Response> {
 
   let orders: SyncOrder[];
   try {
-    orders = await fetchOrdersForSync(sinceIso, untilIso);
+    orders = await fetchOrdersForSync(sinceIso, untilIso, { by });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Shopify fetch failed.";
     await svc.from("logistics_api_error_logs").insert({ source: "shopify_sync", context: `since ${sinceIso}`, message });
