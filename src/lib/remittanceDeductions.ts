@@ -35,6 +35,7 @@ export const DISPUTE_STATUSES = [
   "Approved",
   "Partially Approved",
   "Rejected",
+  "Recovered",
   "Closed",
 ] as const;
 
@@ -106,6 +107,93 @@ export function validateClosure(d: DeductionDraft): string[] {
 export function recoveryPct(claim: number | null, approved: number | null): number | null {
   if (!claim || claim <= 0) return null;
   return Math.round(((approved ?? 0) / claim) * 100);
+}
+
+// ── Recovery analytics + export ──────────────────────────────────────────────
+
+const abs = (n: number | null | undefined) => Math.abs(n ?? 0);
+
+export interface RecoverySummary {
+  totalDeducted: number; // Σ |amount_aed|
+  totalClaimed: number; // Σ claim_amount_aed
+  totalApproved: number; // Σ approved_amount_aed (recovered)
+  recoveryPct: number | null; // approved ÷ claimed
+  openCount: number;
+  closedCount: number;
+  byChargeType: { type: string; label: string; count: number; deducted: number; approved: number }[];
+  byStatus: { status: string; count: number; claimed: number; approved: number }[];
+  byMonth: { month: string; deducted: number; approved: number }[];
+  aging: { bucket: string; count: number; amount: number }[]; // OPEN deductions by age
+}
+
+/** Aggregate recovery metrics from the deduction set (pass includeClosed: true). */
+export function summarizeRecovery(ds: RemittanceDeduction[]): RecoverySummary {
+  let totalDeducted = 0, totalClaimed = 0, totalApproved = 0, openCount = 0, closedCount = 0;
+  const ct = new Map<string, { count: number; deducted: number; approved: number }>();
+  const st = new Map<string, { count: number; claimed: number; approved: number }>();
+  const mo = new Map<string, { deducted: number; approved: number }>();
+  const aging = [
+    { bucket: "0–30 days", count: 0, amount: 0 },
+    { bucket: "31–60 days", count: 0, amount: 0 },
+    { bucket: "61–90 days", count: 0, amount: 0 },
+    { bucket: "90+ days", count: 0, amount: 0 },
+  ];
+  const now = Date.now();
+  for (const d of ds) {
+    const ded = abs(d.amount_aed);
+    totalDeducted += ded;
+    totalClaimed += d.claim_amount_aed ?? 0;
+    totalApproved += d.approved_amount_aed ?? 0;
+    if (d.status === "closed") closedCount += 1; else openCount += 1;
+
+    const ckey = d.charge_type ?? "uncategorized";
+    const c = ct.get(ckey) ?? { count: 0, deducted: 0, approved: 0 };
+    c.count += 1; c.deducted += ded; c.approved += d.approved_amount_aed ?? 0;
+    ct.set(ckey, c);
+
+    const skey = d.dispute_status ?? "—";
+    const s = st.get(skey) ?? { count: 0, claimed: 0, approved: 0 };
+    s.count += 1; s.claimed += d.claim_amount_aed ?? 0; s.approved += d.approved_amount_aed ?? 0;
+    st.set(skey, s);
+
+    const when = d.recovery_date ?? d.created_at;
+    const month = when ? String(when).slice(0, 7) : "—";
+    const m = mo.get(month) ?? { deducted: 0, approved: 0 };
+    m.deducted += ded; m.approved += d.approved_amount_aed ?? 0;
+    mo.set(month, m);
+
+    if (d.status !== "closed" && d.created_at) {
+      const age = (now - new Date(d.created_at).getTime()) / 86_400_000;
+      const b = age <= 30 ? 0 : age <= 60 ? 1 : age <= 90 ? 2 : 3;
+      aging[b].count += 1; aging[b].amount += ded;
+    }
+  }
+  return {
+    totalDeducted, totalClaimed, totalApproved,
+    recoveryPct: totalClaimed > 0 ? Math.round((totalApproved / totalClaimed) * 100) : null,
+    openCount, closedCount,
+    byChargeType: [...ct.entries()].map(([type, v]) => ({ type, label: chargeTypeLabel(type), ...v })).sort((a, b) => b.deducted - a.deducted),
+    byStatus: [...st.entries()].map(([status, v]) => ({ status, ...v })).sort((a, b) => b.count - a.count),
+    byMonth: [...mo.entries()].map(([month, v]) => ({ month, ...v })).sort((a, b) => a.month.localeCompare(b.month)),
+    aging,
+  };
+}
+
+/** Deductions as a flat report table (for CSV export). */
+export function deductionsReport(ds: RemittanceDeduction[]): { headers: string[]; rows: (string | number | null)[][] } {
+  const headers = [
+    "Payment Ref", "Charge Type", "Deduction AED", "Status", "Dispute Status",
+    "Return ID", "PO Number", "TLE Invoice", "SRT", "PRT", "Dispute ID", "Amazon Case",
+    "Claim AED", "Approved AED", "Recovery %", "Recovery Date", "Remark", "Created", "Closed",
+  ];
+  const rows = ds.map((d) => [
+    d.remittance_ref, chargeTypeLabel(d.charge_type), d.amount_aed, d.status, d.dispute_status,
+    d.return_id, d.po_number, d.tle_invoice_number, d.srt_number, d.prt_number, d.dispute_id, d.amazon_case_id,
+    d.claim_amount_aed, d.approved_amount_aed, recoveryPct(d.claim_amount_aed, d.approved_amount_aed),
+    d.recovery_date, d.remark, d.created_at ? String(d.created_at).slice(0, 10) : null,
+    d.closed_at ? String(d.closed_at).slice(0, 10) : null,
+  ]);
+  return { headers, rows };
 }
 
 export async function fetchDeductions(opts: { includeClosed: boolean }): Promise<RemittanceDeduction[]> {
