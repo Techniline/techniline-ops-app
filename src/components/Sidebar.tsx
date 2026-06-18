@@ -96,6 +96,7 @@ export function Sidebar({
       items: [
         { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
         { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
+        { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) },
       ],
     },
     {
