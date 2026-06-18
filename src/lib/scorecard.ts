@@ -124,17 +124,20 @@ export async function fetchScorecard(): Promise<Scorecard> {
 
   // ── MARICEL ──────────────────────────────────────────────────────────────
   const maricel: Kpi[] = [];
-  // 1. Reconciliation within 7-day SLA (leading/process)
+  // 1. Reconciliation within 3-day SLA (leading) — a payment must be marked
+  //    reviewed within 3 days; one left open >3 days is a breach.
   const remits = remitRes.data ?? [];
-  const olderThan7 = remits.filter((r) => r.created_at && now - new Date(r.created_at).getTime() > 7 * DAY);
-  const reconciledOld = olderThan7.filter((r) => r.reconciled === true).length;
-  const reconPct = pct(reconciledOld, olderThan7.length);
+  const olderThan3 = remits.filter((r) => r.created_at && now - new Date(r.created_at).getTime() > 3 * DAY);
+  const reviewedOld = olderThan3.filter((r) => r.reconciled === true).length;
+  const breaches = olderThan3.length - reviewedOld; // open > 3 days, not reviewed
+  const reconPct = pct(reviewedOld, olderThan3.length);
   maricel.push({
-    key: "recon", label: "Reconciliation 7-day SLA", icon: "✅", type: "leading",
-    display: reconPct == null ? "—" : `${reconPct}%`, sub: `${reconciledOld} of ${olderThan7.length} payments`,
+    key: "recon", label: "Reconciliation 3-day SLA", icon: "✅", type: "leading",
+    display: reconPct == null ? "—" : `${reconPct}%`,
+    sub: `${reviewedOld} of ${olderThan3.length} reviewed · ${breaches} open >3 days`,
     target: "≥ 95%", status: statusFor(reconPct, 95, true), progress: reconPct,
-    how: "Of remittance payments received more than 7 days ago, the share marked reconciled. Anything older than a week that's still open has missed the 7-day SLA.",
-    source: "remittances.reconciled vs ingest date.",
+    how: "Of remittance payments received more than 3 days ago, the share marked reviewed. Any payment still open (not reviewed) after 3 days is an SLA breach — shown as the “open >3 days” count.",
+    source: "remittances.reconciled (Mark reviewed) vs ingest date.",
   });
 
   // 2. Return documentation completed (leading) — the Amazon return paperwork
