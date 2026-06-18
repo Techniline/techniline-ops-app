@@ -1,4 +1,5 @@
 import { formatAED } from "@/lib/format";
+import { fetchMmMetrics, fetchMmTarget, fetchRecoveredThisMonth } from "@/lib/musicmajlis";
 import { fetchDeductions, summarizeRecovery } from "@/lib/remittanceDeductions";
 import { supabase } from "@/lib/supabaseClient";
 import { fetchWazzupStats } from "@/lib/wazzup";
@@ -44,18 +45,15 @@ function statusFor(value: number | null, target: number, higherIsBetter: boolean
 export async function fetchScorecard(): Promise<Scorecard> {
   const now = Date.now();
   const since30 = iso(now - 30 * DAY);
-  const monthStart = (() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; })();
-  const monthKey = monthStart.toISOString().slice(0, 7);
 
-  // ── shared fetches ─────────────────────────────────────────────────────────
-  const [wz, ordersRes, mmSalesRes, mmTargetRes, abandonedRes, recoveredRes, remitRes, returnsRes, deductions] =
+  // ── shared fetches (reuse the same sources the dashboard uses) ───────────────
+  const [wz, ordersRes, mmMetrics, mmTarget, recoveredCarts, remitRes, returnsRes, deductions] =
     await Promise.all([
       fetchWazzupStats().catch(() => null),
       supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", since30),
-      supabase.from("shopify_orders").select("order_value, logistics_status").gte("shopify_created_at", monthStart.toISOString()),
-      supabase.from("mm_targets").select("target_amount").eq("month", monthKey).maybeSingle(),
-      supabase.from("mm_abandoned_actions").select("id").gte("created_at", since30),
-      supabase.from("mm_recovered_carts").select("amount").gte("recovered_date", since30.slice(0, 10)),
+      fetchMmMetrics().catch(() => null),
+      fetchMmTarget().catch(() => null),
+      fetchRecoveredThisMonth().catch(() => []),
       supabase.from("remittances").select("reconciled, created_at"),
       supabase.from("marketplace_returns").select("created_at, updated_at, doc_status").gte("created_at", iso(now - 90 * DAY)),
       fetchDeductions({ includeClosed: true }).catch(() => []),
@@ -96,32 +94,32 @@ export async function fetchScorecard(): Promise<Scorecard> {
     source: "shopify_orders.fulfillment_status (derived from line-item fulfillment).",
   });
 
-  // 4. Abandoned-cart recovery (lagging)
-  const abandoned = (abandonedRes.data ?? []).length;
-  const recovered = recoveredRes.data ?? [];
-  const recoveredCount = recovered.length;
-  const recoveredAed = recovered.reduce((s, r) => s + (r.amount ?? 0), 0);
-  const recoveryRate = pct(recoveredCount, abandoned);
+  // 4. Abandoned-cart recovery (lagging) — recovered carts (this month) vs the
+  //    month's abandoned-cart count from Shopify.
+  const abandoned = mmMetrics?.abandonedCarts ?? null;
+  const recoveredCount = recoveredCarts.length;
+  const recoveredAed = recoveredCarts.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const recoveryRate = abandoned && abandoned > 0 ? pct(recoveredCount, abandoned) : null;
   aaron.push({
     key: "cart", label: "Abandoned-cart recovery", icon: "🛒", type: "lagging",
     display: recoveryRate == null ? `${recoveredCount} carts` : `${recoveryRate}%`,
-    sub: `${recoveredCount} recovered · ${formatAED(recoveredAed)} (30d)`,
-    target: "≥ 20%", status: statusFor(recoveryRate, 20, true), progress: recoveryRate,
-    how: "Abandoned checkouts recovered (converted to an order) ÷ abandoned checkouts worked, last 30 days. Value = AED of recovered carts.",
-    source: "mm_recovered_carts vs mm_abandoned_actions.",
+    sub: `${recoveredCount} recovered · ${formatAED(recoveredAed)}${abandoned != null ? ` of ${abandoned} abandoned` : ""} (this month)`,
+    target: "≥ 20%", status: recoveryRate == null ? "none" : statusFor(recoveryRate, 20, true), progress: recoveryRate,
+    how: "Recovered carts logged this month ÷ Shopify abandoned checkouts this month. Value = AED of the recovered carts.",
+    source: "mm_recovered_carts + Shopify abandoned-cart metric.",
   });
 
-  // 5. MM sales vs monthly target (lagging)
-  const mmSales = (mmSalesRes.data ?? []).filter((o) => o.logistics_status !== "cancelled").reduce((s, o) => s + (o.order_value ?? 0), 0);
-  const mmTarget = (mmTargetRes.data as { target_amount?: number } | null)?.target_amount ?? null;
-  const mmPct = mmTarget && mmTarget > 0 ? Math.round((mmSales / mmTarget) * 100) : null;
+  // 5. MM sales vs monthly target (lagging) — Shopify net sales (same as dashboard)
+  const mmSales = mmMetrics?.netSales ?? null;
+  const target = mmTarget?.target_amount ?? null;
+  const mmPct = target && target > 0 && mmSales != null ? Math.round((mmSales / target) * 100) : null;
   aaron.push({
     key: "mmsales", label: "MusicMajlis sales (month)", icon: "💰", type: "lagging",
-    display: formatAED(mmSales),
-    sub: mmTarget ? `${mmPct}% of ${formatAED(mmTarget)} target` : "no target set this month",
-    target: mmTarget ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), progress: mmPct == null ? null : Math.min(100, mmPct),
-    how: "Sum of order value for all non-cancelled MusicMajlis orders created this calendar month, compared to the month's sales target.",
-    source: "shopify_orders.order_value + mm_targets.",
+    display: mmSales == null ? "—" : formatAED(mmSales),
+    sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} target` : "no target set this month",
+    target: target ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), progress: mmPct == null ? null : Math.min(100, mmPct),
+    how: "Shopify net sales for MusicMajlis this calendar month (the dashboard figure), compared to the month's sales target.",
+    source: "Shopify net sales + mm_targets.",
   });
 
   // ── MARICEL ──────────────────────────────────────────────────────────────
