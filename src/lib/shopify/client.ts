@@ -273,11 +273,33 @@ export async function fetchOrdersForSync(sinceIso: string, untilIso?: string): P
     for (const o of json.orders ?? []) {
       const name = [o.customer?.first_name, o.customer?.last_name].filter(Boolean).join(" ").trim();
       const amt = Number(o.current_total_price ?? o.total_price ?? 0);
+      // Shopify's order-level fulfillment_status is unreliable (often null even
+      // when fulfilled, since fulfillment moved to a separate model). Trust it
+      // only when it says fulfilled/partial; otherwise derive from the line
+      // items' fulfillable_quantity (0 remaining = that unit is fulfilled).
+      const liArr = o.line_items ?? [];
+      let totQty = 0;
+      let fulQty = 0;
+      for (const li of liArr) {
+        const q = Number(li.quantity ?? 0);
+        const f = Number(li.fulfillable_quantity ?? q);
+        totQty += q;
+        fulQty += Math.max(0, q - f);
+      }
+      const orderFs = (o.fulfillment_status ?? "").toLowerCase();
+      const fulfillmentStatus =
+        orderFs === "fulfilled" || orderFs === "partial"
+          ? orderFs
+          : totQty > 0 && fulQty >= totQty
+            ? "fulfilled"
+            : fulQty > 0
+              ? "partial"
+              : "unfulfilled";
       out.push({
         shopifyOrderId: String(o.id ?? ""),
         orderNumber: o.name ?? null,
         shopifyCreatedAt: o.created_at ?? null,
-        fulfillmentStatus: o.fulfillment_status ?? "unfulfilled",
+        fulfillmentStatus,
         financialStatus: o.financial_status ?? null,
         customerName: name || null,
         orderValue: Number.isFinite(amt) ? amt : null,

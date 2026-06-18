@@ -46,6 +46,22 @@ function StatusBadge({ value }: { value: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
 }
 
+/** Payment (financial) status badge — paid green, pending amber, refunded/void red. */
+function PaymentBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-slate-400">—</span>;
+  const v = value.toLowerCase();
+  const tone =
+    v === "paid"
+      ? "bg-emerald-100 text-emerald-700"
+      : v === "pending" || v === "authorized" || v === "partially_paid"
+        ? "bg-amber-100 text-amber-700"
+        : v === "refunded" || v === "voided" || v === "partially_refunded"
+          ? "bg-rose-100 text-rose-700"
+          : "bg-slate-100 text-slate-600";
+  const label = value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
+}
+
 interface Column {
   id: string;
   label: string;
@@ -74,6 +90,7 @@ const COLUMNS: Column[] = [
     cell: (o) => (o.order_value != null ? `${o.currency ?? "AED"} ${o.order_value.toFixed(2)}` : "—"),
   },
   { id: "payment", label: "Payment", cell: (o) => o.payment_method ?? "—" },
+  { id: "payment_status", label: "Payment status", cell: (o) => <PaymentBadge value={o.financial_status} /> },
   { id: "phone", label: "Phone", cell: (o) => o.shipping_phone ?? "—" },
   { id: "method", label: "Method", cell: (o) => o.shipping_method ?? "—" },
   { id: "city", label: "City", cell: (o) => o.shipping_city ?? "—" },
