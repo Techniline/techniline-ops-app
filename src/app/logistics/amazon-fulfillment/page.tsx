@@ -375,9 +375,12 @@ function Content() {
     }
   }, [search]);
 
+  // Wait for the auth session (profile) before fetching — otherwise the query can
+  // fire before the login token attaches and come back empty (RLS sees anon).
+  // Re-fetches if the profile/session changes (e.g. token refresh).
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (profile?.id) void load();
+  }, [load, profile?.id]);
 
   async function syncNow() {
     setSyncing(true);
