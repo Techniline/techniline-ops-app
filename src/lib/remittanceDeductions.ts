@@ -362,7 +362,15 @@ export async function markRemittanceReviewed(remittanceRef: string): Promise<voi
     .from("remittances")
     .update({ reconciled: true, reviewed_at: new Date().toISOString() })
     .eq("remittance_ref", remittanceRef);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // reviewed_at column may not exist yet (migration not run) — retry without it
+    // so "Mark reviewed" always works.
+    const { error: e2 } = await supabase
+      .from("remittances")
+      .update({ reconciled: true })
+      .eq("remittance_ref", remittanceRef);
+    if (e2) throw new Error(e2.message);
+  }
 }
 
 /** Captured remittances that still have an unexplained deduction total (for the picker). */
