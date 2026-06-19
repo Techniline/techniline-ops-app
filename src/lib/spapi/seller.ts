@@ -56,10 +56,22 @@ export async function fetchSellerOrderItems(amazonOrderId: string): Promise<Sell
 
 export type SellerOrderDocRow = Tables<"seller_order_docs">;
 
-/** Return documentation keyed by amazon_order_id. */
-export async function fetchSellerOrderDocs(): Promise<Map<string, SellerOrderDocRow>> {
+/** Return documentation keyed by amazon_order_id. Pass the order ids being shown
+ *  so we only fetch their docs — a plain select is capped at 1000 rows by
+ *  Supabase, and seller_order_docs now exceeds that, which silently dropped docs
+ *  (invoice/PRT/SRT) for orders beyond the cap. */
+export async function fetchSellerOrderDocs(orderIds?: string[]): Promise<Map<string, SellerOrderDocRow>> {
   const map = new Map<string, SellerOrderDocRow>();
-  const { data, error } = await supabase.from("seller_order_docs").select("*");
+  if (orderIds && orderIds.length) {
+    for (let i = 0; i < orderIds.length; i += 300) {
+      const chunk = orderIds.slice(i, i + 300);
+      const { data } = await supabase.from("seller_order_docs").select("*").in("amazon_order_id", chunk);
+      for (const d of data ?? []) map.set(d.amazon_order_id, d);
+    }
+    return map;
+  }
+  // Fallback (no ids supplied): fetch a bounded set.
+  const { data, error } = await supabase.from("seller_order_docs").select("*").limit(1000);
   if (error) return map;
   for (const d of data ?? []) map.set(d.amazon_order_id, d);
   return map;

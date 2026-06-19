@@ -364,7 +364,8 @@ function Content() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, d] = await Promise.all([fetchSellerOrders(search), fetchSellerOrderDocs()]);
+      const o = await fetchSellerOrders(search);
+      const d = await fetchSellerOrderDocs(o.map((x) => x.amazon_order_id));
       setOrders(o);
       setDocs(d);
       setErr(null);
