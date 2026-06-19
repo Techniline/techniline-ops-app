@@ -90,16 +90,16 @@ export async function fetchScorecard(cycle: { startIso: string; endIso: string; 
   const fulfilRate = pct(fulfilled, live.length);
   aaron.push({
     key: "action", label: "Order action rate", icon: "⚡", type: "leading",
-    display: actionRate == null ? "—" : `${actionRate}%`, sub: `${actioned} of ${live.length} orders (30d)`,
+    display: actionRate == null ? "—" : `${actionRate}%`, sub: `${actioned} of ${live.length} orders`,
     target: "≥ 90%", status: statusFor(actionRate, 90, true), achievement: achHB(actionRate, 90), progress: actionRate,
-    how: "Orders moved past “New Order” (picked / dispatched / advanced) ÷ all non-cancelled orders created in the last 30 days. A leading sign that nothing is sitting untouched.",
+    how: "Orders moved past “New Order” (picked / dispatched / advanced) ÷ all non-cancelled orders created in the selected quarter. A leading sign that nothing is sitting untouched.",
     source: "shopify_orders.logistics_status.",
   });
   aaron.push({
     key: "fulfil", label: "Fulfillment rate", icon: "📦", type: "lagging",
-    display: fulfilRate == null ? "—" : `${fulfilRate}%`, sub: `${fulfilled} of ${live.length} orders (30d)`,
+    display: fulfilRate == null ? "—" : `${fulfilRate}%`, sub: `${fulfilled} of ${live.length} orders`,
     target: "≥ 95%", status: statusFor(fulfilRate, 95, true), achievement: achHB(fulfilRate, 95), progress: fulfilRate,
-    how: "Non-cancelled orders marked fulfilled ÷ all non-cancelled orders created in the last 30 days.",
+    how: "Non-cancelled orders marked fulfilled ÷ all non-cancelled orders created in the selected quarter.",
     source: "shopify_orders.fulfillment_status (derived from line-item fulfillment).",
   });
 
@@ -160,7 +160,7 @@ export async function fetchScorecard(cycle: { startIso: string; endIso: string; 
     display: counted === 0 ? "—" : `${reconPct}%`,
     sub: counted === 0 ? "no reviews recorded yet" : `${onTimeR} on time · ${lateR} late · ${openBreach} open >3 days`,
     target: "≥ 95%", status: statusFor(reconPct, 95, true), achievement: achHB(reconPct, 95), progress: reconPct,
-    how: "Reviewed within 3 days of receipt, from the real timestamp stamped on “Mark reviewed”. Last 30 days of Amazon payment remittances. Payments reviewed before timestamp tracking are excluded (never guessed).",
+    how: "Reviewed within 3 days of receipt, from the real timestamp stamped on “Mark reviewed”. Amazon payment remittances received in the selected quarter. Payments reviewed before timestamp tracking are excluded (never guessed).",
     source: "remittances.reviewed_at vs ingest date.",
   });
 
@@ -184,9 +184,9 @@ export async function fetchScorecard(cycle: { startIso: string; endIso: string; 
   const avgDed = dedDays.length ? dedDays.reduce((a, b) => a + b, 0) / dedDays.length : null;
   maricel.push({
     key: "ded_turn", label: "Deduction turnaround", icon: "⏱️", type: "lagging",
-    display: avgDed == null ? "—" : `${avgDed.toFixed(1)} days`, sub: `${dedDays.length} closed (90d)`,
+    display: avgDed == null ? "—" : `${avgDed.toFixed(1)} days`, sub: `${dedDays.length} closed this quarter`,
     target: "≤ 5 days", status: statusFor(avgDed, 5, false), achievement: achLB(avgDed, 5), progress: avgDed == null ? null : Math.max(0, Math.min(100, 100 - (avgDed / 10) * 100)),
-    how: "Average days from a deduction appearing on a remittance to Maricel closing (documenting) it, over the last 90 days.",
+    how: "Average days from a deduction appearing on a remittance to Maricel closing (documenting) it, for deductions closed in the selected quarter.",
     source: "remittance_deductions (created_at → closed_at).",
   });
 
