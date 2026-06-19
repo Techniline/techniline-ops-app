@@ -30,7 +30,6 @@ export interface Scorecard {
 
 const DAY = 86_400_000;
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : null);
-const iso = (ms: number) => new Date(ms).toISOString();
 /** Achievement % vs target, normalised so higher = better, capped at 200 so a
  *  tiny denominator (e.g. 0.07-day turnaround) can't produce a 7000% chip. */
 const cap = (n: number) => Math.max(0, Math.min(200, Math.round(n)));
@@ -49,16 +48,18 @@ function statusFor(value: number | null, target: number, higherIsBetter: boolean
   return "bad";
 }
 
-/** Compute the full KPI scorecard for Aaron + Maricel from live data. Fail-soft. */
-export async function fetchScorecard(): Promise<Scorecard> {
+/** Compute the full KPI scorecard for Aaron + Maricel from live data, scoped to
+ *  the given cycle (quarter) window. Fail-soft. */
+export async function fetchScorecard(cycle: { startIso: string; endIso: string; label: string }): Promise<Scorecard> {
   const now = Date.now();
-  const since30 = iso(now - 30 * DAY);
+  const qStart = cycle.startIso;
+  const qEnd = cycle.endIso;
 
   // ── shared fetches (reuse the same sources the dashboard uses) ───────────────
   const [wz, ordersRes, mmMetrics, mmTarget, recoveredCarts, remitRes, docsRes, deductions] =
     await Promise.all([
       fetchWazzupStats().catch(() => null),
-      supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", since30),
+      supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", qStart).lt("shopify_created_at", qEnd),
       fetchMmMetrics().catch(() => null),
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
@@ -136,8 +137,9 @@ export async function fetchScorecard(): Promise<Scorecard> {
   //    reviewed_at timestamp (stamped on "Mark reviewed"). Last 30 days of real
   //    Amazon payment remittances. Legacy rows reviewed before timestamp tracking
   //    (reconciled but no reviewed_at) are EXCLUDED — never guessed.
+  const inCycle = (t: string | null | undefined) => !!t && t >= qStart && t < qEnd; // ISO compare
   const remits = (remitRes.data ?? []).filter(
-    (r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref) && r.created_at && now - new Date(r.created_at).getTime() <= 30 * DAY
+    (r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref) && inCycle(r.created_at)
   );
   let onTimeR = 0, lateR = 0, openBreach = 0;
   for (const r of remits) {
@@ -177,7 +179,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
 
   // 3. Deduction turnaround — avg days from a deduction appearing to Maricel
   //    closing it (real timestamps), last 90 days. (lagging)
-  const closedDed = deductions.filter((d) => d.status === "closed" && d.closed_at && d.created_at && now - new Date(d.closed_at as string).getTime() <= 90 * DAY);
+  const closedDed = deductions.filter((d) => d.status === "closed" && inCycle(d.closed_at as string | null) && d.created_at);
   const dedDays = closedDed.map((d) => (new Date(d.closed_at as string).getTime() - new Date(d.created_at).getTime()) / DAY).filter((n) => n >= 0);
   const avgDed = dedDays.length ? dedDays.reduce((a, b) => a + b, 0) / dedDays.length : null;
   maricel.push({
@@ -189,7 +191,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
   });
 
   // 3 + 4. Recovery rate % and total recovered AED (lagging — the money)
-  const rec = summarizeRecovery(deductions);
+  const rec = summarizeRecovery(deductions.filter((d) => inCycle(d.created_at)));
   maricel.push({
     key: "recovery", label: "Deduction recovery rate", icon: "📈", type: "lagging",
     display: rec.recoveryPct == null ? "—" : `${rec.recoveryPct}%`,
@@ -206,5 +208,5 @@ export async function fetchScorecard(): Promise<Scorecard> {
     source: "remittance_deductions.approved_amount_aed.",
   });
 
-  return { aaron, maricel, period: "Rolling 30 days · chat 7d · recovery all-time" };
+  return { aaron, maricel, period: `${cycle.label} · chat is rolling 7d · MM sales is current month` };
 }

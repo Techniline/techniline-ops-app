@@ -6,7 +6,8 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { useAuth } from "@/app/providers/AuthProvider";
-import { surface } from "@/components/ui";
+import { inputClass, surface } from "@/components/ui";
+import { buildCycle, currentYearQuarter, friThuWeek, getStoredCycle, storeCycle } from "@/lib/kpiCycle";
 import { isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
 
@@ -88,12 +89,21 @@ function ScorecardContent() {
   const { profile } = useAuth();
   const [data, setData] = useState<Scorecard | null>(null);
   const [loading, setLoading] = useState(true);
+  const stored = getStoredCycle() ?? currentYearQuarter();
+  const [year, setYear] = useState(stored.year);
+  const [quarter, setQuarter] = useState(stored.quarter);
+  const week = friThuWeek();
 
   useEffect(() => {
     let alive = true;
-    fetchScorecard().then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
+    setLoading(true);
+    storeCycle(year, quarter);
+    fetchScorecard(buildCycle(year, quarter)).then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, []);
+  }, [year, quarter]);
+
+  const cy = currentYearQuarter().year;
+  const years = [cy - 1, cy, cy + 1];
 
   if (!isManager(profile)) {
     return (
@@ -107,6 +117,20 @@ function ScorecardContent() {
   return (
     <div>
       <PageHeader title="KPI Scorecard" subtitle={data ? data.period : "Performance KPIs — leading drivers + lagging outcomes."} />
+
+      <div className={`${surface} mb-4 flex flex-wrap items-center gap-3 p-3`}>
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cycle</span>
+        <select value={quarter} onChange={(e) => setQuarter(Number(e.target.value))} className={`${inputClass} max-w-[110px]`}>
+          {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
+        </select>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={`${inputClass} max-w-[110px]`}>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <span className="text-xs text-slate-500">{buildCycle(year, quarter).months}</span>
+        <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {week.label} (Fri–Thu)
+        </span>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
         <span className="flex items-center gap-1"><span className="rounded-full bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">leading</span> daily driver</span>
