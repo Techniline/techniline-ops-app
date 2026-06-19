@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 import { authorizeLogistics } from "@/lib/logistics/serverAuth";
 import { parseAmazonInvoices } from "@/lib/logistics/parseAmazonInvoices";
 
@@ -23,6 +25,24 @@ export async function GET(request: Request): Promise<Response> {
   const { data: exact } = await svc.from("seller_orders").select("amazon_order_id").eq("amazon_order_id", orderId).maybeSingle();
   const { data: like } = await svc.from("seller_orders").select("amazon_order_id").ilike("amazon_order_id", `%${orderId}%`).limit(5);
   const { data: doc } = await svc.from("seller_order_docs").select("amazon_order_id, invoice_number, updated_at").eq("amazon_order_id", orderId).maybeSingle();
+
+  // Read AS THE USER (their token, under RLS) to see exactly what the browser gets.
+  const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "").trim();
+  const url2 = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  let userView: Record<string, unknown> = { skipped: true };
+  if (url2 && anon) {
+    const uc = createClient(url2, anon, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
+    const ordersRes = await uc.from("seller_orders").select("amazon_order_id", { count: "exact", head: true });
+    const docRes = await uc.from("seller_order_docs").select("amazon_order_id, invoice_number").eq("amazon_order_id", orderId).maybeSingle();
+    userView = {
+      sellerOrdersVisible: ordersRes.count ?? 0,
+      sellerOrdersError: ordersRes.error?.message ?? null,
+      docInvoice: (docRes.data as { invoice_number?: string } | null)?.invoice_number ?? null,
+      docError: docRes.error?.message ?? null,
+    };
+  }
+
   return Response.json({
     ok: true,
     orderId,
@@ -30,6 +50,7 @@ export async function GET(request: Request): Promise<Response> {
     inSellerOrders_exact: !!exact,
     fuzzyMatches: (like ?? []).map((r) => (r as { amazon_order_id: string }).amazon_order_id),
     docRow: doc ?? null,
+    userView,
   });
 }
 
