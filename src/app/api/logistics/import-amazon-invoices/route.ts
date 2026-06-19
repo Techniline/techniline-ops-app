@@ -10,6 +10,29 @@ const DOC_EDITORS = new Set([
   "4f0eaff3-3ce3-44de-8ed9-aa84246fc538", // Kesh
 ]);
 
+/** Read-only trace for one order id: GET ?trace=403-... → is it in seller_orders,
+ *  and what does its seller_order_docs row hold? Pinpoints why a match fails. */
+export async function GET(request: Request): Promise<Response> {
+  const auth = await authorizeLogistics(request);
+  if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+  const svc = auth.serviceClient;
+  const orderId = new URL(request.url).searchParams.get("trace");
+  if (!orderId) return Response.json({ ok: false, error: "Pass ?trace=<orderId>." }, { status: 400 });
+
+  const { count: total } = await svc.from("seller_orders").select("*", { count: "exact", head: true });
+  const { data: exact } = await svc.from("seller_orders").select("amazon_order_id").eq("amazon_order_id", orderId).maybeSingle();
+  const { data: like } = await svc.from("seller_orders").select("amazon_order_id").ilike("amazon_order_id", `%${orderId}%`).limit(5);
+  const { data: doc } = await svc.from("seller_order_docs").select("amazon_order_id, invoice_number, updated_at").eq("amazon_order_id", orderId).maybeSingle();
+  return Response.json({
+    ok: true,
+    orderId,
+    sellerOrdersTotal: total ?? 0,
+    inSellerOrders_exact: !!exact,
+    fuzzyMatches: (like ?? []).map((r) => (r as { amazon_order_id: string }).amazon_order_id),
+    docRow: doc ?? null,
+  });
+}
+
 /**
  * Fill Amazon order invoice numbers from the SIS Ledger (ERP export). Matches the
  * Comment (Amazon order id) to a synced seller_order, and writes the Inv No into
@@ -50,9 +73,16 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "No rows with an Amazon order id + invoice number found." }, { status: 400 });
   }
 
-  const { data: orders, error: oErr } = await svc.from("seller_orders").select("amazon_order_id");
-  if (oErr) return Response.json({ ok: false, error: oErr.message }, { status: 500 });
-  const known = new Set((orders ?? []).map((o) => (o as { amazon_order_id: string }).amazon_order_id));
+  // Match by querying only the ledger's order ids (chunked) so the default
+  // 1000-row cap on a bare select can never silently drop a valid order.
+  const ledgerIds = parsed.records.map((r) => r.orderId);
+  const known = new Set<string>();
+  for (let i = 0; i < ledgerIds.length; i += 300) {
+    const chunk = ledgerIds.slice(i, i + 300);
+    const { data, error } = await svc.from("seller_orders").select("amazon_order_id").in("amazon_order_id", chunk);
+    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+    for (const o of data ?? []) known.add((o as { amazon_order_id: string }).amazon_order_id);
+  }
 
   const { data: docRows } = await svc.from("seller_order_docs").select("amazon_order_id, invoice_number");
   const existingInvoice = new Map<string, string | null>();
