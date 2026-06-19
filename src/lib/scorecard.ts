@@ -31,9 +31,11 @@ export interface Scorecard {
 const DAY = 86_400_000;
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : null);
 const iso = (ms: number) => new Date(ms).toISOString();
-/** Achievement % vs target, normalised so higher = better. */
-const achHB = (v: number | null, t: number) => (v == null ? null : Math.round((v / t) * 100)); // higher is better
-const achLB = (v: number | null, t: number) => (v == null || v <= 0 ? (v === 0 ? 200 : null) : Math.round((t / v) * 100)); // lower is better
+/** Achievement % vs target, normalised so higher = better, capped at 200 so a
+ *  tiny denominator (e.g. 0.07-day turnaround) can't produce a 7000% chip. */
+const cap = (n: number) => Math.max(0, Math.min(200, Math.round(n)));
+const achHB = (v: number | null, t: number) => (v == null ? null : cap((v / t) * 100)); // higher is better
+const achLB = (v: number | null, t: number) => (v == null ? null : v <= 0 ? 200 : cap((t / v) * 100)); // lower is better
 
 function statusFor(value: number | null, target: number, higherIsBetter: boolean, warnBand = 0.1): Kpi["status"] {
   if (value == null) return "none";
@@ -61,7 +63,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
       supabase.from("remittances").select("remittance_ref, reconciled, reviewed_at, created_at"),
-      supabase.from("seller_order_docs").select("invoice_number, prt_number, srt_number, doc_status"),
+      supabase.from("seller_order_docs").select("*", { count: "exact", head: true }).or("invoice_number.not.is.null,prt_number.not.is.null,srt_number.not.is.null"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
 
@@ -162,9 +164,9 @@ export async function fetchScorecard(): Promise<Scorecard> {
 
   // 2. Return documentation completed (leading) — the Amazon return paperwork
   //    (invoice / PRT / SRT) Maricel maintains on the Amazon Fulfillment page.
-  const docs = docsRes.data ?? [];
-  const documented = docs.filter((d) => d.invoice_number || d.prt_number || d.srt_number).length;
-  const docClosed = docs.filter((d) => d.doc_status === "Closed").length;
+  // Counts via count-queries (not fetched rows) so the 1000-row cap can't undercount.
+  const documented = docsRes.count ?? 0;
+  const { count: docClosed } = await supabase.from("seller_order_docs").select("*", { count: "exact", head: true }).eq("doc_status", "Closed");
   maricel.push({
     key: "docs", label: "Return docs prepared", icon: "🗂️", type: "leading",
     display: `${documented}`, sub: `orders with invoice/PRT/SRT${docClosed ? ` · ${docClosed} closed` : ""}`,
@@ -191,7 +193,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
   maricel.push({
     key: "recovery", label: "Deduction recovery rate", icon: "📈", type: "lagging",
     display: rec.recoveryPct == null ? "—" : `${rec.recoveryPct}%`,
-    sub: `${formatAED(rec.totalApproved)} of ${formatAED(rec.totalClaimed)} claimed`,
+    sub: rec.totalClaimed > 0 ? `${formatAED(rec.totalApproved)} of ${formatAED(rec.totalClaimed)} claimed` : "no claims entered yet",
     target: "≥ 80%", status: statusFor(rec.recoveryPct, 80, true), achievement: achHB(rec.recoveryPct, 80), progress: rec.recoveryPct,
     how: "AED approved/recovered ÷ AED claimed across all remittance deductions Maricel has disputed.",
     source: "remittance_deductions (claim vs approved).",
