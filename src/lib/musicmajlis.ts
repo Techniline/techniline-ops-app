@@ -93,6 +93,19 @@ export async function fetchMmNetSalesRange(fromIso: string, toIso: string): Prom
   return j.netSales ?? null;
 }
 
+/** Daily MM net-sales series (YYYY-MM-DD → AED) for a range, for weekly buckets. */
+export async function fetchMmDailyRange(fromIso: string, toIso: string): Promise<Record<string, number>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return {};
+  const res = await fetch(`/api/shopify/mm-metrics?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; daily?: Record<string, number> };
+  if (!res.ok || !j.ok) return {};
+  return j.daily ?? {};
+}
+
 /** Sum of monthly MM targets across a quarter (months stored as YYYY-MM-01). */
 export async function fetchMmTargetRange(year: number, quarter: number): Promise<number | null> {
   const startMonth = (quarter - 1) * 3;

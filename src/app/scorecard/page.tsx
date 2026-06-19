@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,6 +10,7 @@ import { inputClass, surface } from "@/components/ui";
 import { buildCycle, currentYearQuarter, fetchStoredCycle, friThuWeek, saveCycle } from "@/lib/kpiCycle";
 import { isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
+import { fetchWeeklyScorecard, type WeeklyRow, type WeeklyScorecard } from "@/lib/scorecardWeekly";
 
 /** Achievement-% colour band (matches the company KPI sheet):
  *  >120 blue · 100–119 green · 80–99 yellow · <80 red · no-target slate. */
@@ -88,6 +89,59 @@ function Person({ name, role, accent, kpis }: { name: string; role: string; acce
 const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
+/** Cell colour for the weekly grid: band on achievement vs target (AED = neutral). */
+function cellInfo(row: WeeklyRow, v: number | null): { text: string; cls: string } {
+  if (v == null) return { text: "—", cls: "text-slate-300 dark:text-slate-600" };
+  const fmt = row.uom === "AED" ? v.toLocaleString() : row.uom === "days" ? `${v}d` : row.uom === "%" ? `${v}%` : String(v);
+  if (row.uom === "AED") return { text: fmt, cls: "bg-slate-50 text-slate-700 dark:bg-slate-800/50 dark:text-slate-200" };
+  const ach = row.higherIsBetter ? (v / row.targetValue) * 100 : v <= 0 ? 200 : (row.targetValue / v) * 100;
+  const cls = ach > 120 ? "bg-sky-500 text-white" : ach >= 100 ? "bg-emerald-500 text-white" : ach >= 80 ? "bg-amber-400 text-amber-950" : "bg-rose-500 text-white";
+  return { text: fmt, cls };
+}
+
+function WeeklyGrid({ grid, showAaron, showMaricel }: { grid: WeeklyScorecard; showAaron: boolean; showMaricel: boolean }) {
+  const rows = grid.rows.filter((r) => (r.person === "Aaron" ? showAaron : showMaricel));
+  let lastPerson = "";
+  return (
+    <div className={`${surface} overflow-x-auto p-0`}>
+      <table className="min-w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-slate-100 dark:bg-slate-800">
+            <th className="sticky left-0 z-10 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">KPI</th>
+            <th className="px-2 py-2 text-center font-semibold text-slate-600 dark:text-slate-200">Target</th>
+            <th className="px-2 py-2 text-center font-bold text-slate-700 dark:text-slate-100">QTD</th>
+            {grid.weeks.map((w) => <th key={w} className="whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium text-slate-500">{w}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const header = r.person !== lastPerson ? r.person : null;
+            lastPerson = r.person;
+            const tgt = r.uom === "AED" ? "—" : r.higherIsBetter ? `≥${r.targetValue}${r.uom === "%" ? "%" : ""}` : `≤${r.targetValue}${r.uom === "days" ? "d" : ""}`;
+            const qtd = cellInfo(r, r.qtd);
+            return (
+              <Fragment key={r.person + r.label}>
+                {header ? (
+                  <tr><td colSpan={3 + grid.weeks.length} className="bg-slate-50 px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:bg-slate-900/40">{header}</td></tr>
+                ) : null}
+                <tr className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1.5 font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-200">{r.label}</td>
+                  <td className="px-2 py-1.5 text-center text-xs text-slate-400">{tgt}</td>
+                  <td className={`px-2 py-1.5 text-center text-xs font-bold tabular-nums ${qtd.cls}`}>{qtd.text}</td>
+                  {r.weekly.map((v, i) => {
+                    const c = cellInfo(r, v);
+                    return <td key={i} className={`px-2 py-1.5 text-center text-xs tabular-nums ${c.cls}`}>{c.text}</td>;
+                  })}
+                </tr>
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ScorecardContent() {
   const { profile } = useAuth();
   const manager = isManager(profile);
@@ -95,6 +149,9 @@ function ScorecardContent() {
 
   const [data, setData] = useState<Scorecard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"cards" | "weekly">("cards");
+  const [grid, setGrid] = useState<WeeklyScorecard | null>(null);
+  const [gridLoading, setGridLoading] = useState(false);
   const init = currentYearQuarter();
   const [year, setYear] = useState(init.year);
   const [quarter, setQuarter] = useState(init.quarter);
@@ -114,6 +171,15 @@ function ScorecardContent() {
     fetchScorecard(buildCycle(year, quarter)).then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [year, quarter]);
+
+  // Weekly grid — fetched when that view is open (and refreshed on cycle change).
+  useEffect(() => {
+    if (view !== "weekly") return;
+    let alive = true;
+    setGridLoading(true);
+    fetchWeeklyScorecard(buildCycle(year, quarter)).then((g) => { if (alive) { setGrid(g); setGridLoading(false); } }).catch(() => alive && setGridLoading(false));
+    return () => { alive = false; };
+  }, [view, year, quarter]);
 
   function changeCycle(y: number, q: number) {
     setYear(y); setQuarter(q);
@@ -154,9 +220,13 @@ function ScorecardContent() {
           <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Q{quarter} {year}</span>
         )}
         <span className="text-xs text-slate-500">{buildCycle(year, quarter).months}{manager ? "" : " · set by manager"}</span>
-        <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          {week.label} (Fri–Thu)
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs dark:border-slate-700">
+            <button type="button" onClick={() => setView("cards")} className={`px-2.5 py-1 font-medium ${view === "cards" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>Cards</button>
+            <button type="button" onClick={() => setView("weekly")} className={`px-2.5 py-1 font-medium ${view === "weekly" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>Weekly grid</button>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{week.label} (Fri–Thu)</span>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
@@ -170,7 +240,13 @@ function ScorecardContent() {
         <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded bg-rose-500" /> &lt;80%</span>
       </div>
 
-      {loading || !data ? (
+      {view === "weekly" ? (
+        gridLoading || !grid ? (
+          <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading weekly grid…</div>
+        ) : (
+          <WeeklyGrid grid={grid} showAaron={showAaron} showMaricel={showMaricel} />
+        )
+      ) : loading || !data ? (
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading KPIs…</div>
       ) : (
         <>

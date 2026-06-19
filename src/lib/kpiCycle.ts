@@ -46,6 +46,26 @@ export function friThuWeek(ref: Date = new Date()): { startIso: string; endIso: 
   return { startIso: start.toISOString(), endIso: end.toISOString(), label };
 }
 
+/** The Fri→Thu weeks spanning the cycle's quarter, each labelled by its Thursday
+ *  ("week ending"). The first week may start a few days before the quarter. */
+export function cycleWeeks(cycle: KpiCycle): { startIso: string; endIso: string; label: string }[] {
+  const qStart = new Date(cycle.startIso);
+  const qEnd = new Date(cycle.endIso);
+  const first = new Date(qStart);
+  first.setDate(first.getDate() - ((first.getDay() - 5 + 7) % 7)); // back to the Friday on/before
+  first.setHours(0, 0, 0, 0);
+  const out: { startIso: string; endIso: string; label: string }[] = [];
+  for (const s = new Date(first); s < qEnd; s.setDate(s.getDate() + 7)) {
+    const start = new Date(s);
+    const end = new Date(s);
+    end.setDate(end.getDate() + 7);
+    const thu = new Date(end);
+    thu.setDate(end.getDate() - 1);
+    out.push({ startIso: start.toISOString(), endIso: end.toISOString(), label: thu.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) });
+  }
+  return out;
+}
+
 /** Read the shared cycle from app_settings (any signed-in user). Falls back to
  *  the current quarter. */
 export async function fetchStoredCycle(): Promise<{ year: number; quarter: number }> {
