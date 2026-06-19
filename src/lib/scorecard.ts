@@ -13,6 +13,9 @@ export interface Kpi {
   sub?: string; // supporting context line
   target?: string; // e.g. "≥ 90%"
   status: "good" | "warn" | "bad" | "none";
+  /** % of target attained, normalised so higher is always better. Drives the
+   *  colour band: >120 blue · 100–119 green · 80–99 yellow · <80 red. */
+  achievement: number | null;
   progress?: number | null; // 0–100 for the bar (null = no bar)
   how: string; // plain-English calculation
   source: string; // where the data comes from
@@ -28,6 +31,9 @@ export interface Scorecard {
 const DAY = 86_400_000;
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : null);
 const iso = (ms: number) => new Date(ms).toISOString();
+/** Achievement % vs target, normalised so higher = better. */
+const achHB = (v: number | null, t: number) => (v == null ? null : Math.round((v / t) * 100)); // higher is better
+const achLB = (v: number | null, t: number) => (v == null || v <= 0 ? (v === 0 ? 200 : null) : Math.round((t / v) * 100)); // lower is better
 
 function statusFor(value: number | null, target: number, higherIsBetter: boolean, warnBand = 0.1): Kpi["status"] {
   if (value == null) return "none";
@@ -54,7 +60,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
       fetchMmMetrics().catch(() => null),
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
-      supabase.from("remittances").select("remittance_ref, reconciled, created_at"),
+      supabase.from("remittances").select("remittance_ref, reconciled, reviewed_at, created_at"),
       supabase.from("seller_order_docs").select("invoice_number, prt_number, srt_number, doc_status"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
@@ -67,7 +73,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
     key: "chat15", label: "Chat reply within 15 min", icon: "💬", type: "lagging",
     display: chatPct == null ? "—" : `${chatPct}%`,
     sub: wz?.repliedTotal ? `of ${wz.repliedTotal} replies (7d)` : "no data yet",
-    target: "≥ 90%", status: statusFor(chatPct, 90, true), progress: chatPct,
+    target: "≥ 90%", status: statusFor(chatPct, 90, true), achievement: achHB(chatPct, 90), progress: chatPct,
     how: "Inbound WhatsApp messages answered in under 15 minutes ÷ all answered messages, over the last 7 days.",
     source: "Wazzup message stream (response time per chat).",
   });
@@ -82,14 +88,14 @@ export async function fetchScorecard(): Promise<Scorecard> {
   aaron.push({
     key: "action", label: "Order action rate", icon: "⚡", type: "leading",
     display: actionRate == null ? "—" : `${actionRate}%`, sub: `${actioned} of ${live.length} orders (30d)`,
-    target: "≥ 90%", status: statusFor(actionRate, 90, true), progress: actionRate,
+    target: "≥ 90%", status: statusFor(actionRate, 90, true), achievement: achHB(actionRate, 90), progress: actionRate,
     how: "Orders moved past “New Order” (picked / dispatched / advanced) ÷ all non-cancelled orders created in the last 30 days. A leading sign that nothing is sitting untouched.",
     source: "shopify_orders.logistics_status.",
   });
   aaron.push({
     key: "fulfil", label: "Fulfillment rate", icon: "📦", type: "lagging",
     display: fulfilRate == null ? "—" : `${fulfilRate}%`, sub: `${fulfilled} of ${live.length} orders (30d)`,
-    target: "≥ 95%", status: statusFor(fulfilRate, 95, true), progress: fulfilRate,
+    target: "≥ 95%", status: statusFor(fulfilRate, 95, true), achievement: achHB(fulfilRate, 95), progress: fulfilRate,
     how: "Non-cancelled orders marked fulfilled ÷ all non-cancelled orders created in the last 30 days.",
     source: "shopify_orders.fulfillment_status (derived from line-item fulfillment).",
   });
@@ -104,7 +110,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
     key: "cart", label: "Abandoned-cart recovery", icon: "🛒", type: "lagging",
     display: recoveryRate == null ? `${recoveredCount} carts` : `${recoveryRate}%`,
     sub: `${recoveredCount} recovered · ${formatAED(recoveredAed)}${abandoned != null ? ` of ${abandoned} abandoned` : ""} (this month)`,
-    target: "≥ 20%", status: recoveryRate == null ? "none" : statusFor(recoveryRate, 20, true), progress: recoveryRate,
+    target: "≥ 20%", status: recoveryRate == null ? "none" : statusFor(recoveryRate, 20, true), achievement: achHB(recoveryRate, 20), progress: recoveryRate,
     how: "Recovered carts logged this month ÷ Shopify abandoned checkouts this month. Value = AED of the recovered carts.",
     source: "mm_recovered_carts + Shopify abandoned-cart metric.",
   });
@@ -117,29 +123,41 @@ export async function fetchScorecard(): Promise<Scorecard> {
     key: "mmsales", label: "MusicMajlis sales (month)", icon: "💰", type: "lagging",
     display: mmSales == null ? "—" : formatAED(mmSales),
     sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} target` : "no target set this month",
-    target: target ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), progress: mmPct == null ? null : Math.min(100, mmPct),
+    target: target ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), achievement: mmPct, progress: mmPct == null ? null : Math.min(100, mmPct),
     how: "Shopify net sales for MusicMajlis this calendar month (the dashboard figure), compared to the month's sales target.",
     source: "Shopify net sales + mm_targets.",
   });
 
   // ── MARICEL ──────────────────────────────────────────────────────────────
   const maricel: Kpi[] = [];
-  // 1. Reconciliation within 3-day SLA (leading) — a payment must be marked
-  //    reviewed within 3 days; one left open >3 days is a breach.
-  // Only real Amazon payment remittances (6+ digit refs) — drops "Payment Advice"
-  // and other non-payment rows so the SLA population is genuine, matching the band.
-  const remits = (remitRes.data ?? []).filter((r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref));
-  const olderThan3 = remits.filter((r) => r.created_at && now - new Date(r.created_at).getTime() > 3 * DAY);
-  const reviewedOld = olderThan3.filter((r) => r.reconciled === true).length;
-  const breaches = olderThan3.length - reviewedOld; // open > 3 days, not reviewed
-  const reconPct = pct(reviewedOld, olderThan3.length);
+  // 1. Reconciliation within 3-day SLA (leading) — measured from the REAL
+  //    reviewed_at timestamp (stamped on "Mark reviewed"). Last 30 days of real
+  //    Amazon payment remittances. Legacy rows reviewed before timestamp tracking
+  //    (reconciled but no reviewed_at) are EXCLUDED — never guessed.
+  const remits = (remitRes.data ?? []).filter(
+    (r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref) && r.created_at && now - new Date(r.created_at).getTime() <= 30 * DAY
+  );
+  let onTimeR = 0, lateR = 0, openBreach = 0;
+  for (const r of remits) {
+    const created = new Date(r.created_at as string).getTime();
+    if (r.reviewed_at) {
+      const days = (new Date(r.reviewed_at).getTime() - created) / DAY;
+      if (days <= 3) onTimeR += 1; else lateR += 1;
+    } else if (r.reconciled === true) {
+      continue; // reviewed before timestamp tracking — unknown timing, excluded
+    } else if (now - created > 3 * DAY) {
+      openBreach += 1; // genuinely open past the 3-day SLA
+    } // else: open but still within 3 days — in-flight, not yet judged
+  }
+  const counted = onTimeR + lateR + openBreach;
+  const reconPct = pct(onTimeR, counted);
   maricel.push({
     key: "recon", label: "Reconciliation 3-day SLA", icon: "✅", type: "leading",
-    display: reconPct == null ? "—" : `${reconPct}%`,
-    sub: `${reviewedOld} of ${olderThan3.length} reviewed · ${breaches} open >3 days`,
-    target: "≥ 95%", status: statusFor(reconPct, 95, true), progress: reconPct,
-    how: "Of remittance payments received more than 3 days ago, the share marked reviewed. Any payment still open (not reviewed) after 3 days is an SLA breach — shown as the “open >3 days” count.",
-    source: "remittances.reconciled (Mark reviewed) vs ingest date.",
+    display: counted === 0 ? "—" : `${reconPct}%`,
+    sub: counted === 0 ? "no reviews recorded yet" : `${onTimeR} on time · ${lateR} late · ${openBreach} open >3 days`,
+    target: "≥ 95%", status: statusFor(reconPct, 95, true), achievement: achHB(reconPct, 95), progress: reconPct,
+    how: "Reviewed within 3 days of receipt, from the real timestamp stamped on “Mark reviewed”. Last 30 days of Amazon payment remittances. Payments reviewed before timestamp tracking are excluded (never guessed).",
+    source: "remittances.reviewed_at vs ingest date.",
   });
 
   // 2. Return documentation completed (leading) — the Amazon return paperwork
@@ -150,7 +168,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
   maricel.push({
     key: "docs", label: "Return docs prepared", icon: "🗂️", type: "leading",
     display: `${documented}`, sub: `orders with invoice/PRT/SRT${docClosed ? ` · ${docClosed} closed` : ""}`,
-    target: undefined, status: "none", progress: null,
+    target: undefined, status: "none", achievement: null, progress: null,
     how: "Amazon orders where Maricel has filled return paperwork (invoice number, PRT, or SRT). Counts her actual documentation output, not the status flag.",
     source: "seller_order_docs (invoice_number / prt_number / srt_number).",
   });
@@ -163,7 +181,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
   maricel.push({
     key: "ded_turn", label: "Deduction turnaround", icon: "⏱️", type: "lagging",
     display: avgDed == null ? "—" : `${avgDed.toFixed(1)} days`, sub: `${dedDays.length} closed (90d)`,
-    target: "≤ 5 days", status: statusFor(avgDed, 5, false), progress: avgDed == null ? null : Math.max(0, Math.min(100, 100 - (avgDed / 10) * 100)),
+    target: "≤ 5 days", status: statusFor(avgDed, 5, false), achievement: achLB(avgDed, 5), progress: avgDed == null ? null : Math.max(0, Math.min(100, 100 - (avgDed / 10) * 100)),
     how: "Average days from a deduction appearing on a remittance to Maricel closing (documenting) it, over the last 90 days.",
     source: "remittance_deductions (created_at → closed_at).",
   });
@@ -174,14 +192,14 @@ export async function fetchScorecard(): Promise<Scorecard> {
     key: "recovery", label: "Deduction recovery rate", icon: "📈", type: "lagging",
     display: rec.recoveryPct == null ? "—" : `${rec.recoveryPct}%`,
     sub: `${formatAED(rec.totalApproved)} of ${formatAED(rec.totalClaimed)} claimed`,
-    target: "≥ 80%", status: statusFor(rec.recoveryPct, 80, true), progress: rec.recoveryPct,
+    target: "≥ 80%", status: statusFor(rec.recoveryPct, 80, true), achievement: achHB(rec.recoveryPct, 80), progress: rec.recoveryPct,
     how: "AED approved/recovered ÷ AED claimed across all remittance deductions Maricel has disputed.",
     source: "remittance_deductions (claim vs approved).",
   });
   maricel.push({
     key: "recovered_aed", label: "Total recovered", icon: "🏆", type: "lagging",
     display: formatAED(rec.totalApproved), sub: `from ${formatAED(rec.totalDeducted)} deducted by Amazon`,
-    target: undefined, status: "none", progress: rec.totalDeducted > 0 ? Math.round((rec.totalApproved / rec.totalDeducted) * 100) : null,
+    target: undefined, status: "none", achievement: null, progress: rec.totalDeducted > 0 ? Math.round((rec.totalApproved / rec.totalDeducted) * 100) : null,
     how: "Total AED recovered back from Amazon deductions — the money Maricel's reconciliation work brings back to the business.",
     source: "remittance_deductions.approved_amount_aed.",
   });

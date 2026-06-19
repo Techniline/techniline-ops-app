@@ -10,40 +10,45 @@ import { surface } from "@/components/ui";
 import { isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
 
-const STATUS: Record<Kpi["status"], { dot: string; text: string; bar: string; ring: string }> = {
-  good: { dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500", ring: "border-l-emerald-500" },
-  warn: { dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500", ring: "border-l-amber-500" },
-  bad: { dot: "bg-rose-500", text: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500", ring: "border-l-rose-500" },
-  none: { dot: "bg-slate-400", text: "text-slate-900 dark:text-slate-100", bar: "bg-slate-400", ring: "border-l-slate-300 dark:border-l-slate-700" },
-};
+/** Achievement-% colour band (matches the company KPI sheet):
+ *  >120 blue · 100–119 green · 80–99 yellow · <80 red · no-target slate. */
+type Band = { card: string; ring: string; chip: string; bar: string; value: string };
+function bandFor(a: number | null): Band {
+  if (a == null) return { card: "bg-white dark:bg-slate-900/40", ring: "border-l-slate-300 dark:border-l-slate-700", chip: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200", bar: "bg-slate-400", value: "text-slate-900 dark:text-slate-100" };
+  if (a > 120) return { card: "bg-sky-50 dark:bg-sky-950/30", ring: "border-l-sky-500", chip: "bg-sky-500 text-white", bar: "bg-sky-500", value: "text-sky-700 dark:text-sky-300" };
+  if (a >= 100) return { card: "bg-emerald-50 dark:bg-emerald-950/30", ring: "border-l-emerald-500", chip: "bg-emerald-500 text-white", bar: "bg-emerald-500", value: "text-emerald-700 dark:text-emerald-300" };
+  if (a >= 80) return { card: "bg-amber-50 dark:bg-amber-950/30", ring: "border-l-amber-400", chip: "bg-amber-400 text-amber-950", bar: "bg-amber-400", value: "text-amber-700 dark:text-amber-300" };
+  return { card: "bg-rose-50 dark:bg-rose-950/30", ring: "border-l-rose-500", chip: "bg-rose-500 text-white", bar: "bg-rose-500", value: "text-rose-700 dark:text-rose-300" };
+}
 
 function KpiCard({ k }: { k: Kpi }) {
-  const s = STATUS[k.status];
+  const b = bandFor(k.achievement);
   return (
-    <div className={`${surface} flex flex-col border-l-4 ${s.ring} p-4`}>
+    <div className={`flex flex-col rounded-xl border border-slate-200 border-l-4 ${b.ring} ${b.card} p-4 shadow-sm dark:border-slate-800`}>
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-xl" aria-hidden="true">{k.icon}</span>
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{k.label}</span>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${k.type === "leading" ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300" : "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"}`}>
-          {k.type}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {k.achievement != null ? (
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${b.chip}`}>{k.achievement}%</span>
+          ) : null}
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${k.type === "leading" ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300" : "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"}`}>
+            {k.type}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className={`text-3xl font-bold tabular-nums ${s.text}`}>{k.display}</span>
-        {k.target ? (
-          <span className="flex items-center gap-1 text-xs text-slate-400">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} /> target {k.target}
-          </span>
-        ) : null}
+        <span className={`text-3xl font-bold tabular-nums ${b.value}`}>{k.display}</span>
+        {k.target ? <span className="text-xs text-slate-400">target {k.target}</span> : null}
       </div>
       {k.sub ? <p className="mt-0.5 text-xs text-slate-500">{k.sub}</p> : null}
 
       {k.progress != null ? (
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div className={`h-full rounded-full ${s.bar}`} style={{ width: `${Math.max(2, Math.min(100, k.progress))}%` }} />
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-800">
+          <div className={`h-full rounded-full ${b.bar}`} style={{ width: `${Math.max(2, Math.min(100, k.progress))}%` }} />
         </div>
       ) : null}
 
@@ -106,9 +111,12 @@ function ScorecardContent() {
       <div className="mb-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
         <span className="flex items-center gap-1"><span className="rounded-full bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">leading</span> daily driver</span>
         <span className="flex items-center gap-1"><span className="rounded-full bg-violet-100 px-1.5 py-0.5 font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-300">lagging</span> outcome</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> on target</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-500" /> close</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> below</span>
+        <span className="text-slate-300">·</span>
+        <span className="font-medium text-slate-500">vs target:</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded bg-sky-500" /> &gt;120%</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded bg-emerald-500" /> 100–119%</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded bg-amber-400" /> 80–99%</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded bg-rose-500" /> &lt;80%</span>
       </div>
 
       {loading || !data ? (

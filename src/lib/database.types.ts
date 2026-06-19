@@ -1516,6 +1516,7 @@ export type Database = {
           payment_date: string | null
           raw_body: string | null
           reconciled: boolean | null
+          reviewed_at: string | null
           remittance_ref: string
           shortage_deductions_aed: number | null
           vret_deductions_aed: number | null
@@ -1540,6 +1541,7 @@ export type Database = {
           net_paid_aed?: number | null
           payment_date?: string | null
           reconciled?: boolean | null
+          reviewed_at?: string | null
           remittance_ref: string
           shortage_deductions_aed?: number | null
           vret_deductions_aed?: number | null
@@ -1563,6 +1565,7 @@ export type Database = {
           net_paid_aed?: number | null
           payment_date?: string | null
           reconciled?: boolean | null
+          reviewed_at?: string | null
           remittance_ref?: string
           shortage_deductions_aed?: number | null
           vret_deductions_aed?: number | null

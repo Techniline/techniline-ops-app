@@ -360,7 +360,7 @@ export async function markRemittanceReviewed(remittanceRef: string): Promise<voi
   if (!remittanceRef) throw new Error("Missing payment reference.");
   const { error } = await supabase
     .from("remittances")
-    .update({ reconciled: true })
+    .update({ reconciled: true, reviewed_at: new Date().toISOString() })
     .eq("remittance_ref", remittanceRef);
   if (error) throw new Error(error.message);
 }

@@ -15,10 +15,12 @@ import {
   fetchSellerOrders,
   fulfillmentLabel,
   importAmazonDelivery,
+  importAmazonInvoices,
   needsFulfillment,
   syncSeller,
   updateSellerOrderDoc,
   type AmazonDeliveryImportSummary,
+  type AmazonInvoiceImportSummary,
   type SellerOrderDocLogRow,
   type SellerOrderDocRow,
   type SellerOrderItemRow,
@@ -274,6 +276,73 @@ function ImportModal({ onClose, onApplied }: { onClose: () => void; onApplied: (
   );
 }
 
+function InvoiceImportModal({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [summary, setSummary] = useState<AmazonInvoiceImportSummary | null>(null);
+  const [done, setDone] = useState<number | null>(null);
+
+  async function run(apply: boolean) {
+    if (!file) { setErr("Choose the SIS ledger (.xlsx) first."); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await importAmazonInvoices(file, apply);
+      setSummary(r.summary);
+      if (apply) { setDone(r.filled ?? 0); onApplied(); }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+      <div className={`${surface} w-full max-w-lg`}>
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import invoice numbers</h2>
+            <p className="text-xs text-slate-500">From the SIS ledger — fills each order's invoice number (Inv No matched to the Amazon order id in Comment). Fills only where empty.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setSummary(null); setDone(null); }}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-slate-300 dark:file:bg-slate-800"
+          />
+          {err ? <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+          {summary ? (
+            <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+              <div className="grid grid-cols-2 gap-y-1">
+                <span className="text-slate-500">Invoices in ledger</span><span className="text-right font-medium">{summary.distinctOrders}</span>
+                <span className="text-slate-500">Matched to orders</span><span className="text-right font-medium text-emerald-600">{summary.matched}</span>
+                <span className="text-slate-500">{done == null ? "Will fill" : "Filled"}</span><span className="text-right font-medium">{done ?? summary.willFill}</span>
+                <span className="text-slate-500">Already had invoice</span><span className="text-right font-medium text-slate-500">{summary.alreadyHad}</span>
+                <span className="text-slate-500">Unmatched (skipped)</span><span className="text-right font-medium text-amber-600">{summary.unmatched}</span>
+              </div>
+              {done != null ? <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">✓ Filled {done} invoice number(s).</p> : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <button type="button" onClick={onClose} className={btnSecondary} disabled={busy}>Close</button>
+          {done == null ? (
+            <>
+              <button type="button" onClick={() => run(false)} className={btnSecondary} disabled={busy || !file}>{busy ? "Working…" : "Preview"}</button>
+              <button type="button" onClick={() => run(true)} className={btnPrimary} disabled={busy || !summary || summary.willFill === 0}>{busy ? "Working…" : `Apply${summary ? ` (${summary.willFill})` : ""}`}</button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Content() {
   const { profile } = useAuth();
   const canEdit = isManager(profile) || DOC_EDITOR_UIDS.includes(profile?.id ?? "");
@@ -285,6 +354,7 @@ function Content() {
   const [channel, setChannel] = useState("all");
   const [editing, setEditing] = useState<SellerOrderRow | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importingInv, setImportingInv] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [items, setItems] = useState<Map<string, SellerOrderItemRow[] | "loading">>(new Map());
   const [err, setErr] = useState<string | null>(null);
@@ -446,9 +516,14 @@ function Content() {
     <div>
       <div className="mb-3 flex items-center justify-end gap-2">
         {canEdit ? (
-          <button type="button" onClick={() => setImporting(true)} className={btnSecondary}>
-            Import delivery list
-          </button>
+          <>
+            <button type="button" onClick={() => setImportingInv(true)} className={btnSecondary}>
+              Import invoices
+            </button>
+            <button type="button" onClick={() => setImporting(true)} className={btnSecondary}>
+              Import delivery list
+            </button>
+          </>
         ) : null}
         <button type="button" onClick={syncNow} disabled={syncing} className={btnPrimary}>
           {syncing ? "Syncing…" : "Sync now"}
@@ -516,6 +591,10 @@ function Content() {
 
       {importing ? (
         <ImportModal onClose={() => setImporting(false)} onApplied={() => void load()} />
+      ) : null}
+
+      {importingInv ? (
+        <InvoiceImportModal onClose={() => setImportingInv(false)} onApplied={() => void load()} />
       ) : null}
 
       {editing ? (

@@ -90,6 +90,39 @@ export interface AmazonDeliveryImportSummary {
   sampleWrite: { amazon_order_id: string }[];
 }
 
+export interface AmazonInvoiceImportSummary {
+  ledgerRows: number;
+  distinctOrders: number;
+  ordersInSystem: number;
+  matched: number;
+  willFill: number;
+  alreadyHad: number;
+  unmatched: number;
+  sampleUnmatched: string[];
+  sampleFill: { amazon_order_id: string; invoice_number: string }[];
+}
+
+/** Upload the SIS ledger; preview (apply=false) or fill (apply=true) Amazon order
+ *  invoice numbers into seller_order_docs (matched by order id). */
+export async function importAmazonInvoices(
+  file: File,
+  apply: boolean
+): Promise<{ dryRun: boolean; filled?: number; summary: AmazonInvoiceImportSummary }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/logistics/import-amazon-invoices?apply=${apply ? "1" : "0"}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+  return { dryRun: !!j.dryRun, filled: j.filled as number | undefined, summary: j.summary as AmazonInvoiceImportSummary };
+}
+
 /** Upload the Amazon Seller Delivery List workbook; preview (apply=false) or
  *  backfill (apply=true) delivery/return data into seller_order_docs. */
 export async function importAmazonDelivery(

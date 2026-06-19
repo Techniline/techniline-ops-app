@@ -279,6 +279,15 @@ create policy seller_order_items_read on public.seller_order_items for select to
          or auth.uid() = 'cbb81b27-8756-4f2d-bfe0-04211c27092c');  -- Aaron
 -- writes are service-role only (the sync), so no insert/update policy is needed.
 
+-- ╔══════════════════════════════════════════════════════════════════════════╗
+-- ║ K. REMITTANCES — reviewed_at timestamp (real 3-day reconciliation SLA)      ║
+-- ╚══════════════════════════════════════════════════════════════════════════╝
+-- Stamped when "Mark reviewed" is clicked, so the KPI Scorecard's reconciliation
+-- 3-day SLA is measured from a real event (not the reconciled flag's default).
+
+alter table public.remittances
+  add column if not exists reviewed_at timestamptz;
+
 -- ============================================================================
 -- Done. Expected: 0 errors. Then open the app: Checklist shows 0 tasks on
 -- Sunday; Vendor PO detail saves invoice/booking; Amazon Seller Central →
