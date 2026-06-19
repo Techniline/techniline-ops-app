@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabaseClient";
+
 /** KPI reporting cycle: a quarter (3 calendar months of a year) plus the current
  *  Friday→Thursday week. The quarter is manager-selectable on the scorecard. */
 export interface KpiCycle {
@@ -44,17 +46,30 @@ export function friThuWeek(ref: Date = new Date()): { startIso: string; endIso: 
   return { startIso: start.toISOString(), endIso: end.toISOString(), label };
 }
 
-const KEY = "kpi_cycle";
-export function getStoredCycle(): { year: number; quarter: number } | null {
+/** Read the shared cycle from app_settings (any signed-in user). Falls back to
+ *  the current quarter. */
+export async function fetchStoredCycle(): Promise<{ year: number; quarter: number }> {
   try {
-    const v = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
-    if (!v) return null;
-    const p = JSON.parse(v) as { year?: number; quarter?: number };
-    return p.year && p.quarter ? { year: p.year, quarter: p.quarter } : null;
-  } catch {
-    return null;
-  }
+    const { data } = await supabase.from("app_settings").select("value").eq("key", "kpi_cycle").maybeSingle();
+    const v = (data as { value?: string | null } | null)?.value;
+    if (v) {
+      const p = JSON.parse(v) as { year?: number; quarter?: number };
+      if (p.year && p.quarter) return { year: p.year, quarter: p.quarter };
+    }
+  } catch { /* ignore */ }
+  return currentYearQuarter();
 }
-export function storeCycle(year: number, quarter: number): void {
-  try { localStorage.setItem(KEY, JSON.stringify({ year, quarter })); } catch { /* ignore */ }
+
+/** Save the shared cycle (manager only — enforced server-side). */
+export async function saveCycle(year: number, quarter: number): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/kpi-cycle", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ year, quarter }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
 }

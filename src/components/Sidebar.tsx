@@ -96,7 +96,7 @@ export function Sidebar({
       items: [
         { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
         { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
-        { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) },
+        { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) || profile?.id === "cbb81b27-8756-4f2d-bfe0-04211c27092c" || profile?.id === "227fdb27-80b5-4040-ab14-4bb945068af7" },
       ],
     },
     {

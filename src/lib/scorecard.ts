@@ -1,8 +1,8 @@
 import { formatAED } from "@/lib/format";
-import { fetchMmMetrics, fetchMmTarget, fetchRecoveredThisMonth } from "@/lib/musicmajlis";
+import type { KpiCycle } from "@/lib/kpiCycle";
+import { fetchMmNetSalesRange, fetchMmTargetRange } from "@/lib/musicmajlis";
 import { fetchDeductions, summarizeRecovery } from "@/lib/remittanceDeductions";
 import { supabase } from "@/lib/supabaseClient";
-import { fetchWazzupStats } from "@/lib/wazzup";
 
 /** One scorecard KPI, with everything the UI needs to render + explain it. */
 export interface Kpi {
@@ -50,34 +50,39 @@ function statusFor(value: number | null, target: number, higherIsBetter: boolean
 
 /** Compute the full KPI scorecard for Aaron + Maricel from live data, scoped to
  *  the given cycle (quarter) window. Fail-soft. */
-export async function fetchScorecard(cycle: { startIso: string; endIso: string; label: string }): Promise<Scorecard> {
+export async function fetchScorecard(cycle: KpiCycle): Promise<Scorecard> {
   const now = Date.now();
   const qStart = cycle.startIso;
   const qEnd = cycle.endIso;
 
-  // ── shared fetches (reuse the same sources the dashboard uses) ───────────────
-  const [wz, ordersRes, mmMetrics, mmTarget, recoveredCarts, remitRes, docsRes, deductions] =
+  // ── shared fetches, all scoped to the cycle quarter ──────────────────────────
+  const [chatTotalRes, chatWithinRes, ordersRes, mmSales, mmTarget, recoveredRes, abandonedRes, remitRes, docsRes, deductions] =
     await Promise.all([
-      fetchWazzupStats().catch(() => null),
+      // Chat: replied inbound messages within the quarter, and how many ≤15 min.
+      supabase.from("wazzup_messages").select("*", { count: "exact", head: true }).eq("direction", "inbound").not("response_minutes", "is", null).gte("message_at", qStart).lt("message_at", qEnd),
+      supabase.from("wazzup_messages").select("*", { count: "exact", head: true }).eq("direction", "inbound").lte("response_minutes", 15).gte("message_at", qStart).lt("message_at", qEnd),
       supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", qStart).lt("shopify_created_at", qEnd),
-      fetchMmMetrics().catch(() => null),
-      fetchMmTarget().catch(() => null),
-      fetchRecoveredThisMonth().catch(() => []),
+      fetchMmNetSalesRange(qStart, qEnd).catch(() => null),
+      fetchMmTargetRange(cycle.year, cycle.quarter).catch(() => null),
+      supabase.from("mm_recovered_carts").select("amount").gte("recovered_date", qStart.slice(0, 10)).lt("recovered_date", qEnd.slice(0, 10)),
+      supabase.from("mm_abandoned_actions").select("*", { count: "exact", head: true }).gte("created_at", qStart).lt("created_at", qEnd),
       supabase.from("remittances").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("seller_order_docs").select("*", { count: "exact", head: true }).or("invoice_number.not.is.null,prt_number.not.is.null,srt_number.not.is.null"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
 
   // ── AARON ────────────────────────────────────────────────────────────────
-  // 1. Chat reply within 15 min (lagging)
-  const chatPct = wz?.repliedPct ?? null;
+  // 1. Chat reply within 15 min (lagging) — scoped to the quarter.
+  const chatTotal = chatTotalRes.count ?? 0;
+  const chatWithin = chatWithinRes.count ?? 0;
+  const chatPct = pct(chatWithin, chatTotal);
   const aaron: Kpi[] = [];
   aaron.push({
     key: "chat15", label: "Chat reply within 15 min", icon: "💬", type: "lagging",
     display: chatPct == null ? "—" : `${chatPct}%`,
-    sub: wz?.repliedTotal ? `of ${wz.repliedTotal} replies (7d)` : "no data yet",
+    sub: chatTotal ? `${chatWithin} of ${chatTotal} replies` : "no data yet",
     target: "≥ 90%", status: statusFor(chatPct, 90, true), achievement: achHB(chatPct, 90), progress: chatPct,
-    how: "Inbound WhatsApp messages answered in under 15 minutes ÷ all answered messages, over the last 7 days.",
+    how: "Inbound WhatsApp messages answered in under 15 minutes ÷ all answered messages, within the selected quarter.",
     source: "Wazzup message stream (response time per chat).",
   });
 
@@ -103,32 +108,31 @@ export async function fetchScorecard(cycle: { startIso: string; endIso: string; 
     source: "shopify_orders.fulfillment_status (derived from line-item fulfillment).",
   });
 
-  // 4. Abandoned-cart recovery (lagging) — recovered carts (this month) vs the
-  //    month's abandoned-cart count from Shopify.
-  const abandoned = mmMetrics?.abandonedCarts ?? null;
-  const recoveredCount = recoveredCarts.length;
-  const recoveredAed = recoveredCarts.reduce((s, r) => s + (r.amount ?? 0), 0);
-  const recoveryRate = abandoned && abandoned > 0 ? pct(recoveredCount, abandoned) : null;
+  // 4. Abandoned-cart recovery (lagging) — recovered carts vs abandoned, in the quarter.
+  const recovered = recoveredRes.data ?? [];
+  const recoveredCount = recovered.length;
+  const recoveredAed = recovered.reduce((s, r) => s + ((r as { amount?: number }).amount ?? 0), 0);
+  const abandoned = abandonedRes.count ?? 0;
+  const recoveryRate = abandoned > 0 ? pct(recoveredCount, abandoned) : null;
   aaron.push({
     key: "cart", label: "Abandoned-cart recovery", icon: "🛒", type: "lagging",
     display: recoveryRate == null ? `${recoveredCount} carts` : `${recoveryRate}%`,
-    sub: `${recoveredCount} recovered · ${formatAED(recoveredAed)}${abandoned != null ? ` of ${abandoned} abandoned` : ""} (this month)`,
+    sub: `${recoveredCount} recovered · ${formatAED(recoveredAed)}${abandoned ? ` of ${abandoned} abandoned` : ""}`,
     target: "≥ 20%", status: recoveryRate == null ? "none" : statusFor(recoveryRate, 20, true), achievement: achHB(recoveryRate, 20), progress: recoveryRate,
-    how: "Recovered carts logged this month ÷ Shopify abandoned checkouts this month. Value = AED of the recovered carts.",
-    source: "mm_recovered_carts + Shopify abandoned-cart metric.",
+    how: "Abandoned carts recovered ÷ abandoned checkouts worked, within the selected quarter. Value = AED of the recovered carts.",
+    source: "mm_recovered_carts + mm_abandoned_actions.",
   });
 
-  // 5. MM sales vs monthly target (lagging) — Shopify net sales (same as dashboard)
-  const mmSales = mmMetrics?.netSales ?? null;
-  const target = mmTarget?.target_amount ?? null;
+  // 5. MM sales vs quarter target (lagging) — Shopify net sales over the quarter.
+  const target = mmTarget ?? null;
   const mmPct = target && target > 0 && mmSales != null ? Math.round((mmSales / target) * 100) : null;
   aaron.push({
-    key: "mmsales", label: "MusicMajlis sales (month)", icon: "💰", type: "lagging",
+    key: "mmsales", label: "MusicMajlis sales (quarter)", icon: "💰", type: "lagging",
     display: mmSales == null ? "—" : formatAED(mmSales),
-    sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} target` : "no target set this month",
+    sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} quarter target` : "no target set for the quarter",
     target: target ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), achievement: mmPct, progress: mmPct == null ? null : Math.min(100, mmPct),
-    how: "Shopify net sales for MusicMajlis this calendar month (the dashboard figure), compared to the month's sales target.",
-    source: "Shopify net sales + mm_targets.",
+    how: "Shopify net sales for MusicMajlis across the selected quarter, vs the sum of that quarter's monthly sales targets.",
+    source: "Shopify net sales + mm_targets (3 months summed).",
   });
 
   // ── MARICEL ──────────────────────────────────────────────────────────────
@@ -208,5 +212,5 @@ export async function fetchScorecard(cycle: { startIso: string; endIso: string; 
     source: "remittance_deductions.approved_amount_aed.",
   });
 
-  return { aaron, maricel, period: `${cycle.label} · chat is rolling 7d · MM sales is current month` };
+  return { aaron, maricel, period: `${cycle.label} (${cycle.months}) — all KPIs scoped to this quarter` };
 }

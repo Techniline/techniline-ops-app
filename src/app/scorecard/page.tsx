@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { inputClass, surface } from "@/components/ui";
-import { buildCycle, currentYearQuarter, friThuWeek, getStoredCycle, storeCycle } from "@/lib/kpiCycle";
+import { buildCycle, currentYearQuarter, fetchStoredCycle, friThuWeek, saveCycle } from "@/lib/kpiCycle";
 import { isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
 
@@ -85,34 +85,55 @@ function Person({ name, role, accent, kpis }: { name: string; role: string; acce
   );
 }
 
+const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
+const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
+
 function ScorecardContent() {
   const { profile } = useAuth();
+  const manager = isManager(profile);
+  const canView = manager || profile?.id === AARON_ID || profile?.id === MARICEL_ID;
+
   const [data, setData] = useState<Scorecard | null>(null);
   const [loading, setLoading] = useState(true);
-  const stored = getStoredCycle() ?? currentYearQuarter();
-  const [year, setYear] = useState(stored.year);
-  const [quarter, setQuarter] = useState(stored.quarter);
+  const init = currentYearQuarter();
+  const [year, setYear] = useState(init.year);
+  const [quarter, setQuarter] = useState(init.quarter);
   const week = friThuWeek();
 
+  // Load the shared cycle (set by a manager) from the DB on mount.
+  useEffect(() => {
+    let alive = true;
+    fetchStoredCycle().then((c) => { if (alive) { setYear(c.year); setQuarter(c.quarter); } });
+    return () => { alive = false; };
+  }, []);
+
+  // Recompute KPIs whenever the cycle changes.
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    storeCycle(year, quarter);
     fetchScorecard(buildCycle(year, quarter)).then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [year, quarter]);
 
+  function changeCycle(y: number, q: number) {
+    setYear(y); setQuarter(q);
+    void saveCycle(y, q).catch(() => { /* non-manager can't save; ignored */ });
+  }
+
   const cy = currentYearQuarter().year;
   const years = [cy - 1, cy, cy + 1];
 
-  if (!isManager(profile)) {
+  if (!canView) {
     return (
       <div>
         <PageHeader title="KPI Scorecard" />
-        <div className={`${surface} p-8 text-center text-sm text-slate-500`}>This scorecard is available to managers.</div>
+        <div className={`${surface} p-8 text-center text-sm text-slate-500`}>You don't have access to the KPI scorecard.</div>
       </div>
     );
   }
+
+  const showAaron = manager || profile?.id === AARON_ID;
+  const showMaricel = manager || profile?.id === MARICEL_ID;
 
   return (
     <div>
@@ -120,13 +141,19 @@ function ScorecardContent() {
 
       <div className={`${surface} mb-4 flex flex-wrap items-center gap-3 p-3`}>
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cycle</span>
-        <select value={quarter} onChange={(e) => setQuarter(Number(e.target.value))} className={`${inputClass} max-w-[110px]`}>
-          {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
-        </select>
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={`${inputClass} max-w-[110px]`}>
-          {years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <span className="text-xs text-slate-500">{buildCycle(year, quarter).months}</span>
+        {manager ? (
+          <>
+            <select value={quarter} onChange={(e) => changeCycle(year, Number(e.target.value))} className={`${inputClass} max-w-[110px]`}>
+              {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
+            </select>
+            <select value={year} onChange={(e) => changeCycle(Number(e.target.value), quarter)} className={`${inputClass} max-w-[110px]`}>
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </>
+        ) : (
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Q{quarter} {year}</span>
+        )}
+        <span className="text-xs text-slate-500">{buildCycle(year, quarter).months}{manager ? "" : " · set by manager"}</span>
         <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           {week.label} (Fri–Thu)
         </span>
@@ -147,8 +174,8 @@ function ScorecardContent() {
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>Loading KPIs…</div>
       ) : (
         <>
-          <Person name="Aaron" role="Orders · Reseller deliveries · Customer chats" accent="bg-indigo-500" kpis={data.aaron} />
-          <Person name="Maricel" role="Returns documentation · Remittance recovery" accent="bg-teal-500" kpis={data.maricel} />
+          {showAaron ? <Person name="Aaron" role="Orders · Reseller deliveries · Customer chats" accent="bg-indigo-500" kpis={data.aaron} /> : null}
+          {showMaricel ? <Person name="Maricel" role="Returns documentation · Remittance recovery" accent="bg-teal-500" kpis={data.maricel} /> : null}
         </>
       )}
     </div>

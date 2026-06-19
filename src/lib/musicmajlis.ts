@@ -80,6 +80,28 @@ export function remainingWorkingDays(): number {
   return n;
 }
 
+/** Shopify net sales for an arbitrary date range (server route). */
+export async function fetchMmNetSalesRange(fromIso: string, toIso: string): Promise<number | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return null;
+  const res = await fetch(`/api/shopify/mm-metrics?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; netSales?: number };
+  if (!res.ok || !j.ok) return null;
+  return j.netSales ?? null;
+}
+
+/** Sum of monthly MM targets across a quarter (months stored as YYYY-MM-01). */
+export async function fetchMmTargetRange(year: number, quarter: number): Promise<number | null> {
+  const startMonth = (quarter - 1) * 3;
+  const keys = [0, 1, 2].map((i) => `${year}-${String(startMonth + i + 1).padStart(2, "0")}-01`);
+  const { data } = await supabase.from("mm_targets").select("target_amount").in("month", keys);
+  if (!data || data.length === 0) return null;
+  return data.reduce((s, r) => s + ((r as { target_amount?: number }).target_amount ?? 0), 0);
+}
+
 /** This month's MM sales target (null if not set). */
 export async function fetchMmTarget(): Promise<MmTarget | null> {
   const { monthStr } = monthBounds();
