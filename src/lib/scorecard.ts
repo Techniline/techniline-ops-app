@@ -62,7 +62,7 @@ export async function fetchScorecard(): Promise<Scorecard> {
       fetchMmMetrics().catch(() => null),
       fetchMmTarget().catch(() => null),
       fetchRecoveredThisMonth().catch(() => []),
-      supabase.from("remittances").select("remittance_ref, reconciled, reviewed_at, created_at"),
+      supabase.from("remittances").select("*").order("created_at", { ascending: false }).limit(1000),
       supabase.from("seller_order_docs").select("*", { count: "exact", head: true }).or("invoice_number.not.is.null,prt_number.not.is.null,srt_number.not.is.null"),
       fetchDeductions({ includeClosed: true }).catch(() => []),
     ]);
