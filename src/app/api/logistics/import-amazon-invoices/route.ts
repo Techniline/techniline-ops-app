@@ -105,10 +105,17 @@ export async function POST(request: Request): Promise<Response> {
     for (const o of data ?? []) known.add((o as { amazon_order_id: string }).amazon_order_id);
   }
 
-  const { data: docRows } = await svc.from("seller_order_docs").select("amazon_order_id, invoice_number");
+  // Read existing invoices only for the ledger's orders (chunked .in) — a plain
+  // select is capped at 1000 rows and seller_order_docs now exceeds that, which
+  // made the preview think already-filled orders were still empty ("Will fill"
+  // never dropping).
   const existingInvoice = new Map<string, string | null>();
-  for (const d of (docRows ?? []) as { amazon_order_id: string; invoice_number: string | null }[]) {
-    existingInvoice.set(d.amazon_order_id, d.invoice_number);
+  for (let i = 0; i < ledgerIds.length; i += 300) {
+    const chunk = ledgerIds.slice(i, i + 300);
+    const { data } = await svc.from("seller_order_docs").select("amazon_order_id, invoice_number").in("amazon_order_id", chunk);
+    for (const d of (data ?? []) as { amazon_order_id: string; invoice_number: string | null }[]) {
+      existingInvoice.set(d.amazon_order_id, d.invoice_number);
+    }
   }
 
   const toWrite: { amazon_order_id: string; invoice_number: string }[] = [];
