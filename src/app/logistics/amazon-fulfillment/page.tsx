@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { LogisticsShell } from "@/components/logistics/LogisticsShell";
+import { supabase } from "@/lib/supabaseClient";
 import { StatusPill, channelChipClass } from "@/components/SellerOrderUi";
 import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCell } from "@/components/ui";
 import { isManager } from "@/lib/permissions";
@@ -382,6 +383,15 @@ function Content() {
   useEffect(() => {
     if (profile?.id) void load();
   }, [load, profile?.id]);
+
+  // Self-heal: if the first load fired before the auth token attached (empty
+  // result), re-fetch when the session signs in or refreshes.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((e) => {
+      if (e === "SIGNED_IN" || e === "TOKEN_REFRESHED" || e === "INITIAL_SESSION") void load();
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [load]);
 
   async function syncNow() {
     setSyncing(true);
