@@ -151,3 +151,26 @@ create policy seller_ret_read on public.seller_returns for select to authenticat
 insert into public.app_settings (key, value) values ('seller_last_sync', null)
 on conflict (key) do nothing;
 ```
+
+---
+
+## Profit & Pricing module (Phase 1 + 2 — LIVE, Jun 2026)
+
+Module: **`/logistics/amazon-pricing`** (LogisticsPage `amazon_profit`; manager + Maricel view, manager-only edits). Two views: **Orders (profit)** and **Repricing (per SKU)**.
+
+### Roles (Seller app "Techniline Ops - Seller Integration", approved Jun 2026)
+Finance and Accounting · Buyer Communication · **Pricing** · Inventory and Order Tracking · Amazon Fulfillment · **Product Listing**. The refresh token **must be minted on `sellercentral.amazon.ae` (UAE)** — a US-portal token 403s on Pricing/Orders/Finances even though the roles are granted. Verify via `/amazon-actions/seller` → Discover access: `getPricing` + `getItemOffers` (Buy Box) + Product Type Definitions = 200; only legacy `competitivePricing v0` stays 403 (not used).
+
+### Tables (created via mgmt-API SQL; hand-synced into database.types.ts)
+- **`seller_order_finance`** (amazon_order_id PK) — per-order net from the Finances API: product_charges, shipping_charges, referral_fee, fba_fee, other_fees, fees_total, tax_collected, **net_proceeds**, refund_total, posted_date, `fee_breakdown` jsonb (incl. per-transaction `events`), raw.
+- **`seller_sku_costs`** (seller_sku PK) — **`expected_in_hand`** (target net per unit after all Amazon deductions; the real input) + legacy cost/sell_price.
+- **`seller_sku_pricing`** (seller_sku PK) — my_price, buybox_price, lowest_price, is_buybox_winner, offer_count, asin.
+All RLS: read for manager/admin/logistics + seller uids; writes via service-role endpoints only.
+
+### Sync
+- **Orders/finance:** `seller-sync` also pulls `listFinancialEvents` (90-day window) → `seller_order_finance`. Parses Shipment + Refund + **ServiceFee (Easy Ship) + Chargeback + GuaranteeClaim** events; net_proceeds = sum of all signed amounts.
+- **Pricing:** `/api/spapi/price-sync` (manager/Aaron/Kesh) prices the SKUs from `seller_sku_costs` ∪ ordered SKUs. `getPricing` (comma-separated Skus, batched 20) for own price; `getItemOffers` per ASIN (from order items) for Buy Box, capped ~200/run and **carries forward prior Buy Box** so repeating backfills the rest.
+- **Costs:** `/api/spapi/sku-costs` (manager/Aaron/Kesh) — CSV/XLSX import + edit of expected-in-hand.
+
+### Repricing logic
+`floor price = expected_in_hand ÷ (1 − est_fee%)`; est_fee% = realized rate from settled orders (per-SKU from single-SKU orders, else account avg). Status: 🔴 below floor → raise · 🟢 clears target · 💡 can match Buy Box (Buy Box ≥ floor) · ⚠ Buy Box below floor. **Recommend-only — no price push yet** (Product Listing role is available for a future manager-confirmed push).

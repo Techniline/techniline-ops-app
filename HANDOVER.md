@@ -38,8 +38,10 @@ _Last updated 2026-06-08. Repo: `Techniline/techniline-ops-app` · Stack: Next.j
 | Priorities | `/priorities` | any user (RLS-scoped) | Standalone module (`priorities` table). Managers create & assign to Aaron/Maricel/Both with title/description/due/`priority_level` P1-P3/notes; staff see + update their own (progress %, in-progress, complete, notes). Status open/in_progress/overdue(derived)/completed. **Assignment email + weekly summary via Microsoft Graph** (`/api/priorities/notify`, manager-only, fail-soft). Names shown, never UUIDs. |
 | Cocoblu | `/cocoblu` | `cocoblu` cap | Ageing table + Add/Update Qty + **PDF invoice capture** (free parser handles the Microless/Cocoblu **and** Dulam/Nevin layouts; AI for any layout when keyed) + **Invoices browser** + manager **Edit**. |
 | LP Tracker | `/lp` | `lp_tracker` cap (Maricel + managers) | Local-purchase (LPO) ageing & clearance. **PDF capture** (free LPO parser → editable Verify; qty change needs a reason) + **per-line sales draw-down** (sold qty/invoice/entity/salesman; auto-clears at 0) + **price-change alerts** (any Δ vs same SKU's prior LP) + **master search** (vendor/LP no/SKU) + manager **Edit** + **LP PDFs browser**. **Stock-in-hand report**: manual email to `impex@techniline.org` + point-in-time **PDF export**. Tables `lp_orders`/`lp_items`/`lp_sales` + view `lp_items_view`; bucket `lp-invoices`. |
-| Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. |
-| Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | Guarded but **removed from nav** — do not re-promote. |
+| Amazon Actions | `/amazon-actions` | `finance` cap | Operational closure queue (see §4). **Cancellations** tab + inline detail rows. Vendor (1P) remittance/disputes/shortage/returns from email — the only source (no vendor API). |
+| Amazon Profit & Pricing | `/logistics/amazon-pricing` | `amazon_profit` (manager + Maricel) | **Orders (profit)** view: real net received per order from the Finances API (`seller_order_finance`) + expandable transaction breakdown + variance vs expected-in-hand + settlement-coverage table + order search. **Repricing (per SKU)** view: your price + Buy Box (Product Pricing API), est. fee %, **floor price** (clears expected-in-hand after fees), suggested price, below-target flags. Manager **🎯 Expected in-hand** import (`seller_sku_costs`) + **Sync prices** (`/api/spapi/price-sync`, backfills Buy Box across runs). Recommend-only — no price push yet. (See [AMAZON-SELLER-SETUP.md](AMAZON-SELLER-SETUP.md).) |
+| Amazon Fulfillment | `/logistics/amazon-fulfillment` | `amazon_fulfillment` | Seller + Flex orders + return docs. Now shows **order SKUs** + a **pre-ship "below target" heads-up** (SKU historically nets below its expected in-hand). |
+| Historical finance | `/remittances` `/returns` `/disputes` | `finance` cap | `/remittances` has a live **Recovery & disputes** tab (deducted vs recovered, by charge type, dispute pipeline, aging) — the vendor deduction-recovery dashboard. Off main nav; do not re-promote the others. |
 
 Users: **Maricel** (`227fdb27-…`, checklist+finance) · **Aaron** (`cbb81b27-…`, checklist+cocoblu) · **Vihan** (`c4abda49-…`, all + manager). Permissions are id+capability based (`src/lib/permissions/`), `role==='manager'` for cross-user override. **No email-based checks.**
 
@@ -47,7 +49,7 @@ Users: **Maricel** (`227fdb27-…`, checklist+finance) · **Aaron** (`cbb81b27-�
 
 ## 3. Database Changes (all owner-run SQL; never auto-migrated)
 
-Schema source of truth = generated `src/lib/database.types.ts` (hand-synced 2026-06-08 to include this cycle's columns — `ingest_log`, `cocoblu_ageing` audit, `priorities.priority_level`/`notes`; re-run `supabase gen types` for an authoritative regen when DB access is available).
+Schema source of truth = generated `src/lib/database.types.ts`, **hand-synced**. NOTE: the Supabase **management API SQL endpoint works** with the token in `.env.local.txt` (`POST https://api.supabase.com/v1/projects/$REF/database/query`) — used to create the Amazon pricing tables and run reads. But `supabase gen types` is **unreliable here** (it intermittently drops tables like `ai_usage`/`seller_order_doc_log`), so prefer **hand-editing** the types file for a new table over a full regen.
 
 | Change | Status |
 |---|---|
@@ -58,6 +60,7 @@ Schema source of truth = generated `src/lib/database.types.ts` (hand-synced 2026
 | RLS for newly-surfaced tables: `priorities` (read/insert/update), `submissions` (read), `breach_log` (read), `users` (read) | ✅ Run 2026-06-08. |
 | `priorities` columns `priority_level`, `notes` (§0 of CHECKLIST-PRIORITIES-SETUP) | ✅ Run 2026-06-08. Priorities module fully live. |
 | LP Tracker: `lp_orders`/`lp_items`/`lp_sales` tables + `lp_items_view` + RLS (manager + Maricel uid) + `lp-invoices` bucket | ✅ Run 2026-06-08 ([LP-TRACKER-SETUP.md](LP-TRACKER-SETUP.md)). Hand-synced into `database.types.ts`. |
+| Amazon Profit & Pricing: `seller_order_finance` (per-order net/fees), `seller_sku_costs` (`expected_in_hand` target + legacy cost/sell), `seller_sku_pricing` (own price + Buy Box) + RLS (manager/admin/logistics + seller uids) | ✅ Created via mgmt-API SQL (Jun 2026). Service-role writes; hand-synced into `database.types.ts`. |
 
 The checklist work surfaces tables the backend team already built (`priorities`, `submissions`, `breach_log`) — **no schema changes**, only the RLS above. No pre-existing tables/enums/RPCs were modified.
 
@@ -135,6 +138,8 @@ Flow: `/cocoblu` → **Upload Invoice (PDF)** → `POST /api/cocoblu/parse` (aut
 | `ANTHROPIC_API_KEY` | Prod+Preview | ❌ optional | Enables AI invoice capture (Sonnet 4.6). Without it, Cocoblu uses the free parser. |
 | `PRIORITY_MAIL_FROM` | Prod | optional | Sender mailbox for priority/weekly emails (default `vihan@techniline.org`). Needs the Azure app to have **Mail.Send (Application)** consented. |
 | `INGEST_MAILBOXES` / `INGEST_LOOKBACK_HOURS` / `INGEST_FETCH_CAP` | Prod | optional | Defaults: `vihan@,purchasing@` / `48` / `1000`. |
+| `SELLER_SPAPI_CLIENT_ID` / `_SECRET` / `_REFRESH_TOKEN` | Prod | ✅ | **Seller (3P)** SP-API app "Techniline Ops - Seller Integration". Roles incl. **Pricing + Product Listing** (approved Jun 2026). Refresh token **must be minted on `sellercentral.amazon.ae` (UAE)** — a US-portal token returns 403 for Pricing/Orders/Finances. Powers the profit/repricing module. |
+| `SPAPI_CLIENT_ID` / `_SECRET` / `_REFRESH_TOKEN` | Prod | ✅ | **Vendor (1P)** SP-API app "Techniline Ops - Vendor Integration" (separate app/token). Only **Vendor POs** are accessible; vendor analytics need a Brand-Analytics role that isn't offered, and remittance/returns/disputes have **no vendor API** (email only). Token from `vendorcentral.amazon.me` (UAE). |
 
 All secrets are marked **Sensitive** in Vercel → **write-only** (not readable via UI or `vercel env pull`). To fix one, `vercel env rm NAME production` then `echo "value" | vercel env add NAME production` (the trailing newline is trimmed; a `printf '%s'` pipe without a newline does **not** save) → then `vercel deploy --prod`.
 
@@ -145,8 +150,10 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 1. **Parser is heuristic** (both Amazon ingestion and Cocoblu basic capture) — re-validate against new real samples periodically. Cocoblu's Verify step mitigates this.
 2. **Auto-deploy-on-git-push** historically flaky — the CLI/deploy-hook is the dependable path (§1). If you want push-to-deploy, redeliver the GitHub webhook / reconnect Git (owner OAuth).
 3. **Cron cadence is daily** (Hobby). Fine for steady mail; move to Pro (`*/30`) or an external scheduler for near-real-time.
-4. ~~**`database.types.ts` is stale**~~ Resolved 2026-06-08 — hand-synced for `ingest_log`, `cocoblu_ageing` audit, and `priorities.priority_level`/`notes`; the local mini-type + `as never` casts were removed. Run `supabase gen types` for an authoritative regen when DB access is available.
-5. CRLF warnings on commit (cosmetic).
+4. **`database.types.ts` is hand-synced.** The Supabase **mgmt-API SQL endpoint works** (token in `.env.local.txt`), but `supabase gen types` **drops tables intermittently** (`ai_usage`, `seller_order_doc_log`) — so add new tables to the types file **by hand**, not via full regen.
+5. **SP-API tokens are region- and entity-specific.** Roles are baked into the refresh token at authorization time; mint on the matching regional portal (UAE) or you get 403s that look like missing roles. Seller and Vendor are **separate apps/tokens** (`SELLER_SPAPI_*` vs `SPAPI_*`) — never cross them.
+6. **Vendor (1P) API is minimal** — POs only; remittance/returns/disputes have no API (email is the source). Don't chase an API for those.
+7. CRLF warnings on commit (cosmetic).
 
 ---
 
@@ -164,7 +171,9 @@ All secrets are marked **Sensitive** in Vercel → **write-only** (not readable 
 
 ## 12. Outstanding / Next Steps
 
-**Owner data tasks (Claude can't reach the DB — Supabase mgmt token returns 401; provide SQL, owner runs):**
+**Amazon Seller profit & pricing (Phase 1 + 2) — ✅ LIVE (Jun 2026):** net-profit module + repricing built; Pricing/Product-Listing roles approved; UAE seller token set. To go further: add a one-click **"push suggested price to Amazon"** (Product Listing write, manager-confirmed) and move **Sync prices** onto the daily cron. **Vendor side:** confirmed API-limited (POs only); recovery handled via `/remittances` Recovery tab on email data.
+
+**Owner data tasks** (NOTE: the Supabase **mgmt-API SQL endpoint now works** for Claude via the `.env.local.txt` token — reads + DDL, no longer 401; the older "provide SQL, owner runs" constraint is lifted):
 1. ~~**Data-accuracy check on the ingestion go-live**~~ ✅ DONE 2026-06-08 — duplicate `ref_number` query returned zero rows; no duplication vs backend feed.
 2. ~~**Remove Aaron's duplicate checklist**~~ ✅ DONE 2026-06-08 — duplicate active definition deactivated.
 3. **Monitor the first daily cron runs** (`ingest_log`, `expected_actions`); optionally add a least-privilege Exchange Application Access Policy for the two mailboxes.
