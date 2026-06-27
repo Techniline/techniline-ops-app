@@ -54,6 +54,58 @@ export async function fetchSellerOrderItems(amazonOrderId: string): Promise<Sell
   return data ?? [];
 }
 
+// ── Per-order financials (fees + net proceeds) ──────────────────────────────
+export type OrderFinanceRow = Tables<"seller_order_finance">;
+
+/** Per-order financials keyed by amazon_order_id (browser read; RLS-gated). */
+export async function fetchOrderFinance(): Promise<Map<string, OrderFinanceRow>> {
+  const map = new Map<string, OrderFinanceRow>();
+  const { data, error } = await supabase.from("seller_order_finance").select("*").limit(20000);
+  if (error) return map;
+  for (const r of data ?? []) map.set(r.amazon_order_id, r);
+  return map;
+}
+
+// ── SKU pricing (own price + Buy Box) for the repricing view ────────────────
+export type SkuPricingRow = Tables<"seller_sku_pricing">;
+
+/** Current pricing per SKU keyed by seller_sku (browser read; RLS-gated). */
+export async function fetchSkuPricing(): Promise<Map<string, SkuPricingRow>> {
+  const map = new Map<string, SkuPricingRow>();
+  const { data, error } = await supabase.from("seller_sku_pricing").select("*").limit(20000);
+  if (error) return map;
+  for (const r of data ?? []) map.set(r.seller_sku, r);
+  return map;
+}
+
+export interface PriceSyncResult { count: number; withBuyBox: number; remaining: number; lastSync: string; note?: string }
+
+/** Trigger the Amazon price sync (own price + Buy Box) for the master SKUs. */
+export async function syncPrices(): Promise<PriceSyncResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/spapi/price-sync", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Partial<PriceSyncResult>;
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+  return { count: j.count ?? 0, withBuyBox: j.withBuyBox ?? 0, remaining: j.remaining ?? 0, lastSync: j.lastSync ?? "", note: j.note };
+}
+
+/** All line items (lite) for the below-cost / margin analysis across orders. */
+export async function fetchAllSellerItemsLite(): Promise<
+  { amazon_order_id: string; seller_sku: string | null; item_price: number | null; quantity_ordered: number | null }[]
+> {
+  const { data, error } = await supabase
+    .from("seller_order_items")
+    .select("amazon_order_id, seller_sku, item_price, quantity_ordered")
+    .limit(20000);
+  if (error) return [];
+  return data ?? [];
+}
+
 export type SellerOrderDocRow = Tables<"seller_order_docs">;
 
 /** Return documentation keyed by amazon_order_id. Pass the order ids being shown
@@ -201,6 +253,7 @@ export interface SellerSyncResult {
   finance: number;
   orders: number;
   items: number;
+  orderFinance: number;
   warnings: string[];
   lastSync: string;
 }
@@ -217,5 +270,54 @@ export async function syncSeller(): Promise<SellerSyncResult> {
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Partial<SellerSyncResult>;
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
-  return { finance: j.finance ?? 0, orders: j.orders ?? 0, items: j.items ?? 0, warnings: j.warnings ?? [], lastSync: j.lastSync ?? "" };
+  return { finance: j.finance ?? 0, orders: j.orders ?? 0, items: j.items ?? 0, orderFinance: j.orderFinance ?? 0, warnings: j.warnings ?? [], lastSync: j.lastSync ?? "" };
+}
+
+// ── SKU cost master (purchase cost per seller SKU, for margin / below-cost) ──────
+export type SkuCostRow = Tables<"seller_sku_costs">;
+
+/** All SKU costs as a map keyed by seller_sku (browser read; RLS-gated). */
+export async function fetchSkuCosts(): Promise<Map<string, SkuCostRow>> {
+  const map = new Map<string, SkuCostRow>();
+  const { data, error } = await supabase.from("seller_sku_costs").select("*").order("seller_sku");
+  if (error) return map;
+  for (const r of data ?? []) map.set(r.seller_sku, r);
+  return map;
+}
+
+export interface SkuCostInput {
+  seller_sku: string;
+  expected_in_hand: number | null; // target net per unit, after all Amazon deductions
+  cost?: number | null;
+  sell_price?: number | null;
+  notes?: string | null;
+}
+
+/** Bulk upsert SKU costs (single edit or spreadsheet import). Manager/Aaron/Kesh. */
+export async function saveSkuCosts(rows: SkuCostInput[]): Promise<number> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/spapi/sku-costs", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "upsert", rows }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; count?: number };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+  return j.count ?? 0;
+}
+
+/** Delete one SKU's cost row. */
+export async function deleteSkuCost(sellerSku: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/spapi/sku-costs", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "delete", seller_sku: sellerSku }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
 }

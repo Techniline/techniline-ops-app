@@ -10,10 +10,13 @@ import { btnPrimary, btnSecondary, inputClass, surface, tableWrap, tdCell, thCel
 import { isManager } from "@/lib/permissions";
 import { fetchUserNames } from "@/lib/checklist";
 import {
+  fetchAllSellerItemsLite,
+  fetchOrderFinance,
   fetchSellerOrderDocLog,
   fetchSellerOrderDocs,
   fetchSellerOrderItems,
   fetchSellerOrders,
+  fetchSkuCosts,
   fulfillmentLabel,
   importAmazonDelivery,
   importAmazonInvoices,
@@ -24,8 +27,10 @@ import {
   type AmazonInvoiceImportSummary,
   type SellerOrderDocLogRow,
   type SellerOrderDocRow,
+  type OrderFinanceRow,
   type SellerOrderItemRow,
   type SellerOrderRow,
+  type SkuCostRow,
 } from "@/lib/spapi/seller";
 
 /** Who can edit return docs (besides managers): Maricel + Kesh. */
@@ -361,6 +366,62 @@ function Content() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [itemsLite, setItemsLite] = useState<{ amazon_order_id: string; seller_sku: string | null; quantity_ordered: number | null }[]>([]);
+  const [finance, setFinance] = useState<Map<string, OrderFinanceRow>>(new Map());
+  const [skuCosts, setSkuCosts] = useState<Map<string, SkuCostRow>>(new Map());
+
+  // Pricing context for SKU display + pre-ship "below target" heads-up.
+  const loadPricing = useCallback(async () => {
+    const [items, fin, costs] = await Promise.all([fetchAllSellerItemsLite(), fetchOrderFinance(), fetchSkuCosts()]);
+    setItemsLite(items); setFinance(fin); setSkuCosts(costs);
+  }, []);
+  useEffect(() => { if (profile?.id) void loadPricing(); }, [loadPricing, profile?.id]);
+
+  // Distinct SKUs (with qty) per order.
+  const itemsByOrder = useMemo(() => {
+    const m = new Map<string, Map<string, number>>();
+    for (const it of itemsLite) {
+      if (!it.seller_sku) continue;
+      const inner = m.get(it.amazon_order_id) ?? new Map<string, number>();
+      inner.set(it.seller_sku, (inner.get(it.seller_sku) ?? 0) + (it.quantity_ordered && it.quantity_ordered > 0 ? it.quantity_ordered : 1));
+      m.set(it.amazon_order_id, inner);
+    }
+    return m;
+  }, [itemsLite]);
+
+  // Average realized net per unit per SKU, from SETTLED single-SKU orders (clean
+  // per-unit attribution). Used as the pre-ship heads-up vs the expected in-hand.
+  const skuRealizedNet = useMemo(() => {
+    const acc = new Map<string, { sum: number; n: number }>();
+    for (const [orderId, skuMap] of itemsByOrder) {
+      const fin = finance.get(orderId);
+      if (!fin || fin.net_proceeds == null) continue;
+      if (skuMap.size !== 1) continue; // single-SKU only, to avoid allocation guesswork
+      const [[sku, qty]] = [...skuMap.entries()];
+      const perUnit = fin.net_proceeds / (qty > 0 ? qty : 1);
+      const a = acc.get(sku) ?? { sum: 0, n: 0 };
+      a.sum += perUnit; a.n += 1; acc.set(sku, a);
+    }
+    const out = new Map<string, number>();
+    for (const [sku, a] of acc) out.set(sku, Math.round((a.sum / a.n) * 100) / 100);
+    return out;
+  }, [itemsByOrder, finance]);
+
+  /** Pre-ship heads-up for an order: the SKUs, and whether any historically nets
+   *  below its expected in-hand (a reason to review/reject before shipping). */
+  const preShip = useCallback((orderId: string) => {
+    const skuMap = itemsByOrder.get(orderId);
+    if (!skuMap) return { skus: [] as { sku: string; qty: number; below: boolean; target: number | null; realized: number | null }[], anyBelow: false };
+    let anyBelow = false;
+    const skus = [...skuMap.entries()].map(([sku, qty]) => {
+      const target = skuCosts.get(sku)?.expected_in_hand ?? null;
+      const realized = skuRealizedNet.get(sku) ?? null;
+      const below = target != null && realized != null && realized < target;
+      if (below) anyBelow = true;
+      return { sku, qty, below, target, realized };
+    });
+    return { skus, anyBelow };
+  }, [itemsByOrder, skuCosts, skuRealizedNet]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -401,7 +462,7 @@ function Content() {
       const r = await syncSeller();
       setMsg(`Synced ${r.orders} order(s) + ${r.items} invoice line item(s) from Amazon.${r.warnings.length ? " Note: " + r.warnings.slice(0, 3).join("; ") : ""}`);
       setItems(new Map()); // drop cached line items so expanded rows refetch
-      await load();
+      await Promise.all([load(), loadPricing()]);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Sync failed.");
     } finally {
@@ -431,6 +492,7 @@ function Content() {
   const shown = orders.filter((o) => channel === "all" || fulfillmentLabel(o) === channel);
   const unfulfilled = shown.filter(needsFulfillment).sort(byDateDesc);
   const closed = shown.filter((o) => !needsFulfillment(o)).sort(byDateDesc);
+  const belowTargetCount = unfulfilled.filter((o) => preShip(o.amazon_order_id).anyBelow).length;
   const colSpan = canEdit ? 11 : 10;
 
   const head = (
@@ -454,6 +516,8 @@ function Content() {
     const d = docs.get(o.amazon_order_id);
     const isOpen = expanded === o.amazon_order_id;
     const its = items.get(o.amazon_order_id);
+    const ps = preShip(o.amazon_order_id);
+    const flagBelow = needsFulfillment(o) && ps.anyBelow; // pre-ship review signal
     return (
       <Fragment key={o.id}>
         <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${needsFulfillment(o) ? "bg-orange-50/40 dark:bg-orange-950/10" : ""}`}>
@@ -462,9 +526,21 @@ function Content() {
               <span className="text-slate-400">{isOpen ? "▾" : "▸"}</span>
               {o.amazon_order_id}
             </button>
+            {ps.skus.length > 0 ? (
+              <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] font-normal text-slate-500">
+                {ps.skus.map((s) => (
+                  <span key={s.sku} className={s.below ? "rounded bg-rose-100 px-1 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : ""} title={s.target != null ? `Target in‑hand ${s.target}${s.realized != null ? ` · usually nets ${s.realized}` : ""}` : undefined}>
+                    {s.sku}{s.qty > 1 ? `×${s.qty}` : ""}{s.below ? " ⚠" : ""}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </td>
           <td className={tdCell}>{fmt(o.purchase_date)}</td>
-          <td className={tdCell}><StatusPill order={o} /></td>
+          <td className={tdCell}>
+            <StatusPill order={o} />
+            {flagBelow ? <span className="ml-1 inline-block rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" title="A SKU in this order historically nets below your expected in‑hand — review before shipping">⚠ below target</span> : null}
+          </td>
           <td className={tdCell}>{fulfillmentLabel(o)}</td>
           <td className={tdCell}>{d?.invoice_number ?? "—"}</td>
           <td className={tdCell}>
@@ -546,6 +622,12 @@ function Content() {
 
       {msg ? <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div> : null}
       {err ? <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</div> : null}
+
+      {belowTargetCount > 0 ? (
+        <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+          ⚠ <strong>{belowTargetCount}</strong> unfulfilled order{belowTargetCount === 1 ? "" : "s"} contain{belowTargetCount === 1 ? "s" : ""} a SKU that historically nets <strong>below your expected in‑hand</strong> — review before shipping. (Heads‑up from past settlements; exact pre‑ship pricing comes with the Pricing role.)
+        </div>
+      ) : null}
 
       <input
         className={`${inputClass} mb-3 w-full`}

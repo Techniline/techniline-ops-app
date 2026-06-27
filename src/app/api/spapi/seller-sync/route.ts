@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { isManager } from "@/lib/permissions";
-import { fetchFinancialEventGroups, fetchOrderItems, fetchSellerOrders, sellerConfigured } from "@/lib/spapi/sellerClient";
+import { fetchFinancialEventGroups, fetchFinancialEvents, fetchOrderItems, fetchSellerOrders, sellerConfigured } from "@/lib/spapi/sellerClient";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -48,11 +48,16 @@ async function runSync(url: string, service: string): Promise<Response> {
   // and older orders are never missed (cheap at this volume; upsert dedupes).
   const ordersCreatedAfter = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
 
+  // Per-order financial events (fees / net proceeds) — rolling 90-day window so
+  // newly-settled orders get their net captured.
+  const financePostedAfter = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+
   const nowIso = new Date().toISOString();
-  const result: { finance: number; orders: number; items: number; warnings: string[] } = {
+  const result: { finance: number; orders: number; items: number; orderFinance: number; warnings: string[] } = {
     finance: 0,
     orders: 0,
     items: 0,
+    orderFinance: 0,
     warnings: [],
   };
 
@@ -79,6 +84,36 @@ async function runSync(url: string, service: string): Promise<Response> {
     }
   } catch (e) {
     result.warnings.push(`finance: ${e instanceof Error ? e.message : "failed"}`);
+  }
+
+  // Per-order financials — fees + net proceeds (the "what we actually receive")
+  try {
+    const fin = await fetchFinancialEvents(financePostedAfter);
+    if (fin.length) {
+      const rows = fin.map((f) => ({
+        amazon_order_id: f.amazonOrderId,
+        currency: f.currency,
+        product_charges: f.productCharges,
+        shipping_charges: f.shippingCharges,
+        promo_discount: f.promoDiscount,
+        referral_fee: f.referralFee,
+        fba_fee: f.fbaFee,
+        other_fees: f.otherFees,
+        fees_total: f.feesTotal,
+        tax_collected: f.taxCollected,
+        net_proceeds: f.netProceeds,
+        refund_total: f.refundTotal,
+        posted_date: f.postedDate,
+        fee_breakdown: { referralFee: f.referralFee, fbaFee: f.fbaFee, otherFees: f.otherFees, events: f.events } as never,
+        raw: f.raw as never,
+        synced_at: nowIso,
+      }));
+      const { error } = await svc.from("seller_order_finance").upsert(rows, { onConflict: "amazon_order_id" });
+      if (error) result.warnings.push(`orderFinance: ${error.message}`);
+      else result.orderFinance = rows.length;
+    }
+  } catch (e) {
+    result.warnings.push(`orderFinance: ${e instanceof Error ? e.message : "failed"}`);
   }
 
   // Orders — live order tracking / fulfillment (Orders API)

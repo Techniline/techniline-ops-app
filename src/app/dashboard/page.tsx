@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { btnSecondary, surface } from "@/components/ui";
 import { AaronDealsBand } from "@/components/AaronDealsBand";
+import { AaronBreakStatus } from "@/components/AaronBreakStatus";
 import { WazzupCard } from "@/components/WazzupCard";
 import { ManagerScorecard } from "@/components/ManagerScorecard";
 import { RemittanceTasksBand } from "@/components/RemittanceTasksBand";
@@ -992,6 +993,9 @@ function DashboardContent() {
           </div>
         }
       />
+
+      {/* Aaron live break status — managers only */}
+      {managerView ? <AaronBreakStatus /> : null}
 
       {/* Chats (WhatsApp / Wazzup) — Aaron + managers */}
       {managerView || profile.id === AARON_ID ? <WazzupCard /> : null}

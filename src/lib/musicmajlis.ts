@@ -106,13 +106,74 @@ export async function fetchMmDailyRange(fromIso: string, toIso: string): Promise
   return j.daily ?? {};
 }
 
-/** Sum of monthly MM targets across a quarter (months stored as YYYY-MM-01). */
-export async function fetchMmTargetRange(year: number, quarter: number): Promise<number | null> {
-  const startMonth = (quarter - 1) * 3;
-  const keys = [0, 1, 2].map((i) => `${year}-${String(startMonth + i + 1).padStart(2, "0")}-01`);
-  const { data } = await supabase.from("mm_targets").select("target_amount").in("month", keys);
-  if (!data || data.length === 0) return null;
-  return data.reduce((s, r) => s + ((r as { target_amount?: number }).target_amount ?? 0), 0);
+/** A specific month's MM sales target (month key = "YYYY-MM-01"). null if unset.
+ *  Targets are set per calendar month, so KPIs compare each month against its
+ *  own target rather than summing a (often partially-filled) quarter. */
+export async function fetchMmTargetForMonth(monthKey: string): Promise<number | null> {
+  const { data } = await supabase
+    .from("mm_targets")
+    .select("target_amount")
+    .eq("month", monthKey)
+    .maybeSingle();
+  if (!data) return null;
+  return (data as { target_amount?: number }).target_amount ?? null;
+}
+
+const MON_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** The three calendar months of a quarter, each as { key:"YYYY-MM-01", label, monthIndex }. */
+export function quarterMonths(year: number, quarter: number): { key: string; label: string }[] {
+  const start = (quarter - 1) * 3;
+  return [0, 1, 2].map((i) => ({
+    key: `${year}-${pad(start + i + 1)}-01`,
+    label: `${MON_SHORT[start + i]} ${year}`,
+  }));
+}
+
+/** Every set target for a quarter's three months → map of monthKey → amount.
+ *  Missing months are simply absent from the map. Fail-soft: {} on error. */
+export async function fetchMmTargetsForQuarter(
+  year: number,
+  quarter: number
+): Promise<Record<string, number>> {
+  const keys = quarterMonths(year, quarter).map((m) => m.key);
+  const out: Record<string, number> = {};
+  const { data, error } = await supabase
+    .from("mm_targets")
+    .select("month, target_amount")
+    .in("month", keys);
+  if (error || !data) return out;
+  for (const r of data as { month: string; target_amount: number | null }[]) {
+    if (r.target_amount != null) out[r.month] = r.target_amount;
+  }
+  return out;
+}
+
+/** Sum of the quarter's set monthly targets (null when none are set). */
+export async function fetchMmTargetQuarterTotal(year: number, quarter: number): Promise<number | null> {
+  const map = await fetchMmTargetsForQuarter(year, quarter);
+  const vals = Object.values(map);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+}
+
+/** Upsert one month's target (manager-only via RLS). month key = "YYYY-MM-01".
+ *  Reads the row back and verifies the value actually persisted — so a silent
+ *  no-op (RLS, conflict mishandling) surfaces as a clear error instead of
+ *  "nothing saved". */
+export async function setMmTargetForMonth(
+  monthKey: string,
+  amount: number,
+  createdBy: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("mm_targets")
+    .upsert({ month: monthKey, target_amount: amount, created_by: createdBy }, { onConflict: "month" })
+    .select("month, target_amount")
+    .single();
+  if (error) throw new Error(`${monthKey}: ${error.message}`);
+  if (!data || Number(data.target_amount) !== amount) {
+    throw new Error(`${monthKey}: did not save (table still shows ${data?.target_amount ?? "no row"}).`);
+  }
 }
 
 /** This month's MM sales target (null if not set). */

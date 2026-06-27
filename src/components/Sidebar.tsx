@@ -22,6 +22,7 @@ import {
 
 import {
   ActionsIcon,
+  AiIcon,
   AnalyticsIcon,
   BlockerIcon,
   ChecklistIcon,
@@ -97,6 +98,7 @@ export function Sidebar({
         { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
         { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
         { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) || profile?.id === "cbb81b27-8756-4f2d-bfe0-04211c27092c" || profile?.id === "227fdb27-80b5-4040-ab14-4bb945068af7" },
+        { href: "/ai-usage", label: "AI Usage", icon: AiIcon, show: true },
       ],
     },
     {
@@ -140,6 +142,7 @@ export function Sidebar({
       items: [
         { href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon, show: can("orders") },
         { href: "/logistics/amazon-fulfillment", label: "Amazon (Seller + Flex)", icon: ActionsIcon, show: can("amazon_fulfillment") },
+        { href: "/logistics/amazon-pricing", label: "Amazon Profit & Pricing", icon: AnalyticsIcon, show: can("amazon_profit") },
         { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
       ],
     },

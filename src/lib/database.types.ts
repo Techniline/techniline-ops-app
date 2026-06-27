@@ -2910,6 +2910,146 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_order_finance: {
+        Row: {
+          amazon_order_id: string
+          currency: string | null
+          fba_fee: number | null
+          fee_breakdown: Json | null
+          fees_total: number | null
+          net_proceeds: number | null
+          other_fees: number | null
+          posted_date: string | null
+          product_charges: number | null
+          promo_discount: number | null
+          raw: Json | null
+          referral_fee: number | null
+          refund_total: number | null
+          shipping_charges: number | null
+          synced_at: string
+          tax_collected: number | null
+        }
+        Insert: {
+          amazon_order_id: string
+          currency?: string | null
+          fba_fee?: number | null
+          fee_breakdown?: Json | null
+          fees_total?: number | null
+          net_proceeds?: number | null
+          other_fees?: number | null
+          posted_date?: string | null
+          product_charges?: number | null
+          promo_discount?: number | null
+          raw?: Json | null
+          referral_fee?: number | null
+          refund_total?: number | null
+          shipping_charges?: number | null
+          synced_at?: string
+          tax_collected?: number | null
+        }
+        Update: {
+          amazon_order_id?: string
+          currency?: string | null
+          fba_fee?: number | null
+          fee_breakdown?: Json | null
+          fees_total?: number | null
+          net_proceeds?: number | null
+          other_fees?: number | null
+          posted_date?: string | null
+          product_charges?: number | null
+          promo_discount?: number | null
+          raw?: Json | null
+          referral_fee?: number | null
+          refund_total?: number | null
+          shipping_charges?: number | null
+          synced_at?: string
+          tax_collected?: number | null
+        }
+        Relationships: []
+      }
+      seller_sku_costs: {
+        Row: {
+          cost: number | null
+          created_at: string
+          currency: string
+          expected_in_hand: number | null
+          notes: string | null
+          sell_price: number | null
+          seller_sku: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          expected_in_hand?: number | null
+          notes?: string | null
+          sell_price?: number | null
+          seller_sku: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          expected_in_hand?: number | null
+          notes?: string | null
+          sell_price?: number | null
+          seller_sku?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_sku_costs_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seller_sku_pricing: {
+        Row: {
+          asin: string | null
+          buybox_price: number | null
+          currency: string | null
+          is_buybox_winner: boolean | null
+          lowest_price: number | null
+          my_price: number | null
+          offer_count: number | null
+          raw: Json | null
+          seller_sku: string
+          synced_at: string
+        }
+        Insert: {
+          asin?: string | null
+          buybox_price?: number | null
+          currency?: string | null
+          is_buybox_winner?: boolean | null
+          lowest_price?: number | null
+          my_price?: number | null
+          offer_count?: number | null
+          raw?: Json | null
+          seller_sku: string
+          synced_at?: string
+        }
+        Update: {
+          asin?: string | null
+          buybox_price?: number | null
+          currency?: string | null
+          is_buybox_winner?: boolean | null
+          lowest_price?: number | null
+          my_price?: number | null
+          offer_count?: number | null
+          raw?: Json | null
+          seller_sku?: string
+          synced_at?: string
+        }
+        Relationships: []
+      }
       seller_orders: {
         Row: {
           amazon_order_id: string

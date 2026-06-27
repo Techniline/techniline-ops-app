@@ -12,6 +12,7 @@ export interface KpiCycle {
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MON_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export function buildCycle(year: number, quarter: number): KpiCycle {
   const startMonth = (quarter - 1) * 3;
@@ -25,6 +26,36 @@ export function buildCycle(year: number, quarter: number): KpiCycle {
     label: `Q${quarter} ${year}`,
     months: `${MON[startMonth]}–${MON[startMonth + 2]}`,
   };
+}
+
+export interface MonthMeta {
+  startIso: string;
+  endIso: string;
+  monthKey: string; // "YYYY-MM-01" — the mm_targets key
+  label: string; // "June"
+  short: string; // "Jun"
+}
+
+/** Month window + labels from a "YYYY-MM-01" key. */
+export function monthMetaFromKey(monthKey: string): MonthMeta {
+  const [y, m1] = monthKey.split("-").map(Number); // m1 = 1–12
+  const m = m1 - 1;
+  const start = new Date(y, m, 1, 0, 0, 0, 0);
+  const end = new Date(y, m + 1, 1, 0, 0, 0, 0);
+  return { startIso: start.toISOString(), endIso: end.toISOString(), monthKey, label: MON_FULL[m], short: MON[m] };
+}
+
+/** The default month within a cycle for *monthly* KPIs (e.g. the MM sales
+ *  target, set per calendar month). Uses the current month when it falls inside
+ *  the cycle, otherwise the quarter's first month. */
+export function cycleMonth(cycle: KpiCycle): MonthMeta {
+  const qStartMonth = (cycle.quarter - 1) * 3;
+  const now = new Date();
+  const nowYM = now.getFullYear() * 12 + now.getMonth();
+  const qStartYM = cycle.year * 12 + qStartMonth;
+  let m = qStartMonth; // default: the quarter's first month
+  if (nowYM >= qStartYM && nowYM <= qStartYM + 2) m = now.getMonth();
+  return monthMetaFromKey(`${cycle.year}-${String(m + 1).padStart(2, "0")}-01`);
 }
 
 export function currentYearQuarter(): { year: number; quarter: number } {

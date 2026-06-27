@@ -1,5 +1,6 @@
 import { cycleWeeks, type KpiCycle } from "@/lib/kpiCycle";
-import { fetchMmDailyRange, fetchMmTargetRange } from "@/lib/musicmajlis";
+import { AARON_ID, adjustedResponseMinutes, fetchBreaksForRange } from "@/lib/breaks";
+import { fetchMmDailyRange, fetchMmTargetQuarterTotal } from "@/lib/musicmajlis";
 import { fetchDeductions } from "@/lib/remittanceDeductions";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -34,11 +35,12 @@ export async function fetchWeeklyScorecard(cycle: KpiCycle): Promise<WeeklyScore
   const DAY = 86_400_000;
 
   // ── raw data for the whole quarter (bucketed in JS) ──────────────────────────
-  const [chatRows, orders, mmDaily, mmTarget, recovered, abandoned, remits, deductions] = await Promise.all([
+  const [chatRows, aaronBreaks, orders, mmDaily, mmTarget, recovered, abandoned, remits, deductions] = await Promise.all([
     supabase.from("wazzup_messages").select("message_at, response_minutes").eq("direction", "inbound").not("response_minutes", "is", null).gte("message_at", qStart).lt("message_at", qEnd).limit(5000),
+    fetchBreaksForRange(AARON_ID, qStart, qEnd).catch(() => []),
     supabase.from("shopify_orders").select("shopify_created_at, logistics_status, fulfillment_status").gte("shopify_created_at", qStart).lt("shopify_created_at", qEnd).limit(5000),
     fetchMmDailyRange(qStart, qEnd).catch(() => ({})),
-    fetchMmTargetRange(cycle.year, cycle.quarter).catch(() => null),
+    fetchMmTargetQuarterTotal(cycle.year, cycle.quarter).catch(() => null),
     supabase.from("mm_recovered_carts").select("recovered_date").gte("recovered_date", qStart.slice(0, 10)).lt("recovered_date", qEnd.slice(0, 10)).limit(5000),
     supabase.from("mm_abandoned_actions").select("created_at").gte("created_at", qStart).lt("created_at", qEnd).limit(5000),
     supabase.from("remittances").select("remittance_ref, reconciled, reviewed_at, created_at").limit(2000),
@@ -54,7 +56,13 @@ export async function fetchWeeklyScorecard(cycle: KpiCycle): Promise<WeeklyScore
   // per-window calculators
   const chatPct = (s: string, e: string) => {
     const inWin = chat.filter((r) => within(r.message_at, s, e));
-    return pct(inWin.filter((r) => (r.response_minutes ?? 9999) <= 15).length, inWin.length);
+    return pct(
+      inWin.filter((r) => {
+        const adj = adjustedResponseMinutes(r.message_at as string, r.response_minutes as number, aaronBreaks);
+        return adj != null && adj <= 15;
+      }).length,
+      inWin.length
+    );
   };
   const orderRate = (s: string, e: string, fulfilled: boolean) => {
     const live = ord.filter((o) => within(o.shopify_created_at, s, e) && o.logistics_status !== "cancelled");
@@ -108,7 +116,7 @@ export async function fetchWeeklyScorecard(cycle: KpiCycle): Promise<WeeklyScore
     buildRow("Aaron", "Order action rate", "%", 90, true, (s, e) => orderRate(s, e, false)),
     buildRow("Aaron", "Fulfillment rate", "%", 95, true, (s, e) => orderRate(s, e, true)),
     buildRow("Aaron", "Abandoned-cart recovery", "%", 20, true, cartPct),
-    buildRow("Aaron", `MM sales (target ${mmTarget ? `${(mmTarget / 1000).toFixed(0)}k/qtr` : "—"})`, "AED", 1, true, mmSales),
+    buildRow("Aaron", `MM sales (${cycle.label} target ${mmTarget ? `${(mmTarget / 1000).toFixed(0)}k` : "—"})`, "AED", 1, true, mmSales),
     buildRow("Maricel", "Reconciliation 3-day SLA", "%", 95, true, reconPct),
     buildRow("Maricel", "Deduction recovery rate", "%", 80, true, recoveryPct),
     buildRow("Maricel", "Deduction turnaround", "days", 5, false, turnaround),

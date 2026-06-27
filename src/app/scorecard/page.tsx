@@ -3,11 +3,14 @@
 import { Fragment, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { MmTargetsModal } from "@/components/MmTargetsModal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { inputClass, surface } from "@/components/ui";
-import { buildCycle, currentYearQuarter, fetchStoredCycle, friThuWeek, saveCycle } from "@/lib/kpiCycle";
+import { buildCycle, currentYearQuarter, cycleMonth, fetchStoredCycle, friThuWeek, saveCycle } from "@/lib/kpiCycle";
+import { quarterMonths } from "@/lib/musicmajlis";
+import { AARON_ID, fetchBreakHistory, type UserBreak } from "@/lib/breaks";
 import { isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
 import { fetchWeeklyScorecard, type WeeklyRow, type WeeklyScorecard } from "@/lib/scorecardWeekly";
@@ -86,8 +89,94 @@ function Person({ name, role, accent, kpis }: { name: string; role: string; acce
   );
 }
 
-const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
+
+// ── Break analysis (manager-only) ────────────────────────────────────────────
+
+interface BreakDay {
+  date: string;
+  short: number;
+  lunch: number;
+  totalMinutes: number;
+  manual: number;
+  auto: number;
+}
+
+function groupBreaksByDay(breaks: UserBreak[]): BreakDay[] {
+  const map = new Map<string, BreakDay>();
+  for (const b of breaks) {
+    const date = b.started_at.slice(0, 10);
+    if (!map.has(date)) map.set(date, { date, short: 0, lunch: 0, totalMinutes: 0, manual: 0, auto: 0 });
+    const d = map.get(date)!;
+    if (b.type === "short") d.short += 1; else d.lunch += 1;
+    const end = b.ended_at ?? b.expected_end_at;
+    d.totalMinutes += Math.round((new Date(end).getTime() - new Date(b.started_at).getTime()) / 60_000);
+    if (b.ended_by === "manual") d.manual += 1; else d.auto += 1;
+  }
+  return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function BreakAnalysis({ cycle }: { cycle: { startIso: string; endIso: string; label: string } }) {
+  const [breaks, setBreaks] = useState<UserBreak[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchBreakHistory(AARON_ID, cycle.startIso, cycle.endIso).then((b) => { if (alive) setBreaks(b); });
+    return () => { alive = false; };
+  }, [cycle.startIso, cycle.endIso]);
+
+  if (!breaks) return <p className="text-sm text-slate-400 py-4">Loading break history…</p>;
+  if (breaks.length === 0) return <p className="text-sm text-slate-400 py-4">No breaks recorded this cycle.</p>;
+
+  const days = groupBreaksByDay(breaks);
+  const totalShort = breaks.filter((b) => b.type === "short").length;
+  const totalLunch = breaks.filter((b) => b.type === "lunch").length;
+  const totalMins = days.reduce((s, d) => s + d.totalMinutes, 0);
+  const totalManual = breaks.filter((b) => b.ended_by === "manual").length;
+  const totalAuto = breaks.filter((b) => b.ended_by === "auto" || !b.ended_by).length;
+
+  return (
+    <div>
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+        {[
+          { label: "Short breaks", value: totalShort, sub: "15 min each" },
+          { label: "Lunch breaks", value: totalLunch, sub: "60 min each" },
+          { label: "Total break time", value: `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`, sub: `${breaks.length} sessions` },
+          { label: "Auto-expired", value: totalAuto, sub: `${totalManual} manual returns` },
+        ].map((c) => (
+          <div key={c.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{c.label}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{c.value}</p>
+            <p className="text-xs text-slate-400">{c.sub}</p>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+        <table className="min-w-full text-xs border-collapse">
+          <thead className="bg-slate-100 dark:bg-slate-800">
+            <tr>
+              {["Date", "Short breaks", "Lunch breaks", "Total time", "Manual return", "Auto-expired"].map((h) => (
+                <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600 dark:text-slate-200 whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((d) => (
+              <tr key={d.date} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="px-3 py-1.5 font-medium text-slate-700 dark:text-slate-200">{new Date(d.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", weekday: "short" })}</td>
+                <td className="px-3 py-1.5 tabular-nums text-slate-600 dark:text-slate-300">{d.short > 0 ? `${d.short}` : "—"}</td>
+                <td className="px-3 py-1.5 tabular-nums text-slate-600 dark:text-slate-300">{d.lunch > 0 ? `${d.lunch}` : "—"}</td>
+                <td className="px-3 py-1.5 tabular-nums text-slate-600 dark:text-slate-300">{d.totalMinutes}m</td>
+                <td className="px-3 py-1.5 tabular-nums text-slate-600 dark:text-slate-300">{d.manual > 0 ? `${d.manual}` : "—"}</td>
+                <td className="px-3 py-1.5 tabular-nums text-slate-600 dark:text-slate-300">{d.auto > 0 ? <span className="text-amber-600 font-medium">{d.auto}</span> : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 /** Cell colour for the weekly grid: band on achievement vs target (AED = neutral). */
 function cellInfo(row: WeeklyRow, v: number | null): { text: string; cls: string } {
@@ -152,10 +241,19 @@ function ScorecardContent() {
   const [view, setView] = useState<"cards" | "weekly">("cards");
   const [grid, setGrid] = useState<WeeklyScorecard | null>(null);
   const [gridLoading, setGridLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showTargets, setShowTargets] = useState(false);
+  const [reload, setReload] = useState(0);
   const init = currentYearQuarter();
   const [year, setYear] = useState(init.year);
   const [quarter, setQuarter] = useState(init.quarter);
+  const [mmMonth, setMmMonth] = useState(""); // MM-sales card month ("YYYY-MM-01")
   const week = friThuWeek();
+
+  // Reset the MM-sales month to the cycle's default whenever the quarter changes.
+  useEffect(() => {
+    setMmMonth(cycleMonth(buildCycle(year, quarter)).monthKey);
+  }, [year, quarter]);
 
   // Load the shared cycle (set by a manager) from the DB on mount.
   useEffect(() => {
@@ -164,13 +262,14 @@ function ScorecardContent() {
     return () => { alive = false; };
   }, []);
 
-  // Recompute KPIs whenever the cycle changes.
+  // Recompute KPIs whenever the cycle (or the picked MM month) changes.
   useEffect(() => {
+    if (!mmMonth) return; // wait for the month default to be set
     let alive = true;
     setLoading(true);
-    fetchScorecard(buildCycle(year, quarter)).then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
+    fetchScorecard(buildCycle(year, quarter), mmMonth).then((d) => { if (alive) { setData(d); setLoading(false); } }).catch(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [year, quarter]);
+  }, [year, quarter, reload, mmMonth]);
 
   // Weekly grid — fetched when that view is open (and refreshed on cycle change).
   useEffect(() => {
@@ -179,7 +278,7 @@ function ScorecardContent() {
     setGridLoading(true);
     fetchWeeklyScorecard(buildCycle(year, quarter)).then((g) => { if (alive) { setGrid(g); setGridLoading(false); } }).catch(() => alive && setGridLoading(false));
     return () => { alive = false; };
-  }, [view, year, quarter]);
+  }, [view, year, quarter, reload]);
 
   function changeCycle(y: number, q: number) {
     setYear(y); setQuarter(q);
@@ -188,6 +287,55 @@ function ScorecardContent() {
 
   const cy = currentYearQuarter().year;
   const years = [cy - 1, cy, cy + 1];
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const cycle = buildCycle(year, quarter);
+      const [sc, wg, brks] = await Promise.all([
+        data ? Promise.resolve(data) : fetchScorecard(cycle),
+        fetchWeeklyScorecard(cycle),
+        fetchBreakHistory(AARON_ID, cycle.startIso, cycle.endIso),
+      ]);
+
+      const lines: string[] = [];
+      const q = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+
+      // KPI summary
+      lines.push(`KPI Summary — ${cycle.label}`);
+      lines.push("Person,KPI,Value,Target,Achievement %,Status,Type");
+      for (const [person, kpis] of [["Aaron", sc.aaron], ["Maricel", sc.maricel]] as [string, Kpi[]][]) {
+        for (const k of kpis) {
+          lines.push([q(person), q(k.label), q(k.display), q(k.target ?? "—"), k.achievement != null ? k.achievement : "—", q(k.status), q(k.type)].join(","));
+        }
+      }
+
+      // Weekly grid
+      lines.push("", `Weekly Grid — ${cycle.label}`);
+      lines.push(["Person", "KPI", "Target", "QTD", ...wg.weeks].map(q).join(","));
+      for (const r of wg.rows) {
+        const tgt = r.uom === "AED" ? "—" : r.higherIsBetter ? `>=${r.targetValue}${r.uom === "%" ? "%" : ""}` : `<=${r.targetValue}${r.uom === "days" ? "d" : ""}`;
+        lines.push([q(r.person), q(r.label), q(tgt), r.qtd ?? "—", ...r.weekly.map((v) => v ?? "—")].join(","));
+      }
+
+      // Break analysis
+      lines.push("", `Aaron Break History — ${cycle.label}`);
+      lines.push(["Date", "Type", "Started", "Expected End", "Ended At", "Ended By", "Duration (min)"].map(q).join(","));
+      for (const b of brks) {
+        const end = b.ended_at ?? b.expected_end_at;
+        const mins = Math.round((new Date(end).getTime() - new Date(b.started_at).getTime()) / 60_000);
+        lines.push([q(b.started_at.slice(0, 10)), q(b.type), q(b.started_at), q(b.expected_end_at), q(b.ended_at ?? "(auto)"), q(b.ended_by ?? "auto"), mins].join(","));
+      }
+
+      const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kpi-${cycle.label.replace(/\s/g, "-")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally { setExporting(false); }
+  }
 
   if (!canView) {
     return (
@@ -220,12 +368,37 @@ function ScorecardContent() {
           <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Q{quarter} {year}</span>
         )}
         <span className="text-xs text-slate-500">{buildCycle(year, quarter).months}{manager ? "" : " · set by manager"}</span>
+        {view === "cards" ? (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-slate-400">MM sales month</span>
+            <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs dark:border-slate-700">
+              {quarterMonths(year, quarter).map((m) => (
+                <button key={m.key} type="button" onClick={() => setMmMonth(m.key)}
+                  className={`px-2 py-1 font-medium ${mmMonth === m.key ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>
+                  {m.label.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs dark:border-slate-700">
             <button type="button" onClick={() => setView("cards")} className={`px-2.5 py-1 font-medium ${view === "cards" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>Cards</button>
             <button type="button" onClick={() => setView("weekly")} className={`px-2.5 py-1 font-medium ${view === "weekly" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>Weekly grid</button>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{week.label} (Fri–Thu)</span>
+          {manager ? (
+            <>
+              <button type="button" onClick={() => setShowTargets(true)}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                🎯 Set targets
+              </button>
+              <button type="button" onClick={() => void exportCsv()} disabled={exporting}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                {exporting ? "Exporting…" : "⬇ Export CSV"}
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -254,6 +427,29 @@ function ScorecardContent() {
           {showMaricel ? <Person name="Maricel" role="Returns documentation · Remittance recovery" accent="bg-teal-500" kpis={data.maricel} /> : null}
         </>
       )}
+
+      {/* Break analysis — manager only */}
+      {manager ? (
+        <div className={`${surface} mt-6 p-5`}>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">☕ Aaron — Break History</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Auto-expired = he did not click "I'm back" — system resumed automatically. Not shown to Aaron.</p>
+            </div>
+          </div>
+          <BreakAnalysis cycle={buildCycle(year, quarter)} />
+        </div>
+      ) : null}
+
+      {manager && showTargets ? (
+        <MmTargetsModal
+          year={year}
+          quarter={quarter}
+          createdBy={profile?.id ?? ""}
+          onClose={() => setShowTargets(false)}
+          onSaved={() => setReload((n) => n + 1)}
+        />
+      ) : null}
     </div>
   );
 }

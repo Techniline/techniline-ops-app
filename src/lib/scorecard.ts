@@ -1,6 +1,7 @@
 import { formatAED } from "@/lib/format";
-import type { KpiCycle } from "@/lib/kpiCycle";
-import { fetchMmNetSalesRange, fetchMmTargetRange } from "@/lib/musicmajlis";
+import { cycleMonth, monthMetaFromKey, type KpiCycle } from "@/lib/kpiCycle";
+import { AARON_ID, adjustedResponseMinutes, fetchBreaksForRange } from "@/lib/breaks";
+import { fetchMmNetSalesRange, fetchMmTargetForMonth } from "@/lib/musicmajlis";
 import { fetchDeductions, summarizeRecovery } from "@/lib/remittanceDeductions";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -50,20 +51,23 @@ function statusFor(value: number | null, target: number, higherIsBetter: boolean
 
 /** Compute the full KPI scorecard for Aaron + Maricel from live data, scoped to
  *  the given cycle (quarter) window. Fail-soft. */
-export async function fetchScorecard(cycle: KpiCycle): Promise<Scorecard> {
+export async function fetchScorecard(cycle: KpiCycle, mmMonthKey?: string): Promise<Scorecard> {
   const now = Date.now();
   const qStart = cycle.startIso;
   const qEnd = cycle.endIso;
+  // MM sales target is set per calendar month, so this one KPI is scoped to a
+  // single month — the explicitly-picked month, else the cycle's default month.
+  const sm = mmMonthKey ? monthMetaFromKey(mmMonthKey) : cycleMonth(cycle);
 
   // ── shared fetches, all scoped to the cycle quarter ──────────────────────────
-  const [chatTotalRes, chatWithinRes, ordersRes, mmSales, mmTarget, recoveredRes, abandonedRes, remitRes, docsRes, deductions] =
+  const [chatRows, aaronBreaks, ordersRes, mmSales, mmTarget, recoveredRes, abandonedRes, remitRes, docsRes, deductions] =
     await Promise.all([
-      // Chat: replied inbound messages within the quarter, and how many ≤15 min.
-      supabase.from("wazzup_messages").select("*", { count: "exact", head: true }).eq("direction", "inbound").not("response_minutes", "is", null).gte("message_at", qStart).lt("message_at", qEnd),
-      supabase.from("wazzup_messages").select("*", { count: "exact", head: true }).eq("direction", "inbound").lte("response_minutes", 15).gte("message_at", qStart).lt("message_at", qEnd),
+      // Chat: fetch actual rows so we can adjust response_minutes for break windows.
+      supabase.from("wazzup_messages").select("message_at, response_minutes").eq("direction", "inbound").not("response_minutes", "is", null).gte("message_at", qStart).lt("message_at", qEnd).limit(5000),
+      fetchBreaksForRange(AARON_ID, qStart, qEnd).catch(() => []),
       supabase.from("shopify_orders").select("logistics_status, fulfillment_status").gte("shopify_created_at", qStart).lt("shopify_created_at", qEnd),
-      fetchMmNetSalesRange(qStart, qEnd).catch(() => null),
-      fetchMmTargetRange(cycle.year, cycle.quarter).catch(() => null),
+      fetchMmNetSalesRange(sm.startIso, sm.endIso).catch(() => null),
+      fetchMmTargetForMonth(sm.monthKey).catch(() => null),
       supabase.from("mm_recovered_carts").select("amount").gte("recovered_date", qStart.slice(0, 10)).lt("recovered_date", qEnd.slice(0, 10)),
       supabase.from("mm_abandoned_actions").select("*", { count: "exact", head: true }).gte("created_at", qStart).lt("created_at", qEnd),
       supabase.from("remittances").select("*").order("created_at", { ascending: false }).limit(1000),
@@ -72,9 +76,13 @@ export async function fetchScorecard(cycle: KpiCycle): Promise<Scorecard> {
     ]);
 
   // ── AARON ────────────────────────────────────────────────────────────────
-  // 1. Chat reply within 15 min (lagging) — scoped to the quarter.
-  const chatTotal = chatTotalRes.count ?? 0;
-  const chatWithin = chatWithinRes.count ?? 0;
+  // 1. Chat reply within 15 min — adjusted for break windows.
+  const chats = chatRows.data ?? [];
+  const chatTotal = chats.length;
+  const chatWithin = chats.filter((c) => {
+    const adj = adjustedResponseMinutes(c.message_at as string, c.response_minutes as number, aaronBreaks);
+    return adj != null && adj <= 15;
+  }).length;
   const chatPct = pct(chatWithin, chatTotal);
   const aaron: Kpi[] = [];
   aaron.push({
@@ -123,16 +131,17 @@ export async function fetchScorecard(cycle: KpiCycle): Promise<Scorecard> {
     source: "mm_recovered_carts + mm_abandoned_actions.",
   });
 
-  // 5. MM sales vs quarter target (lagging) — Shopify net sales over the quarter.
+  // 5. MM sales vs MONTHLY target (lagging) — the target is set per calendar
+  //    month, so we compare this month's net sales against this month's target.
   const target = mmTarget ?? null;
   const mmPct = target && target > 0 && mmSales != null ? Math.round((mmSales / target) * 100) : null;
   aaron.push({
-    key: "mmsales", label: "MusicMajlis sales (quarter)", icon: "💰", type: "lagging",
+    key: "mmsales", label: `MusicMajlis sales (${sm.label})`, icon: "💰", type: "lagging",
     display: mmSales == null ? "—" : formatAED(mmSales),
-    sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} quarter target` : "no target set for the quarter",
+    sub: target ? `${mmPct ?? 0}% of ${formatAED(target)} ${sm.label} target` : `no target set for ${sm.label}`,
     target: target ? "100% of target" : undefined, status: mmPct == null ? "none" : statusFor(mmPct, 100, true), achievement: mmPct, progress: mmPct == null ? null : Math.min(100, mmPct),
-    how: "Shopify net sales for MusicMajlis across the selected quarter, vs the sum of that quarter's monthly sales targets.",
-    source: "Shopify net sales + mm_targets (3 months summed).",
+    how: `Shopify net sales for MusicMajlis in ${sm.label}, vs ${sm.label}'s sales target. Scoped to the month because the target is set per month (not per quarter).`,
+    source: "Shopify net sales + mm_targets (the month's target).",
   });
 
   // ── MARICEL ──────────────────────────────────────────────────────────────
@@ -212,5 +221,5 @@ export async function fetchScorecard(cycle: KpiCycle): Promise<Scorecard> {
     source: "remittance_deductions.approved_amount_aed.",
   });
 
-  return { aaron, maricel, period: `${cycle.label} (${cycle.months}) — all KPIs scoped to this quarter` };
+  return { aaron, maricel, period: `${cycle.label} (${cycle.months}) — quarter-scoped, except MusicMajlis sales (${sm.label}, monthly target)` };
 }

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { nextWorkingMoment, workingMinutesBetween, workingWaitMinutes } from "@/lib/workingHours";
 
 export interface WazzupStats {
   pendingChats: number;
@@ -57,19 +58,28 @@ export async function fetchWazzupStats(): Promise<WazzupStats> {
     }
     const pending = [...chats.entries()].map(([chatId, v]) => ({ chatId, name: v.name, at: v.at }));
     const pendingNames = pending.map((p) => p.name);
-    const oldestWaitingMin = oldest != null ? Math.max(0, Math.round((Date.now() - oldest) / 60000)) : 0;
+    const oldestWaitingMin = oldest != null ? workingWaitMinutes(new Date(oldest)) : 0;
 
     // Reply-within-15-min KPI over the last 7 days.
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const { data: rep } = await supabase
       .from("wazzup_messages")
-      .select("response_minutes")
+      .select("message_at, response_minutes")
       .eq("direction", "inbound")
       .not("response_minutes", "is", null)
       .gte("message_at", since)
       .limit(5000);
     const repliedTotal = rep?.length ?? 0;
-    const within = (rep ?? []).filter((r) => (r.response_minutes ?? 9999) <= 15).length;
+    const within = (rep ?? []).filter((r) => {
+      const raw = r.response_minutes as number | null;
+      if (raw == null) return false;
+      // Convert raw wall-clock minutes to working minutes before SLA check
+      const msgDate = new Date((r as { message_at?: string }).message_at ?? "");
+      const respondedAt = new Date(msgDate.getTime() + raw * 60_000);
+      const slaStart = nextWorkingMoment(msgDate);
+      if (respondedAt <= slaStart) return true; // replied before shift = trivially within SLA
+      return workingMinutesBetween(slaStart, respondedAt) <= 15;
+    }).length;
     const repliedPct = repliedTotal ? Math.round((within / repliedTotal) * 100) : null;
 
     // New chats today (distinct chats with any message today).

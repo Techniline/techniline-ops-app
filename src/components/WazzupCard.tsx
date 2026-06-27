@@ -2,9 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "@/app/providers/AuthProvider";
 import { surface } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { fetchWazzupStats, resolveWazzupChat, type WazzupStats } from "@/lib/wazzup";
+import { fmtWorkingMin } from "@/lib/workingHours";
+import {
+  AARON_ID,
+  BREAK_DURATION,
+  breakIsActive,
+  endBreak,
+  fetchCurrentBreak,
+  startBreak,
+  type UserBreak,
+} from "@/lib/breaks";
 
 const WAZZUP_URL = "https://crm.zoho.com/crm/org712284897/tab/WebTab1";
 
@@ -13,6 +24,9 @@ const WAZZUP_URL = "https://crm.zoho.com/crm/org712284897/tab/WebTab1";
  *  every 15s. The actual toast/voice/tab-badge alerting lives in the app-wide
  *  <WazzupAlerts/> watcher so it fires on every page, not just here. */
 export function WazzupCard() {
+  const { profile } = useAuth();
+  const isAaron = profile?.id === AARON_ID;
+
   const [s, setS] = useState<WazzupStats | null>(null);
   const [muted, setMuted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -22,11 +36,35 @@ export function WazzupCard() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolveErr, setResolveErr] = useState<string | null>(null);
 
+  // Break state (Aaron only)
+  const [activeBreak, setActiveBreak] = useState<UserBreak | null>(null);
+  const [breakSecs, setBreakSecs] = useState(0);
+  const [breakLoading, setBreakLoading] = useState(false);
+
   // restore mute pref + notification permission on mount
   useEffect(() => {
     setMuted(localStorage.getItem("wz_muted") === "1");
     if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
   }, []);
+
+  // Load current break status for Aaron
+  useEffect(() => {
+    if (!isAaron) return;
+    void fetchCurrentBreak().then((b) => { setActiveBreak(b); });
+  }, [isAaron]);
+
+  // Countdown ticker for active break
+  useEffect(() => {
+    if (!activeBreak) { setBreakSecs(0); return; }
+    const tick = () => {
+      const rem = Math.max(0, Math.floor((new Date(activeBreak.expected_end_at).getTime() - Date.now()) / 1000));
+      setBreakSecs(rem);
+      if (rem === 0) setActiveBreak(null); // auto-expired
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [activeBreak]);
 
   // Refresh the displayed numbers. Alerting is handled globally by <WazzupAlerts/>.
   const applyRef = useRef<() => Promise<void>>(async () => {});
@@ -83,6 +121,22 @@ export function WazzupCard() {
     if (typeof Notification === "undefined") return;
     const p = await Notification.requestPermission();
     setNotifPerm(p);
+  }
+
+  async function handleStartBreak(type: "short" | "lunch") {
+    setBreakLoading(true);
+    try { setActiveBreak(await startBreak(type)); } catch { /* ignore */ } finally { setBreakLoading(false); }
+  }
+
+  async function handleEndBreak() {
+    if (!activeBreak) return;
+    setBreakLoading(true);
+    try { await endBreak(activeBreak.id); setActiveBreak(null); } catch { /* ignore */ } finally { setBreakLoading(false); }
+  }
+
+  function fmtSecs(s: number) {
+    const m = Math.floor(s / 60), sec = s % 60;
+    return `${m}:${String(sec).padStart(2, "0")}`;
   }
 
   const tile = (label: string, value: string, tone: string, sub?: string) => (
@@ -151,11 +205,140 @@ export function WazzupCard() {
                 : "awaiting reply"}
             </button>
           </div>
-          {tile("Oldest waiting", s.oldestWaitingMin ? `${s.oldestWaitingMin}m` : "—", waitTone, s.oldestWaitingMin > 15 ? "over 15 min" : "within SLA")}
+          {tile("Oldest waiting", s.oldestWaitingMin ? fmtWorkingMin(s.oldestWaitingMin) : "—", waitTone, s.oldestWaitingMin > 15 ? "over SLA · working hrs" : "within SLA")}
           {tile("New today", String(s.newToday), "text-slate-900 dark:text-slate-100", "chats")}
           {tile("Replied <15 min", s.repliedPct == null ? "—" : `${s.repliedPct}%`, pctTone, s.repliedTotal ? `of ${s.repliedTotal} (7d)` : "no data yet")}
         </div>
       )}
+
+      {/* ── Break controls (Aaron only) ─────────────────────────────────────── */}
+      {isAaron ? (
+        <div className="mt-4 border-t border-slate-200/70 pt-4 dark:border-slate-800">
+          <style>{`
+            @keyframes breakpulse{0%,100%{opacity:1}50%{opacity:.6}}
+            .break-btn{position:relative;overflow:hidden;transition:all .18s ease}
+            .break-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 60%);pointer-events:none;border-radius:inherit}
+            .break-btn:active{transform:translateY(1px);box-shadow:inset 0 2px 8px rgba(0,0,0,.18)!important}
+            .break-btn:disabled{opacity:.55;transform:none}
+          `}</style>
+
+          {activeBreak ? (
+            /* ── Active break banner ── */
+            <div
+              className="relative flex items-center gap-4 overflow-hidden rounded-2xl px-5 py-4"
+              style={{
+                background: activeBreak.type === "lunch"
+                  ? "linear-gradient(135deg,#7c3aed 0%,#4f46e5 100%)"
+                  : "linear-gradient(135deg,#0891b2 0%,#0e7490 100%)",
+                boxShadow: activeBreak.type === "lunch"
+                  ? "0 4px 20px rgba(124,58,237,.35), inset 0 1px 0 rgba(255,255,255,.15)"
+                  : "0 4px 20px rgba(8,145,178,.35), inset 0 1px 0 rgba(255,255,255,.15)",
+              }}
+            >
+              {/* glow orb */}
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-20"
+                style={{ background: "radial-gradient(circle,#fff 0%,transparent 70%)" }} />
+
+              {/* icon */}
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
+                style={{ background: "rgba(255,255,255,.15)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.2), 0 2px 8px rgba(0,0,0,.2)" }}>
+                {activeBreak.type === "lunch" ? (
+                  <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 2v7a4 4 0 0 0 4 4h1v9h2v-9h1a4 4 0 0 0 4-4V2M16 2v4M16 6a4 4 0 0 0 4 4v10" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 8h1a4 4 0 0 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
+                    <line x1="6" y1="2" x2="6" y2="4" /><line x1="10" y1="2" x2="10" y2="4" /><line x1="14" y1="2" x2="14" y2="4" />
+                  </svg>
+                )}
+              </div>
+
+              <div className="relative flex-1 min-w-0">
+                <p className="text-sm font-bold text-white">
+                  {activeBreak.type === "lunch" ? "Lunch break" : "Short break"} · SLA paused
+                </p>
+                <p className="text-xs text-white/70 mt-0.5">
+                  Auto-resumes in{" "}
+                  <span className="font-mono font-semibold text-white" style={{ animation: "breakpulse 1.5s ease-in-out infinite" }}>
+                    {fmtSecs(breakSecs)}
+                  </span>
+                  {" "}· chats get fresh 15 min on return
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={breakLoading}
+                onClick={() => void handleEndBreak()}
+                className="break-btn relative shrink-0 rounded-xl px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                style={{
+                  background: "rgba(255,255,255,.18)",
+                  boxShadow: "0 2px 8px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25)",
+                  border: "1px solid rgba(255,255,255,.2)",
+                }}
+              >
+                ✓ I&apos;m back
+              </button>
+            </div>
+          ) : (
+            /* ── Break buttons ── */
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Take a break</p>
+              <div className="flex gap-3">
+                {/* Short break */}
+                <button
+                  type="button"
+                  disabled={breakLoading}
+                  onClick={() => void handleStartBreak("short")}
+                  className="break-btn flex flex-1 items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
+                  style={{
+                    background: "linear-gradient(145deg,#e0f7fa 0%,#b2ebf2 100%)",
+                    boxShadow: "0 4px 14px rgba(8,145,178,.2), inset 0 1px 0 rgba(255,255,255,.8), inset 0 -2px 0 rgba(8,145,178,.15)",
+                    border: "1px solid rgba(8,145,178,.2)",
+                  }}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: "linear-gradient(145deg,#0891b2,#0e7490)", boxShadow: "0 3px 8px rgba(8,145,178,.4), inset 0 1px 0 rgba(255,255,255,.2)" }}>
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 8h1a4 4 0 0 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
+                      <line x1="6" y1="2" x2="6" y2="4" /><line x1="10" y1="2" x2="10" y2="4" /><line x1="14" y1="2" x2="14" y2="4" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-cyan-900">Short break</p>
+                    <p className="text-[11px] text-cyan-700 font-medium">{BREAK_DURATION.short} min · SLA pauses</p>
+                  </div>
+                </button>
+
+                {/* Lunch break */}
+                <button
+                  type="button"
+                  disabled={breakLoading}
+                  onClick={() => void handleStartBreak("lunch")}
+                  className="break-btn flex flex-1 items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
+                  style={{
+                    background: "linear-gradient(145deg,#ede9fe 0%,#ddd6fe 100%)",
+                    boxShadow: "0 4px 14px rgba(124,58,237,.18), inset 0 1px 0 rgba(255,255,255,.8), inset 0 -2px 0 rgba(124,58,237,.12)",
+                    border: "1px solid rgba(124,58,237,.2)",
+                  }}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: "linear-gradient(145deg,#7c3aed,#6d28d9)", boxShadow: "0 3px 8px rgba(124,58,237,.4), inset 0 1px 0 rgba(255,255,255,.2)" }}>
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 2v7a4 4 0 0 0 4 4h1v9h2v-9h1a4 4 0 0 0 4-4V2M16 2v4M16 6a4 4 0 0 0 4 4v10" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-violet-900">Lunch break</p>
+                    <p className="text-[11px] text-violet-700 font-medium">{BREAK_DURATION.lunch} min · SLA pauses</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {managing ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={() => setManaging(false)}>
