@@ -4,9 +4,7 @@ registries:
     type: npm-registry
     url: https://npm.pkg.github.com
     username: x-access-token
-    # Store a Personal Access Token with read:packages scope as a Dependabot secret named GITHUB_PACKAGES_TOKEN
-    # Settings > Secrets and variables > Dependabot > New repository secret
-    password: ${{secrets.GITHUB_PACKAGES_TOKEN}}
+    password: ${{secrets.PACKAGES_READ_TOKEN}}
 updates:
   - package-ecosystem: "npm"
     directory: "/"
