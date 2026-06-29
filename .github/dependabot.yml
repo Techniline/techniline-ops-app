@@ -1,16 +1,7 @@
 version: 2
-registries:
-  github-npm:
-    type: npm-registry
-    url: https://npm.pkg.github.com
-    username: x-access-token
-    password: ${{secrets.PACKAGES_READ_TOKEN}}
-    replaces-base: true
 updates:
   - package-ecosystem: "npm"
     directory: "/"
-    registries:
-      - github-npm
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
