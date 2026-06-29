@@ -3,6 +3,7 @@ export {
   fetchReturns,
   fetchCombinedReturns,
   logReturn,
+  updateReturn,
   validateReturn,
   returnFieldsFor,
   RETURN_TYPES,
