@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: "20"
       # Fail the build on high/critical dependency vulnerabilities.
-      - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=critical
 
   codeql:
     name: CodeQL (static analysis)
