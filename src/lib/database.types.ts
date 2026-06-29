@@ -969,6 +969,33 @@ export type Database = {
           },
         ]
       }
+      lp_brand_margins: {
+        Row: {
+          brand: string
+          created_at: string
+          id: string
+          margin_pct: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          brand: string
+          created_at?: string
+          id?: string
+          margin_pct: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          brand?: string
+          created_at?: string
+          id?: string
+          margin_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       lp_items: {
         Row: {
           amount: number | null
@@ -979,6 +1006,8 @@ export type Database = {
           id: string
           line_number: number | null
           lp_id: string
+          margin_pct: number | null
+          min_stock_qty: number | null
           model_no: string | null
           qty_adjust_comment: string | null
           qty_original: number | null
@@ -997,6 +1026,8 @@ export type Database = {
           id?: string
           line_number?: number | null
           lp_id: string
+          margin_pct?: number | null
+          min_stock_qty?: number | null
           model_no?: string | null
           qty_adjust_comment?: string | null
           qty_original?: number | null
@@ -1015,6 +1046,8 @@ export type Database = {
           id?: string
           line_number?: number | null
           lp_id?: string
+          margin_pct?: number | null
+          min_stock_qty?: number | null
           model_no?: string | null
           qty_adjust_comment?: string | null
           qty_original?: number | null
@@ -1105,6 +1138,44 @@ export type Database = {
           },
         ]
       }
+      lp_price_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          field_name: string
+          id: string
+          lp_item_id: string
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          field_name: string
+          id?: string
+          lp_item_id: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          field_name?: string
+          id?: string
+          lp_item_id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lp_price_history_lp_item_id_fkey"
+            columns: ["lp_item_id"]
+            isOneToOne: false
+            referencedRelation: "lp_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lp_sales: {
         Row: {
           created_at: string
@@ -1118,6 +1189,8 @@ export type Database = {
           sale_date: string | null
           salesman_name: string | null
           sold_qty: number
+          unit_sale_price: number | null
+          unit_sale_price_ex_vat: number | null
         }
         Insert: {
           created_at?: string
@@ -1131,6 +1204,8 @@ export type Database = {
           sale_date?: string | null
           salesman_name?: string | null
           sold_qty: number
+          unit_sale_price?: number | null
+          unit_sale_price_ex_vat?: number | null
         }
         Update: {
           created_at?: string
@@ -1144,6 +1219,8 @@ export type Database = {
           sale_date?: string | null
           salesman_name?: string | null
           sold_qty?: number
+          unit_sale_price?: number | null
+          unit_sale_price_ex_vat?: number | null
         }
         Relationships: [
           {
@@ -3433,6 +3510,8 @@ export type Database = {
           lp_date: string | null
           lp_id: string | null
           lp_number: string | null
+          margin_pct: number | null
+          min_stock_qty: number | null
           model_no: string | null
           pdf_url: string | null
           qty_adjust_comment: string | null
@@ -3459,6 +3538,8 @@ export type Database = {
           lp_date?: never
           lp_id?: string | null
           lp_number?: never
+          margin_pct?: number | null
+          min_stock_qty?: number | null
           model_no?: string | null
           pdf_url?: never
           qty_adjust_comment?: string | null
@@ -3485,6 +3566,8 @@ export type Database = {
           lp_date?: never
           lp_id?: string | null
           lp_number?: never
+          margin_pct?: number | null
+          min_stock_qty?: number | null
           model_no?: string | null
           pdf_url?: never
           qty_adjust_comment?: string | null

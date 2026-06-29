@@ -181,6 +181,7 @@ export async function saveVerifiedLp(input: SaveLpInput): Promise<number> {
 export interface RecordSaleInput {
   lpItemId: string;
   soldQty: number;
+  unitSalePrice: number | null;
   invoiceNumber: string | null;
   entity: EntityOption | null;
   entityOther: string | null;
@@ -222,6 +223,11 @@ export async function recordSale(input: RecordSaleInput): Promise<void> {
   const salePayload: TablesInsert<"lp_sales"> = {
     lp_item_id: input.lpItemId,
     sold_qty: input.soldQty,
+    unit_sale_price: input.unitSalePrice,
+    unit_sale_price_ex_vat:
+      input.unitSalePrice != null
+        ? Math.round((input.unitSalePrice / 1.05) * 100) / 100
+        : null,
     invoice_number: input.invoiceNumber,
     entity: input.entity,
     entity_other: input.entity === "Other" ? input.entityOther : null,

@@ -104,11 +104,14 @@ export interface SaleReportRow {
   salesmanName: string | null;
   invoiceNumber: string | null;
   soldQty: number;
+  unitSalePrice: number | null;
+  unitSalePriceExVat: number | null;
   modelNo: string | null;
   sku: string | null;
   lpNumber: string | null;
   vendorName: string | null;
   unitPrice: number | null;
+  brand: string | null;
 }
 
 /** Shape of the nested select result (lp_sales → lp_items → lp_orders). */
@@ -119,10 +122,13 @@ interface RawSaleJoin {
   salesman_name: string | null;
   invoice_number: string | null;
   sold_qty: number;
+  unit_sale_price: number | null;
+  unit_sale_price_ex_vat: number | null;
   lp_items: {
     model_no: string | null;
     sku: string | null;
     unit_price: number | null;
+    brand: string | null;
     lp_orders: { lp_number: string | null; vendor_name: string | null } | null;
   } | null;
 }
@@ -131,15 +137,15 @@ interface RawSaleJoin {
  * Fetch sales in a sale-date range, joined to their LP line + order, for the
  * entity-wise sold report. Newest first.
  */
-export async function fetchSalesReport(fromIso: string, toIso: string): Promise<SaleReportRow[]> {
+export async function fetchSalesReport(fromIso?: string, toIso?: string): Promise<SaleReportRow[]> {
   let query = supabase
     .from("lp_sales")
     .select(
-      "sale_date, entity, entity_other, salesman_name, invoice_number, sold_qty, lp_items(model_no, sku, unit_price, lp_orders(lp_number, vendor_name))"
+      "sale_date, entity, entity_other, salesman_name, invoice_number, sold_qty, unit_sale_price, unit_sale_price_ex_vat, lp_items(model_no, sku, unit_price, brand, lp_orders(lp_number, vendor_name))"
     );
   if (fromIso) query = query.gte("sale_date", fromIso);
   if (toIso) query = query.lte("sale_date", toIso);
-  const { data, error } = await query.order("sale_date", { ascending: false });
+  const { data, error } = await query.order("sale_date", { ascending: false }).limit(2000);
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as RawSaleJoin[];
@@ -150,9 +156,12 @@ export async function fetchSalesReport(fromIso: string, toIso: string): Promise<
     salesmanName: r.salesman_name,
     invoiceNumber: r.invoice_number,
     soldQty: r.sold_qty,
+    unitSalePrice: r.unit_sale_price,
+    unitSalePriceExVat: r.unit_sale_price_ex_vat,
     modelNo: r.lp_items?.model_no ?? null,
     sku: r.lp_items?.sku ?? null,
     unitPrice: r.lp_items?.unit_price ?? null,
+    brand: r.lp_items?.brand ?? null,
     lpNumber: r.lp_items?.lp_orders?.lp_number ?? null,
     vendorName: r.lp_items?.lp_orders?.vendor_name ?? null,
   }));
@@ -215,4 +224,82 @@ export function computePriceAlerts(rows: LpItemRow[]): Map<string, PriceAlert> {
   }
 
   return alerts;
+}
+
+/* ----------------------------- RRP helpers ------------------------------ */
+
+/** Compute the RRP (selling price) from unit cost + margin percentage. */
+export function computeRrp(unitPrice: number | null, marginPct: number): number | null {
+  if (unitPrice == null) return null;
+  return Math.round(unitPrice * (1 + marginPct / 100) * 100) / 100;
+}
+
+/* --------------------------- Brand margins ------------------------------ */
+
+export interface BrandMarginRow {
+  id: string;
+  brand: string;
+  margin_pct: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export async function fetchBrandMargins(): Promise<BrandMarginRow[]> {
+  const { data, error } = await supabase
+    .from("lp_brand_margins")
+    .select("id, brand, margin_pct, updated_at, updated_by")
+    .order("brand");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BrandMarginRow[];
+}
+
+/* ------------------------ Global margin setting ------------------------- */
+
+export async function fetchGlobalMarginPct(): Promise<number> {
+  const { data } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "lp_global_margin_pct")
+    .maybeSingle();
+  const parsed = Number(data?.value ?? "15");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+}
+
+/* -------------------- Inline lp_items field update -------------------- */
+
+export async function updateLpItemField(
+  id: string,
+  field: "margin_pct" | "min_stock_qty",
+  value: number | null,
+): Promise<void> {
+  const patch =
+    field === "margin_pct"
+      ? { margin_pct: value, updated_at: new Date().toISOString() }
+      : { min_stock_qty: value, updated_at: new Date().toISOString() };
+  const { error } = await supabase.from("lp_items").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/* ----------------------- Price history --------------------------------- */
+
+export interface PriceHistoryEntry {
+  id: string;
+  lp_item_id: string;
+  changed_by: string | null;
+  changed_at: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+}
+
+export async function fetchPriceHistory(opts?: { lpItemId?: string; limit?: number }): Promise<PriceHistoryEntry[]> {
+  let q = supabase
+    .from("lp_price_history")
+    .select("*")
+    .order("changed_at", { ascending: false })
+    .limit(opts?.limit ?? 500);
+  if (opts?.lpItemId) q = q.eq("lp_item_id", opts.lpItemId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PriceHistoryEntry[];
 }

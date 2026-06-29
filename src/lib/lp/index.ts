@@ -28,12 +28,19 @@ export {
   fetchVendors,
   fetchSalesReport,
   computePriceAlerts,
+  computeRrp,
+  fetchBrandMargins,
+  fetchGlobalMarginPct,
+  updateLpItemField,
+  fetchPriceHistory,
   type LpItemRow,
   type LpOverviewRow,
   type LpStatusFilter,
   type LpWindowOpts,
   type PriceAlert,
   type SaleReportRow,
+  type BrandMarginRow,
+  type PriceHistoryEntry,
 } from "./queries";
 
 export {

@@ -21,9 +21,12 @@ import { isManager } from "@/lib/permissions";
 import {
   ENTITY_OPTIONS,
   computePriceAlerts,
+  computeRrp,
   currentViewReport,
   entitySoldDetail,
   entitySoldTotals,
+  fetchBrandMargins,
+  fetchGlobalMarginPct,
   fetchLpItemsWindow,
   fetchLpLinesForOrder,
   fetchLpOverview,
@@ -39,8 +42,10 @@ import {
   setGoodsReceivedDate,
   stockInHandReport,
   updateLpItem,
+  updateLpItemField,
   vendorReport,
   vendorRollup,
+  type BrandMarginRow,
   type CaptureEngine,
   type EntityOption,
   type LpDraft,
@@ -49,6 +54,7 @@ import {
   type LpStatusFilter,
   type LpSaleRow,
   type PriceAlert,
+  type SaleReportRow,
   type StoredLpPdf,
   type VerifiedLpLine,
 } from "@/lib/lp";
@@ -391,17 +397,21 @@ function todayIso(): string {
 
 function RecordSaleModal({
   row,
+  rrp,
   recordedBy,
   onClose,
   onSaved,
 }: {
   row: LpItemRow;
+  rrp: number | null;
   recordedBy: string;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const remaining = row.qty_remaining ?? 0;
+  const costPrice = row.unit_price ?? null;
   const [soldQty, setSoldQty] = useState("");
+  const [unitSalePrice, setUnitSalePrice] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [entity, setEntity] = useState<EntityOption>("Al Shoala");
   const [entityOther, setEntityOther] = useState("");
@@ -410,6 +420,12 @@ function RecordSaleModal({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const parsedSalePrice = unitSalePrice.trim() !== "" ? Number(unitSalePrice) : null;
+  const exVat = parsedSalePrice != null && Number.isFinite(parsedSalePrice)
+    ? Math.round((parsedSalePrice / 1.05) * 100) / 100 : null;
+  const belowCost = parsedSalePrice != null && costPrice != null && parsedSalePrice < costPrice;
+  const belowRrp = parsedSalePrice != null && rrp != null && parsedSalePrice < rrp && !belowCost;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -431,6 +447,7 @@ function RecordSaleModal({
       await recordSale({
         lpItemId: row.id,
         soldQty: qty,
+        unitSalePrice: parsedSalePrice != null && Number.isFinite(parsedSalePrice) ? parsedSalePrice : null,
         invoiceNumber: invoiceNumber.trim() || null,
         entity,
         entityOther: entityOther.trim() || null,
@@ -448,15 +465,28 @@ function RecordSaleModal({
 
   return (
     <ModalShell title="Record sale" onClose={onClose}>
-      <p className="mb-4 text-sm text-slate-500">
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
         <span className="font-medium text-slate-700 dark:text-slate-300">{row.model_no ?? row.sku ?? "—"}</span>
-        {" · "}{row.lp_number ?? "—"} · {remaining.toLocaleString()} remaining
-      </p>
+        <span>{row.lp_number ?? "—"}</span>
+        <span>{remaining.toLocaleString()} remaining</span>
+        {costPrice != null && <span className="text-xs text-slate-400">Cost: AED {fmtCost(costPrice)}</span>}
+        {rrp != null && <span className="text-xs text-slate-400">RRP: AED {fmtCost(rrp)}</span>}
+      </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormRow label="Sold Qty *">
             <input type="number" min="0" step="1" onWheel={blurOnWheel} className={inputClass} value={soldQty} onChange={(e) => setSoldQty(e.target.value)} required />
           </FormRow>
+          <div>
+            <FormRow label="Unit Sale Price (AED inc. VAT)">
+              <input type="number" min="0" step="0.01" onWheel={blurOnWheel} className={inputClass} value={unitSalePrice} onChange={(e) => setUnitSalePrice(e.target.value)} placeholder="Optional" />
+            </FormRow>
+            {exVat != null ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Ex-VAT: <span className="font-medium text-slate-700 dark:text-slate-200">AED {fmtCost(exVat)}</span>
+              </p>
+            ) : null}
+          </div>
           <FormRow label="Invoice Number">
             <input className={inputClass} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
           </FormRow>
@@ -471,20 +501,25 @@ function RecordSaleModal({
             <FormRow label="Entity name *">
               <input className={inputClass} value={entityOther} onChange={(e) => setEntityOther(e.target.value)} />
             </FormRow>
-          ) : (
-            <FormRow label="Salesman">
-              <input className={inputClass} value={salesman} onChange={(e) => setSalesman(e.target.value)} />
-            </FormRow>
-          )}
-          {entity === "Other" ? (
-            <FormRow label="Salesman">
-              <input className={inputClass} value={salesman} onChange={(e) => setSalesman(e.target.value)} />
-            </FormRow>
           ) : null}
+          <FormRow label="Salesman">
+            <input className={inputClass} value={salesman} onChange={(e) => setSalesman(e.target.value)} />
+          </FormRow>
           <FormRow label="Sale Date">
             <input type="date" className={inputClass} value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
           </FormRow>
         </div>
+
+        {belowCost ? (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            ⚠ Sale price is below cost (AED {fmtCost(costPrice)}) — proceed only if authorised.
+          </p>
+        ) : belowRrp ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            Sale price is below RRP (AED {fmtCost(rrp)}).
+          </p>
+        ) : null}
+
         <FormRow label="Notes">
           <textarea className={inputClass} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </FormRow>
@@ -723,6 +758,12 @@ function SaleHistory({ itemId }: { itemId: string }) {
             <span className="font-medium">{s.sold_qty} sold</span>
             <span>{s.sale_date ?? "—"}</span>
             <span>{s.entity === "Other" ? s.entity_other ?? "Other" : s.entity ?? "—"}</span>
+            {s.unit_sale_price != null ? (
+              <span className="font-medium text-indigo-600 dark:text-indigo-400">
+                AED {fmtCost(s.unit_sale_price)}
+                {s.unit_sale_price_ex_vat != null ? ` (ex-VAT ${fmtCost(s.unit_sale_price_ex_vat)})` : ""}
+              </span>
+            ) : null}
             {s.invoice_number ? <span>inv {s.invoice_number}</span> : null}
             {s.salesman_name ? <span>by {s.salesman_name}</span> : null}
             {s.notes ? <span className="text-slate-400">— {s.notes}</span> : null}
@@ -747,6 +788,7 @@ function LpTable({
   onFilter,
   onSale,
   onEdit,
+  computeItemRrp,
 }: {
   rows: LpItemRow[];
   alerts: Map<string, PriceAlert>;
@@ -755,28 +797,64 @@ function LpTable({
   onFilter: (key: keyof ColFilters, value: string) => void;
   onSale: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
+  computeItemRrp: (row: LpItemRow) => number | null;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<{ id: string; field: "margin_pct" | "min_stock_qty" } | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [savingField, setSavingField] = useState(false);
+
   async function openPdf(path: string): Promise<void> {
     const url = await lpPdfUrl(path);
     if (url) window.open(url, "_blank", "noopener,noreferrer");
   }
+
+  function startEdit(row: LpItemRow, field: "margin_pct" | "min_stock_qty"): void {
+    if (!row.id) return;
+    const current = row[field];
+    setEditingField({ id: row.id, field });
+    setEditingValue(current != null ? String(current) : "");
+  }
+
+  async function commitEdit(): Promise<void> {
+    if (!editingField) return;
+    const v = editingValue.trim();
+    const num = v === "" ? null : Number(v);
+    if (v !== "" && (num == null || !Number.isFinite(num) || num < 0)) {
+      setEditingField(null);
+      return;
+    }
+    setSavingField(true);
+    try {
+      await updateLpItemField(editingField.id, editingField.field, num);
+    } catch {
+      /* best-effort */
+    } finally {
+      setSavingField(false);
+      setEditingField(null);
+    }
+  }
+
   return (
     <div className={`${surface} max-h-[calc(100dvh-15rem)] overflow-auto`}>
       <table className="min-w-full text-sm">
         <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
           <tr>
-            <th className={TH}>LP Number</th>
-            <th className={TH}>LP Date</th>
+            <th className={TH}>LP #</th>
+            <th className={TH}>Date</th>
             <th className={TH}>Vendor</th>
             <th className={TH}>Model / SKU</th>
             <th className={TH}>Brand</th>
-            <th className={TH}>Purchased</th>
+            <th className={TH}>Purch.</th>
             <th className={TH}>Sold</th>
-            <th className={TH}>Remaining</th>
-            <th className={TH}>Unit Price</th>
+            <th className={TH}>Rem.</th>
+            <th className={TH}>S/T%</th>
+            <th className={TH}>Cost</th>
+            <th className={TH}>RRP</th>
+            <th className={TH}>Margin%</th>
+            <th className={TH}>Min Stock</th>
             <th className={TH}>Price Δ</th>
-            <th className={TH}>Age (d)</th>
+            <th className={TH}>Age</th>
             <th className={TH}>Status</th>
             <th className={TH}>Action</th>
           </tr>
@@ -784,30 +862,15 @@ function LpTable({
             <th className="px-3 pb-2"></th>
             <th className="px-3 pb-2"></th>
             <th className="px-3 pb-2">
-              <input
-                value={filters.vendor}
-                onChange={(e) => onFilter("vendor", e.target.value)}
-                placeholder="Filter…"
-                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              />
+              <input value={filters.vendor} onChange={(e) => onFilter("vendor", e.target.value)} placeholder="Filter…" className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
             </th>
             <th className="px-3 pb-2">
-              <input
-                value={filters.model}
-                onChange={(e) => onFilter("model", e.target.value)}
-                placeholder="Filter…"
-                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              />
+              <input value={filters.model} onChange={(e) => onFilter("model", e.target.value)} placeholder="Filter…" className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
             </th>
             <th className="px-3 pb-2">
-              <input
-                value={filters.brand}
-                onChange={(e) => onFilter("brand", e.target.value)}
-                placeholder="Filter…"
-                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              />
+              <input value={filters.brand} onChange={(e) => onFilter("brand", e.target.value)} placeholder="Filter…" className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-normal text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
             </th>
-            <th className="px-3 pb-2" colSpan={8}></th>
+            <th className="px-3 pb-2" colSpan={12}></th>
           </tr>
         </thead>
         <tbody>
@@ -815,7 +878,17 @@ function LpTable({
             const id = row.id ?? `row-${index}`;
             const alert = row.id ? alerts.get(row.id) : undefined;
             const remaining = row.qty_remaining ?? 0;
+            const purchased = row.qty_purchased ?? 0;
+            const sold = row.qty_sold ?? 0;
             const isExpanded = expanded === id;
+            const rrp = computeItemRrp(row);
+            const sellThrough = purchased > 0 ? Math.round((sold / purchased) * 100) : null;
+            const minStock = row.min_stock_qty;
+            const needsReorder = minStock != null && remaining <= minStock;
+            const isEditingMargin = editingField?.id === row.id && editingField.field === "margin_pct";
+            const isEditingMin = editingField?.id === row.id && editingField.field === "min_stock_qty";
+            const itemMarginPct = row.margin_pct;
+
             return (
               <Fragment key={id}>
                 <tr
@@ -826,55 +899,97 @@ function LpTable({
                     <span className="inline-flex items-center gap-1.5">
                       {dash(row.lp_number)}
                       {row.pdf_url ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); void openPdf(row.pdf_url!); }}
-                          className="text-indigo-500 hover:text-indigo-700"
-                          title="View LP PDF"
-                          aria-label="View LP PDF"
-                        >
-                          📎
-                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); void openPdf(row.pdf_url!); }} className="text-indigo-500 hover:text-indigo-700" title="View PDF" aria-label="View LP PDF">📎</button>
                       ) : null}
                     </span>
                   </td>
                   <td className={TD}>{dash(row.lp_date)}</td>
-                  <td className={`${TD} max-w-[160px] truncate`} title={row.vendor_name ?? ""}>{dash(row.vendor_name)}</td>
+                  <td className={`${TD} max-w-[140px] truncate`} title={row.vendor_name ?? ""}>{dash(row.vendor_name)}</td>
                   <td className={TD}>{dash(row.model_no ?? row.sku)}</td>
                   <td className={TD}>{dash(row.brand)}</td>
-                  <td className={TD}>{fmtNum(row.qty_purchased)}</td>
-                  <td className={TD}>{fmtNum(row.qty_sold)}</td>
-                  <td className={`${TD} font-medium`}>{fmtNum(row.qty_remaining)}</td>
+                  <td className={TD}>{fmtNum(purchased)}</td>
+                  <td className={TD}>{fmtNum(sold)}</td>
+                  <td className={`${TD} font-medium`}>
+                    <span className={needsReorder ? "text-red-600 dark:text-red-400 font-semibold" : ""}>
+                      {fmtNum(remaining)}
+                      {needsReorder ? " 🔴" : ""}
+                    </span>
+                  </td>
+                  <td className={TD}>
+                    {sellThrough != null ? (
+                      <span className={`text-xs font-medium ${sellThrough >= 80 ? "text-emerald-600 dark:text-emerald-400" : sellThrough >= 40 ? "text-amber-600 dark:text-amber-400" : "text-slate-500"}`}>
+                        {sellThrough}%
+                      </span>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className={TD}>{fmtCost(row.unit_price)}</td>
+                  <td className={`${TD} font-medium text-indigo-600 dark:text-indigo-400`}>{rrp != null ? fmtCost(rrp) : <span className="text-slate-300">—</span>}</td>
+                  <td className={TD} onClick={(e) => e.stopPropagation()}>
+                    {isEditingMargin ? (
+                      <input
+                        autoFocus
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="0.1"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => void commitEdit()}
+                        onKeyDown={(e) => { if (e.key === "Enter") void commitEdit(); if (e.key === "Escape") setEditingField(null); }}
+                        disabled={savingField}
+                        className="w-16 rounded border border-indigo-400 px-1 py-0.5 text-xs"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => managerFlag && startEdit(row, "margin_pct")}
+                        className={`text-xs ${managerFlag ? "cursor-pointer hover:text-indigo-600" : "cursor-default"} ${itemMarginPct != null ? "text-indigo-600 dark:text-indigo-400 font-medium" : "text-slate-400"}`}
+                        title={managerFlag ? "Click to edit item margin" : undefined}
+                      >
+                        {itemMarginPct != null ? `${itemMarginPct}%` : "—"}
+                      </button>
+                    )}
+                  </td>
+                  <td className={TD} onClick={(e) => e.stopPropagation()}>
+                    {isEditingMin ? (
+                      <input
+                        autoFocus
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => void commitEdit()}
+                        onKeyDown={(e) => { if (e.key === "Enter") void commitEdit(); if (e.key === "Escape") setEditingField(null); }}
+                        disabled={savingField}
+                        className="w-14 rounded border border-indigo-400 px-1 py-0.5 text-xs"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => managerFlag && startEdit(row, "min_stock_qty")}
+                        className={`text-xs ${managerFlag ? "cursor-pointer hover:text-indigo-600" : "cursor-default"} ${minStock != null ? "text-slate-700 dark:text-slate-200" : "text-slate-400"}`}
+                        title={managerFlag ? "Click to set minimum stock level" : undefined}
+                      >
+                        {minStock != null ? String(minStock) : "—"}
+                      </button>
+                    )}
+                  </td>
                   <td className={TD}>{alert ? <PriceBadge alert={alert} /> : <span className="text-slate-300">—</span>}</td>
-                  <td className={TD}>{fmtNum(row.ageing_days)}</td>
+                  <td className={TD}>{fmtNum(row.ageing_days)}d</td>
                   <td className={TD}><AgeingBadge status={row.ageing_status} /></td>
                   <td className={TD}>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onSale(row); }}
-                        disabled={!row.id || remaining <= 0}
-                        className={btnSmall}
-                      >
-                        Record sale
-                      </button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onSale(row); }} disabled={!row.id || remaining <= 0} className={btnSmall}>Sale</button>
                       {managerFlag ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); onEdit(row); }}
-                          disabled={!row.id}
-                          className={btnSmall}
-                        >
-                          Edit
-                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(row); }} disabled={!row.id} className={btnSmall}>Edit</button>
                       ) : null}
                     </div>
                   </td>
                 </tr>
                 {isExpanded && row.id ? (
                   <tr className="border-b border-slate-100 bg-slate-50/60 dark:border-slate-800/60 dark:bg-slate-800/20">
-                    <td colSpan={13}>
+                    <td colSpan={17}>
                       {row.qty_adjust_comment ? (
                         <p className="px-3 pt-2 text-xs text-amber-700 dark:text-amber-300">⚑ Qty note: {row.qty_adjust_comment}</p>
                       ) : null}
@@ -1155,23 +1270,55 @@ function SetGrnModal({
 
 /* ---------------------- Overview (always-on rollup) -------------------- */
 
-function OverviewKpiCards({ rows }: { rows: LpOverviewRow[] }) {
+function OverviewKpiCards({ rows, globalMarginPct }: { rows: LpOverviewRow[]; globalMarginPct: number }) {
   const k = useMemo(() => overviewKpis(rows), [rows]);
-  const cards: ReadonlyArray<{ label: string; value: string; tone?: string }> = [
-    { label: "Open LPs", value: k.openLps.toLocaleString() },
-    { label: "Open Lines", value: k.openLines.toLocaleString() },
-    { label: "Qty In Hand", value: k.totalRemainingQty.toLocaleString() },
-    { label: "Value In Hand (AED)", value: fmtCost(k.totalRemainingValue) },
-    { label: "Aged 90+ LPs", value: k.aged90Lps.toLocaleString(), tone: k.aged90Lps > 0 ? "text-red-600 dark:text-red-400" : undefined },
-  ];
+  const estAtRrp = k.totalRemainingValue != null
+    ? Math.round(k.totalRemainingValue * (1 + globalMarginPct / 100))
+    : null;
+
+  const aging = useMemo(() => {
+    const buckets = { d30: { count: 0, value: 0 }, d60: { count: 0, value: 0 }, d90: { count: 0, value: 0 }, d90p: { count: 0, value: 0 } };
+    for (const r of rows) {
+      const d = r.ageing_days ?? 0;
+      const v = r.total_remaining_value ?? 0;
+      if (d <= 30) { buckets.d30.count++; buckets.d30.value += v; }
+      else if (d <= 60) { buckets.d60.count++; buckets.d60.value += v; }
+      else if (d <= 90) { buckets.d90.count++; buckets.d90.value += v; }
+      else { buckets.d90p.count++; buckets.d90p.value += v; }
+    }
+    return buckets;
+  }, [rows]);
+
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {cards.map((c) => (
-        <div key={c.label} className={`${surface} p-4`}>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
-          <p className={`mt-1 text-2xl font-semibold ${c.tone ?? "text-slate-900 dark:text-slate-100"}`}>{c.value}</p>
-        </div>
-      ))}
+    <div className="mb-5 space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          { label: "Open LPs", value: k.openLps.toLocaleString(), tone: "" },
+          { label: "Open Lines", value: k.openLines.toLocaleString(), tone: "" },
+          { label: "Qty In Hand", value: k.totalRemainingQty.toLocaleString(), tone: "" },
+          { label: "At Cost (AED)", value: fmtCost(k.totalRemainingValue), tone: "" },
+          { label: `Est. At RRP (${globalMarginPct}%)`, value: fmtCost(estAtRrp), tone: "text-indigo-600 dark:text-indigo-400" },
+        ].map((c) => (
+          <div key={c.label} className={`${surface} p-4`}>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
+            <p className={`mt-1 text-2xl font-semibold ${c.tone || "text-slate-900 dark:text-slate-100"}`}>{c.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: "0 – 30 days", count: aging.d30.count, value: aging.d30.value, tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900" },
+          { label: "31 – 60 days", count: aging.d60.count, value: aging.d60.value, tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900" },
+          { label: "61 – 90 days", count: aging.d90.count, value: aging.d90.value, tone: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-100 dark:border-orange-900" },
+          { label: "90+ days", count: aging.d90p.count, value: aging.d90p.value, tone: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/30 border-red-100 dark:border-red-900" },
+        ].map((b) => (
+          <div key={b.label} className={`rounded-xl border p-4 ${b.bg}`}>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{b.label}</p>
+            <p className={`mt-1 text-xl font-semibold ${b.tone}`}>{b.count} LP{b.count !== 1 ? "s" : ""}</p>
+            <p className="mt-0.5 text-xs text-slate-500">AED {fmtCost(b.value)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1279,12 +1426,14 @@ function LpoRow({
 
 function OverviewSection({
   rows,
+  globalMarginPct,
   managerFlag,
   onSetGrn,
   onSale,
   onEdit,
 }: {
   rows: LpOverviewRow[];
+  globalMarginPct: number;
   managerFlag: boolean;
   onSetGrn: (lp: LpOverviewRow) => void;
   onSale: (row: LpItemRow) => void;
@@ -1296,7 +1445,7 @@ function OverviewSection({
 
   return (
     <div>
-      <OverviewKpiCards rows={rows} />
+      <OverviewKpiCards rows={rows} globalMarginPct={globalMarginPct} />
       <div className="mb-3 inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
         <button type="button" onClick={() => setByVendor(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By LPO</button>
         <button type="button" onClick={() => setByVendor(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By Vendor</button>
@@ -1344,20 +1493,337 @@ function OverviewSection({
   );
 }
 
+/* ----------------------------- Settings tab ----------------------------- */
+
+function SettingsTab({
+  globalMarginPct,
+  brandMargins,
+  canEdit,
+  userId,
+  onSaved,
+}: {
+  globalMarginPct: number;
+  brandMargins: BrandMarginRow[];
+  canEdit: boolean;
+  userId: string;
+  onSaved: () => void;
+}) {
+  const [globalInput, setGlobalInput] = useState(String(globalMarginPct));
+  const [globalSaving, setGlobalSaving] = useState(false);
+  const [globalErr, setGlobalErr] = useState<string | null>(null);
+  const [brandInput, setBrandInput] = useState({ brand: "", pct: "" });
+  const [brandSaving, setBrandSaving] = useState(false);
+  const [brandErr, setBrandErr] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function callApi(method: "POST" | "DELETE", body: unknown): Promise<{ ok: boolean; error?: string }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { ok: false, error: "Not signed in." };
+    const res = await fetch("/api/lp/margin-settings", {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json() as Promise<{ ok: boolean; error?: string }>;
+  }
+
+  async function saveGlobal(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setGlobalErr(null);
+    const pct = Number(globalInput);
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
+      setGlobalErr("Enter a margin between 1 and 99.");
+      return;
+    }
+    setGlobalSaving(true);
+    try {
+      const r = await callApi("POST", { type: "global", pct });
+      if (r.ok) onSaved();
+      else setGlobalErr(r.error ?? "Failed to save.");
+    } catch (e) {
+      setGlobalErr(errorMessage(e));
+    } finally {
+      setGlobalSaving(false);
+    }
+  }
+
+  async function saveBrand(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setBrandErr(null);
+    const pct = Number(brandInput.pct);
+    if (!brandInput.brand.trim()) { setBrandErr("Brand name is required."); return; }
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) { setBrandErr("Enter a margin between 1 and 99."); return; }
+    setBrandSaving(true);
+    try {
+      const r = await callApi("POST", { type: "brand", brand: brandInput.brand.trim(), pct });
+      if (r.ok) { setBrandInput({ brand: "", pct: "" }); onSaved(); }
+      else setBrandErr(r.error ?? "Failed to save.");
+    } catch (e) {
+      setBrandErr(errorMessage(e));
+    } finally {
+      setBrandSaving(false);
+    }
+  }
+
+  async function deleteBrand(id: string): Promise<void> {
+    setDeletingId(id);
+    try {
+      const r = await callApi("DELETE", { id });
+      if (r.ok) onSaved();
+    } catch {
+      /* best-effort */
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">Margin Settings</h2>
+        <p className="mb-4 text-sm text-slate-500">RRP is computed as: cost × (1 + margin%). Per-item margin overrides brand, which overrides global.</p>
+      </div>
+
+      <div className={`${surface} p-5`}>
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Global Margin (default for all items)</h3>
+        {canEdit ? (
+          <form onSubmit={(e) => void saveGlobal(e)} className="flex items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Margin %</label>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                step="0.1"
+                onWheel={blurOnWheel}
+                value={globalInput}
+                onChange={(e) => setGlobalInput(e.target.value)}
+                className={`${inputClass} w-28`}
+              />
+            </div>
+            <button type="submit" disabled={globalSaving} className={btnPrimary}>{globalSaving ? "Saving…" : "Save"}</button>
+          </form>
+        ) : (
+          <p className="text-2xl font-semibold text-indigo-600 dark:text-indigo-400">{globalMarginPct}%</p>
+        )}
+        {globalErr ? <p className="mt-2 text-sm text-red-600">{globalErr}</p> : null}
+      </div>
+
+      <div className={`${surface} p-5`}>
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Brand Margins</h3>
+        {brandMargins.length > 0 ? (
+          <div className="mb-4 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/40">
+                <tr>
+                  <th className={TH}>Brand</th>
+                  <th className={TH}>Margin %</th>
+                  <th className={TH}>Updated</th>
+                  {canEdit ? <th className={TH}></th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {brandMargins.map((b) => (
+                  <tr key={b.id} className="border-t border-slate-100 dark:border-slate-800/60">
+                    <td className={TD}>{b.brand}</td>
+                    <td className={`${TD} font-semibold text-indigo-600 dark:text-indigo-400`}>{b.margin_pct}%</td>
+                    <td className={`${TD} text-xs text-slate-400`}>{new Date(b.updated_at).toLocaleDateString()}</td>
+                    {canEdit ? (
+                      <td className={TD}>
+                        <button
+                          type="button"
+                          disabled={deletingId === b.id}
+                          onClick={() => void deleteBrand(b.id)}
+                          className="text-xs font-medium text-red-500 hover:text-red-700"
+                        >
+                          {deletingId === b.id ? "Removing…" : "Remove"}
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mb-4 text-sm text-slate-400">No brand overrides set — global margin applies to all brands.</p>
+        )}
+        {canEdit ? (
+          <form onSubmit={(e) => void saveBrand(e)} className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Brand name</label>
+              <input
+                value={brandInput.brand}
+                onChange={(e) => setBrandInput((p) => ({ ...p, brand: e.target.value }))}
+                placeholder="e.g. Samsung"
+                className={`${inputClass} w-36`}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Margin %</label>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                step="0.1"
+                onWheel={blurOnWheel}
+                value={brandInput.pct}
+                onChange={(e) => setBrandInput((p) => ({ ...p, pct: e.target.value }))}
+                className={`${inputClass} w-24`}
+              />
+            </div>
+            <button type="submit" disabled={brandSaving} className={btnPrimary}>{brandSaving ? "Saving…" : "Add / Update"}</button>
+          </form>
+        ) : null}
+        {brandErr ? <p className="mt-2 text-sm text-red-600">{brandErr}</p> : null}
+        {!canEdit ? <p className="mt-2 text-xs text-slate-400">Contact the manager to change margin settings.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Sales tab ------------------------------- */
+
+function SalesTab() {
+  const [fromIso, setFromIso] = useState("");
+  const [toIso, setToIso] = useState("");
+  const [rows, setRows] = useState<SaleReportRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function load(): Promise<void> {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await fetchSalesReport(fromIso || undefined, toIso || undefined);
+      setRows(data);
+      setLoaded(true);
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totalQty = rows.reduce((s, r) => s + r.soldQty, 0);
+  const totalRev = rows.reduce((s, r) => r.unitSalePriceExVat != null ? s + r.unitSalePriceExVat * r.soldQty : s, 0);
+  const hasRevData = rows.some((r) => r.unitSalePriceExVat != null);
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="flex items-center gap-1.5 text-sm text-slate-500">
+          <span className="text-xs font-medium uppercase tracking-wide">Sale date</span>
+          <input type="date" value={fromIso} onChange={(e) => setFromIso(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <span>→</span>
+          <input type="date" value={toIso} onChange={(e) => setToIso(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+        </div>
+        <button type="button" onClick={() => void load()} disabled={loading} className={btnPrimary}>
+          {loading ? "Loading…" : loaded ? "Refresh" : "Load sales"}
+        </button>
+      </div>
+
+      {err ? <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{err}</p> : null}
+
+      {!loaded ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+          <p className="text-sm text-slate-500">Pick a date range and click <span className="font-medium">Load sales</span>.</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-slate-500">No sales found for this range.</p>
+      ) : (
+        <>
+          {hasRevData ? (
+            <div className="mb-4 flex flex-wrap gap-4">
+              <div className={`${surface} p-4`}>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Qty Sold</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{totalQty.toLocaleString()}</p>
+              </div>
+              <div className={`${surface} p-4`}>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Revenue Ex-VAT (AED)</p>
+                <p className="mt-1 text-2xl font-semibold text-indigo-600 dark:text-indigo-400">{fmtCost(totalRev)}</p>
+              </div>
+            </div>
+          ) : null}
+          <div className={`${surface} max-h-[calc(100dvh-20rem)] overflow-auto`}>
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+                <tr>
+                  <th className={TH}>Date</th>
+                  <th className={TH}>LP #</th>
+                  <th className={TH}>Model</th>
+                  <th className={TH}>Brand</th>
+                  <th className={TH}>Entity</th>
+                  <th className={TH}>Salesman</th>
+                  <th className={TH}>Qty</th>
+                  <th className={TH}>Sale Price (inc VAT)</th>
+                  <th className={TH}>Ex-VAT</th>
+                  <th className={TH}>Cost</th>
+                  <th className={TH}>Invoice</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const margin = r.unitSalePriceExVat != null && r.unitPrice != null && r.unitPrice > 0
+                    ? ((r.unitSalePriceExVat - r.unitPrice) / r.unitPrice * 100)
+                    : null;
+                  const belowCost = r.unitSalePriceExVat != null && r.unitPrice != null && r.unitSalePriceExVat < r.unitPrice;
+                  return (
+                    <tr key={i} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                      <td className={TD}>{r.saleDate ?? "—"}</td>
+                      <td className={TD}>{r.lpNumber ?? "—"}</td>
+                      <td className={TD}>{r.modelNo ?? r.sku ?? "—"}</td>
+                      <td className={TD}>{r.brand ?? "—"}</td>
+                      <td className={TD}>{r.entity === "Other" ? (r.entityOther ?? "Other") : (r.entity ?? "—")}</td>
+                      <td className={TD}>{r.salesmanName ?? "—"}</td>
+                      <td className={`${TD} font-medium`}>{r.soldQty}</td>
+                      <td className={TD}>{r.unitSalePrice != null ? fmtCost(r.unitSalePrice) : <span className="text-slate-300">—</span>}</td>
+                      <td className={TD}>
+                        {r.unitSalePriceExVat != null ? (
+                          <span className={belowCost ? "font-medium text-red-600 dark:text-red-400" : "font-medium text-indigo-600 dark:text-indigo-400"}>
+                            {fmtCost(r.unitSalePriceExVat)}
+                            {margin != null ? <span className="ml-1 text-xs text-slate-400">({margin >= 0 ? "+" : ""}{margin.toFixed(1)}%)</span> : null}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className={TD}>{r.unitPrice != null ? fmtCost(r.unitPrice) : <span className="text-slate-300">—</span>}</td>
+                      <td className={TD}>{r.invoiceNumber ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">{rows.length} sale{rows.length !== 1 ? "s" : ""} shown</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------ Content -------------------------------- */
 
 const PAGE = 100;
 
-type LpSection = "overview" | "browse";
+type LpSection = "overview" | "browse" | "sales" | "settings";
+
+const PAVITHRAN_UID = "648993fe-d2e7-446a-ad71-c7b3ff81fae7";
 
 function LpContent() {
   const { profile } = useAuth();
   const managerFlag = isManager(profile);
+  const canEditMargins = profile?.id === PAVITHRAN_UID || managerFlag;
 
   const [section, setSection] = useState<LpSection>("overview");
   const [banner, setBanner] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+
+  // Margin settings (loaded on mount, refreshed after settings changes).
+  const [globalMarginPct, setGlobalMarginPct] = useState(15);
+  const [brandMargins, setBrandMargins] = useState<BrandMarginRow[]>([]);
 
   // Overview (always on): the cheap per-LPO rollup.
   const [overview, setOverview] = useState<LpOverviewRow[]>([]);
@@ -1397,9 +1863,34 @@ function LpContent() {
     }
   }, []);
 
+  const loadMargins = useCallback(async () => {
+    try {
+      const [pct, brands] = await Promise.all([fetchGlobalMarginPct(), fetchBrandMargins()]);
+      setGlobalMarginPct(pct);
+      setBrandMargins(brands);
+    } catch {
+      /* fallback to defaults */
+    }
+  }, []);
+
   useEffect(() => {
     void loadOverview();
-  }, [loadOverview]);
+    void loadMargins();
+  }, [loadOverview, loadMargins]);
+
+  const computeItemRrp = useCallback(
+    (row: LpItemRow): number | null => {
+      if (row.unit_price == null) return null;
+      if (row.margin_pct != null && Number.isFinite(row.margin_pct)) {
+        return computeRrp(row.unit_price, row.margin_pct);
+      }
+      const brand = (row.brand ?? "").trim().toLowerCase();
+      const brandEntry = brand ? brandMargins.find((b) => b.brand.toLowerCase() === brand) : undefined;
+      if (brandEntry) return computeRrp(row.unit_price, brandEntry.margin_pct);
+      return computeRrp(row.unit_price, globalMarginPct);
+    },
+    [brandMargins, globalMarginPct],
+  );
 
   // Browse lines load only when the user asks (Load data).
   async function loadLines(): Promise<void> {
@@ -1494,6 +1985,11 @@ function LpContent() {
     if (linesLoaded) void loadLines();
   }
 
+  function handleMarginsSaved() {
+    setBanner("Margin settings updated.");
+    void loadMargins();
+  }
+
   const filtersActive = search.trim() !== "" || filters.vendor !== "" || filters.brand !== "" || filters.model !== "";
 
   const navItem = (key: LpSection, label: string) => (
@@ -1531,14 +2027,16 @@ function LpContent() {
 
       <div className="flex flex-col gap-4 lg:flex-row">
         {/* Left in-module nav */}
-        <nav className={`flex shrink-0 flex-wrap gap-2 lg:sticky lg:top-24 lg:w-44 lg:flex-col lg:self-start ${surface} p-2`}>
+        <nav className={`flex shrink-0 flex-wrap gap-2 lg:sticky lg:top-24 lg:w-48 lg:flex-col lg:self-start ${surface} p-2`}>
           {navItem("overview", "Overview")}
           {navItem("browse", "Browse lines")}
+          {navItem("sales", "Sales")}
           <button type="button" onClick={() => { setUploadError(null); fileInputRef.current?.click(); }} disabled={parsing} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800">
             {parsing ? "Reading LP…" : "Upload LP"}
           </button>
           <button type="button" onClick={() => { setUploadError(null); setShowReports(true); }} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Reports</button>
           <button type="button" onClick={() => setShowPdfs(true)} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">LP PDFs</button>
+          {navItem("settings", "Settings")}
         </nav>
 
         {/* Content */}
@@ -1554,12 +2052,25 @@ function LpContent() {
             ) : (
               <OverviewSection
                 rows={overview}
+                globalMarginPct={globalMarginPct}
                 managerFlag={managerFlag}
                 onSetGrn={(lp) => setGrnLp(lp)}
                 onSale={(row) => setSaleRow(row)}
                 onEdit={(row) => setEditRow(row)}
               />
             )
+          ) : section === "sales" ? (
+            <SalesTab />
+          ) : section === "settings" ? (
+            profile ? (
+              <SettingsTab
+                globalMarginPct={globalMarginPct}
+                brandMargins={brandMargins}
+                canEdit={canEditMargins}
+                userId={profile.id}
+                onSaved={handleMarginsSaved}
+              />
+            ) : null
           ) : (
             <div>
               {/* Browse controls */}
@@ -1610,7 +2121,7 @@ function LpContent() {
                       <p className="text-sm text-slate-500">No loaded lines match your search / filters.</p>
                     </div>
                   ) : (
-                    <LpTable rows={filtered} alerts={alerts} managerFlag={managerFlag} filters={filters} onFilter={setFilter} onSale={(row) => setSaleRow(row)} onEdit={(row) => setEditRow(row)} />
+                    <LpTable rows={filtered} alerts={alerts} managerFlag={managerFlag} filters={filters} onFilter={setFilter} onSale={(row) => setSaleRow(row)} onEdit={(row) => setEditRow(row)} computeItemRrp={computeItemRrp} />
                   )}
                   {hasMore ? (
                     <div className="mt-4 flex justify-center">
@@ -1636,7 +2147,7 @@ function LpContent() {
         <VerifyLpModal file={review.file} draft={review.draft} engine={review.engine} createdBy={profile.id} onClose={() => setReview(null)} onSaved={handleSaved} />
       ) : null}
       {saleRow && profile ? (
-        <RecordSaleModal row={saleRow} recordedBy={profile.id} onClose={() => setSaleRow(null)} onSaved={handleSaved} />
+        <RecordSaleModal row={saleRow} rrp={computeItemRrp(saleRow)} recordedBy={profile.id} onClose={() => setSaleRow(null)} onSaved={handleSaved} />
       ) : null}
       {editRow ? (
         <EditLpItemModal row={editRow} onClose={() => setEditRow(null)} onSaved={handleSaved} />
