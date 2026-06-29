@@ -5,6 +5,7 @@ registries:
     url: https://npm.pkg.github.com
     username: x-access-token
     password: ${{secrets.PACKAGES_READ_TOKEN}}
+    replaces-base: true
 updates:
   - package-ecosystem: "npm"
     directory: "/"
