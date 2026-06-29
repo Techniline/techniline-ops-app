@@ -18,6 +18,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  async function handleForgot() {
+    setError(null);
+    setResetMsg(null);
+    if (!email) {
+      setError("Enter your email above first, then click “Forgot password”.");
+      return;
+    }
+    setResetting(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setResetting(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setResetMsg(`If ${email} has an account, a password-reset link is on its way. Check your inbox.`);
+  }
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -105,9 +126,22 @@ export default function LoginPage() {
                 {error}
               </p>
             ) : null}
+            {resetMsg ? (
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                {resetMsg}
+              </p>
+            ) : null}
 
             <button type="submit" disabled={submitting} className={btnPrimary}>
               {submitting ? "Signing in…" : "Sign in"}
+            </button>
+            <button
+              type="button"
+              onClick={handleForgot}
+              disabled={resetting}
+              className="text-center text-xs text-slate-500 hover:text-indigo-600 hover:underline disabled:opacity-50 dark:text-slate-400"
+            >
+              {resetting ? "Sending reset link…" : "Forgot password?"}
             </button>
           </form>
         </div>

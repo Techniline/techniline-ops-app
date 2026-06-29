@@ -16,6 +16,7 @@ import {
   canViewLpTracker,
   canViewSellerCentral,
   isLogisticsOnly,
+  isLpOnly,
   isManager,
   type LogisticsPage,
 } from "@/lib/permissions";
@@ -89,6 +90,7 @@ export function Sidebar({
 
   // A dedicated logistics user sees ONLY the Logistics portal — nothing else.
   const logisticsOnly = isLogisticsOnly(profile);
+  const lpOnly = isLpOnly(profile);
 
   // General (non-logistics) items, grouped into categories and gated by capability.
   const generalSectionsRaw: NavSection[] = [
@@ -169,7 +171,9 @@ export function Sidebar({
     .filter((s) => s.items.length > 0);
 
   // Assemble the sections to render.
-  const sections: NavSection[] = logisticsOnly
+  const sections: NavSection[] = lpOnly
+    ? [{ heading: "Inventory", items: generalSections.flatMap((s) => s.items).filter((i) => i.href === "/lp") }]
+    : logisticsOnly
     ? logisticsSections
     : [...generalSections, ...(canViewLogistics(profile) ? logisticsSections : [])];
 

@@ -1003,7 +1003,7 @@ function ReportsModal({
     }
   }
 
-  async function sendStockReport(): Promise<void> {
+  async function sendStockReport(recipients: string[], label: string): Promise<void> {
     setSending(true);
     onError("");
     try {
@@ -1016,13 +1016,13 @@ function ReportsModal({
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: ["impex@techniline.org"],
+          to: recipients,
           subject: `LP Stock in Hand — ${new Date().toLocaleDateString()}`,
           html: renderTableReportHtml(table),
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (res.ok && j.ok) onNotify("Stock report emailed to impex@techniline.org.");
+      if (res.ok && j.ok) onNotify(`Stock report emailed to ${label}.`);
       else onError(`Could not send report: ${j.error ?? `HTTP ${res.status}`}`);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Email send failed.");
@@ -1083,10 +1083,18 @@ function ReportsModal({
           </div>
         </Section>
 
-        <Section title="Email stock-in-hand" hint="Send the current stock-in-hand snapshot to impex@techniline.org.">
-          <button type="button" disabled={sending} onClick={() => void sendStockReport()} className={btnPrimary}>
-            {sending ? "Sending…" : "Send to impex@"}
-          </button>
+        <Section title="Email stock-in-hand" hint="Send the current stock-in-hand snapshot. Pavithran also receives this automatically every Monday.">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org"], "Pavithran (impex@)")} className={btnPrimary}>
+              {sending ? "Sending…" : "Send to Pavithran"}
+            </button>
+            <button type="button" disabled={sending} onClick={() => void sendStockReport(["vihan@techniline.org"], "the manager (vihan@)")} className={btnSecondary}>
+              Send to manager
+            </button>
+            <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org", "vihan@techniline.org"], "Pavithran + manager")} className={btnSecondary}>
+              Send to both
+            </button>
+          </div>
         </Section>
       </div>
 

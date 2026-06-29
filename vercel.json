@@ -11,6 +11,10 @@
     {
       "path": "/api/spapi/seller-sync",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/lp/weekly-report",
+      "schedule": "0 6 * * 1"
     }
   ]
 }

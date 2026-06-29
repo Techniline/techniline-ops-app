@@ -127,6 +127,16 @@ export function isLogisticsOnly(profile: ProfileArg): boolean {
   return profile?.role === "logistics" && !isManager(profile);
 }
 
+/** Users confined to the LP Tracker only (single-module access), by user id. */
+const LP_ONLY_UIDS = new Set<string>([
+  "648993fe-d2e7-446a-ad71-c7b3ff81fae7", // Pavithran
+]);
+
+/** A user who must ONLY see the LP Tracker page (`/lp`), nothing else. */
+export function isLpOnly(profile: ProfileArg): boolean {
+  return !!profile && !isManager(profile) && LP_ONLY_UIDS.has(profile.id);
+}
+
 /**
  * Whether `profile` is allowed to see data belonging to `targetUserId`.
  * Users may always view their own data; managers (role === "manager") may view

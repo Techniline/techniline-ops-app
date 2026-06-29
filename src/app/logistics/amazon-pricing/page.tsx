@@ -42,6 +42,8 @@ interface Row {
   expectedComplete: boolean;
   variance: number | null; // net − expected (≥0 = at/above target; <0 = shortfall)
   pctOfTarget: number | null; // net ÷ expected × 100
+  isCanceled: boolean;
+  pendingSettlement: boolean; // Easy Ship fee posted but ShipmentEvent not yet settled
 }
 
 interface RepriceRow {
@@ -117,20 +119,32 @@ function Content() {
     return { expected: Math.round(sum * 100) / 100, complete };
   }, [itemsByOrder, costs]);
 
-  // Only orders that have settled financials (Amazon posts these after shipment).
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
     for (const order of orders) {
       const fin = finance.get(order.amazon_order_id);
-      if (!fin) continue;
+      const isCanceled = (order.order_status ?? "").toLowerCase().includes("cancel");
+      if (!fin) {
+        // Canceled orders without financials: show in table with blank columns + Canceled pill.
+        if (isCanceled) {
+          out.push({ order, fin: undefined, sales: null, fees: null, net: null, expected: null, expectedComplete: false, variance: null, pctOfTarget: null, isCanceled: true, pendingSettlement: false });
+        }
+        continue;
+      }
       const sales = (fin.product_charges ?? 0) + (fin.shipping_charges ?? 0);
       const net = fin.net_proceeds ?? null;
       const { expected, complete } = orderExpected(order.amazon_order_id);
       const variance = net != null && complete && expected != null ? Math.round((net - expected) * 100) / 100 : null;
       const pctOfTarget = net != null && complete && expected != null && expected !== 0 ? Math.round((net / expected) * 1000) / 10 : null;
-      out.push({ order, fin, sales, fees: fin.fees_total ?? null, net, expected: complete ? expected : null, expectedComplete: complete, variance, pctOfTarget });
+      // pendingSettlement: Easy Ship ServiceFeeEvent already billed but the ShipmentEvent
+      // (product sale + referral fee) hasn't posted in the Finances API yet.
+      const pendingSettlement = sales === 0 && (order.order_total ?? 0) > 0;
+      out.push({ order, fin, sales, fees: fin.fees_total ?? null, net, expected: complete ? expected : null, expectedComplete: complete, variance, pctOfTarget, isCanceled: false, pendingSettlement });
     }
-    return out.sort((a, b) => (b.fin?.posted_date ?? "").localeCompare(a.fin?.posted_date ?? ""));
+    return out.sort((a, b) => {
+      if (a.isCanceled !== b.isCanceled) return a.isCanceled ? 1 : -1;
+      return (b.fin?.posted_date ?? b.order.purchase_date ?? "").localeCompare(a.fin?.posted_date ?? a.order.purchase_date ?? "");
+    });
   }, [orders, finance, orderExpected]);
 
   // Settlement coverage — why some orders have no financials yet.
@@ -139,16 +153,16 @@ function Content() {
     for (const o of orders) {
       if (finance.has(o.amazon_order_id)) { settled += 1; continue; }
       const st = o.order_status ?? "";
-      if (st === "Canceled") canceled += 1;
+      if (st.toLowerCase().includes("cancel")) canceled += 1;
       else if (st === "Shipped") awaiting += 1;
       else if (st === "Unshipped" || st === "Pending") pending += 1;
       else other += 1;
     }
     const list = [
-      { label: "Shipped — settled", count: settled, fin: "✅ shown below" },
+      { label: "Shipped — settled", count: settled, fin: "✅ shown in table" },
+      { label: "Canceled", count: canceled, fin: "✅ shown in table (no money moved)" },
       { label: "Shipped — awaiting settlement", count: awaiting, fin: "⏳ fills in within a day or two" },
-      { label: "Canceled", count: canceled, fin: "❌ no money moved" },
-      { label: "Unshipped / Pending", count: pending, fin: "❌ until shipped & settled" },
+      { label: "Unshipped / Pending", count: pending, fin: "⏳ until shipped & settled" },
     ];
     if (other > 0) list.push({ label: "Other", count: other, fin: "—" });
     return list.filter((r) => r.count > 0);
@@ -159,13 +173,14 @@ function Content() {
     return q ? rows.filter((r) => r.order.amazon_order_id.toLowerCase().includes(q)) : rows;
   }, [rows, search]);
 
-  const shortCount = rows.filter((r) => r.variance != null && r.variance < 0).length;
-  const noTargetCount = rows.filter((r) => !r.expectedComplete).length;
+  const shortCount = rows.filter((r) => !r.isCanceled && r.variance != null && r.variance < 0).length;
+  const noTargetCount = rows.filter((r) => !r.isCanceled && !r.expectedComplete).length;
   const totals = useMemo(() => {
-    const withVar = rows.filter((r) => r.variance != null);
+    const settled = rows.filter((r) => !r.isCanceled);
+    const withVar = settled.filter((r) => r.variance != null);
     return {
-      net: rows.reduce((s, r) => s + (r.net ?? 0), 0),
-      fees: rows.reduce((s, r) => s + (r.fees ?? 0), 0),
+      net: settled.reduce((s, r) => s + (r.net ?? 0), 0),
+      fees: settled.reduce((s, r) => s + (r.fees ?? 0), 0),
       expected: withVar.reduce((s, r) => s + (r.expected ?? 0), 0),
       variance: withVar.reduce((s, r) => s + (r.variance ?? 0), 0),
     };
@@ -299,7 +314,7 @@ function Content() {
       {!loading && orders.length > 0 ? (
         <details className={`${surface} mb-4 p-3`}>
           <summary className="cursor-pointer select-none text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Settlement coverage <span className="font-normal text-slate-400">— {orders.length} orders synced, {coverage.find((c) => c.label === "Shipped — settled")?.count ?? 0} with financials</span>
+            Settlement coverage <span className="font-normal text-slate-400">— {orders.length} orders synced, {coverage.find((c) => c.label === "Shipped — settled")?.count ?? 0} settled</span>
           </summary>
           <table className="mt-3 w-full max-w-lg text-sm">
             <thead>
@@ -355,18 +370,22 @@ function Content() {
             </thead>
             <tbody>
               {displayRows.length === 0 ? (
-                <tr><td className={tdCell} colSpan={10}>No settled order matches “{search}”. (Unsettled, canceled or pending orders won&apos;t appear here — see Settlement coverage above.)</td></tr>
+                <tr><td className={tdCell} colSpan={10}>No order matches &quot;{search}&quot;. (Pending / unshipped orders appear once settled — see Settlement coverage above.)</td></tr>
               ) : displayRows.map((r) => {
                 const loss = r.variance != null && r.variance < 0;
                 const isOpen = expanded === r.order.amazon_order_id;
                 const bd = (r.fin?.fee_breakdown ?? null) as { events?: { type: string; postedDate: string | null; amount: number }[] } | null;
                 return (
                   <Fragment key={r.order.id}>
-                  <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${loss ? "bg-rose-50/50 dark:bg-rose-950/20" : ""}`}>
+                  <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.isCanceled ? "opacity-60" : loss ? "bg-rose-50/50 dark:bg-rose-950/20" : ""}`}>
                     <td className={`${tdCell} font-medium`}>
-                      <button type="button" onClick={() => setExpanded(isOpen ? null : r.order.amazon_order_id)} className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400" title="Show transaction breakdown">
-                        <span className="text-slate-400">{isOpen ? "▾" : "▸"}</span>{r.order.amazon_order_id}
-                      </button>
+                      {r.isCanceled ? (
+                        <span className="text-slate-500">{r.order.amazon_order_id}</span>
+                      ) : (
+                        <button type="button" onClick={() => setExpanded(isOpen ? null : r.order.amazon_order_id)} className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400" title="Show transaction breakdown">
+                          <span className="text-slate-400">{isOpen ? "▾" : "▸"}</span>{r.order.amazon_order_id}
+                        </button>
+                      )}
                     </td>
                     <td className={tdCell}>{fmt(r.fin?.posted_date ?? null)}</td>
                     <td className={tdCell}>
@@ -374,14 +393,22 @@ function Content() {
                       {loss ? <span className="ml-1 inline-block rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">below target</span> : null}
                     </td>
                     <td className={tdCell}>{fulfillmentLabel(r.order)}</td>
-                    <td className={`${tdCell} text-right tabular-nums`}>{money(r.sales)}</td>
-                    <td className={`${tdCell} text-right tabular-nums`}>{money(r.fees, true)}</td>
-                    <td className={`${tdCell} text-right font-semibold tabular-nums`}>{money(r.net)}</td>
-                    <td className={`${tdCell} text-right tabular-nums`}>{r.expectedComplete ? money(r.expected) : <span className="text-amber-600" title="Expected in‑hand not set">set?</span>}</td>
-                    <td className={`${tdCell} text-right font-semibold tabular-nums ${r.variance == null ? "" : loss ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>{r.variance == null ? <span className="text-slate-400">—</span> : <>{r.variance >= 0 ? "+" : ""}{money(r.variance)}</>}</td>
-                    <td className={`${tdCell} text-right tabular-nums ${r.pctOfTarget == null ? "text-slate-400" : r.pctOfTarget < 100 ? "text-rose-600" : "text-emerald-700 dark:text-emerald-400"}`}>{r.pctOfTarget == null ? "—" : `${r.pctOfTarget}%`}</td>
+                    <td className={`${tdCell} text-right tabular-nums`}>
+                      {r.isCanceled ? <span className="text-slate-400">—</span>
+                        : r.pendingSettlement ? (
+                          <span title="Order total from Amazon — sale not yet settled in Finances API; will update automatically on next sync after settlement">
+                            <span className="italic text-slate-400">~{formatAED(r.order.order_total ?? 0)}</span>
+                            <span className="ml-1 text-[10px] text-amber-600">⏳</span>
+                          </span>
+                        ) : money(r.sales)}
+                    </td>
+                    <td className={`${tdCell} text-right tabular-nums`}>{r.isCanceled ? <span className="text-slate-400">—</span> : money(r.fees, true)}</td>
+                    <td className={`${tdCell} text-right font-semibold tabular-nums`}>{r.isCanceled ? <span className="text-slate-400">—</span> : money(r.net)}</td>
+                    <td className={`${tdCell} text-right tabular-nums`}>{r.isCanceled ? <span className="text-slate-400">—</span> : r.expectedComplete ? money(r.expected) : <span className="text-amber-600" title="Expected in‑hand not set">set?</span>}</td>
+                    <td className={`${tdCell} text-right font-semibold tabular-nums ${r.isCanceled || r.variance == null ? "" : loss ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>{r.isCanceled || r.variance == null ? <span className="text-slate-400">—</span> : <>{r.variance >= 0 ? "+" : ""}{money(r.variance)}</>}</td>
+                    <td className={`${tdCell} text-right tabular-nums ${r.isCanceled || r.pctOfTarget == null ? "text-slate-400" : r.pctOfTarget < 100 ? "text-rose-600" : "text-emerald-700 dark:text-emerald-400"}`}>{r.isCanceled || r.pctOfTarget == null ? "—" : `${r.pctOfTarget}%`}</td>
                   </tr>
-                  {isOpen ? (
+                  {isOpen && !r.isCanceled ? (
                     <tr className="bg-slate-50/70 dark:bg-slate-900/40">
                       <td className={tdCell} colSpan={10}>
                         <div className="grid gap-4 sm:grid-cols-2">

@@ -11,6 +11,7 @@ import {
   canViewLogisticsPage,
   hasCapability,
   isLogisticsOnly,
+  isLpOnly,
   type LogisticsPage,
 } from "@/lib/permissions";
 import type { Capability } from "@/lib/types";
@@ -53,6 +54,7 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
   const pathname = usePathname();
 
   const onLogisticsRoute = pathname?.startsWith("/logistics") ?? false;
+  const onLpRoute = pathname?.startsWith("/lp") ?? false;
 
   const authorized =
     !!user &&
@@ -61,7 +63,9 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
     (!requireLogistics || canViewLogistics(profile)) &&
     (!logisticsPage || canViewLogisticsPage(profile, logisticsPage)) &&
     // A logistics-only user may never view a non-logistics route.
-    (!isLogisticsOnly(profile) || onLogisticsRoute);
+    (!isLogisticsOnly(profile) || onLogisticsRoute) &&
+    // An LP-only user may never view a non-LP route.
+    (!isLpOnly(profile) || onLpRoute);
 
   useEffect(() => {
     if (loading) return;
@@ -74,6 +78,12 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
     // Logistics-only users are confined to the Logistics portal.
     if (isLogisticsOnly(profile) && !onLogisticsRoute) {
       router.replace("/logistics");
+      return;
+    }
+
+    // LP-only users (e.g. Pavithran) are confined to the LP Tracker.
+    if (isLpOnly(profile) && !onLpRoute) {
+      router.replace("/lp");
       return;
     }
 
@@ -90,7 +100,7 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
     if (requireCapability && !hasCapability(profile, requireCapability)) {
       router.replace("/dashboard");
     }
-  }, [loading, user, profile, requireCapability, requireLogistics, logisticsPage, onLogisticsRoute, router]);
+  }, [loading, user, profile, requireCapability, requireLogistics, logisticsPage, onLogisticsRoute, onLpRoute, router]);
 
   if (loading) {
     return <LoadingScreen message="Checking your session…" />;

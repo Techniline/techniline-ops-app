@@ -29,6 +29,8 @@ export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
   "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance", "lp_tracker", "seller_central", "seller_finance"],
   // Aaron — Amazon Seller Central: orders + buyer messages
   "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu", "seller_central", "seller_orders"],
+  // Pavithran — LP Tracker only (confined to /lp; see LP_ONLY_UIDS)
+  "648993fe-d2e7-446a-ad71-c7b3ff81fae7": ["lp_tracker"],
   // Vihan
   "c4abda49-13e9-41fd-acae-88acd4aa7fcb": "all",
 };
