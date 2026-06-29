@@ -15,7 +15,6 @@ import {
   fetchCombinedReturns,
   logReturn,
   RETURN_TYPES,
-  returnFieldsFor,
   validateReturn,
   type ReturnDraft,
   type ReturnType,
@@ -23,14 +22,29 @@ import {
 } from "@/lib/returns";
 
 const EMPTY_RETURN: ReturnDraft = {
-  return_type: null, return_id: "", po_number: "", tle_invoice_number: "", model_sku: "",
-  qty: "", amount: "", srt_number: "", prt_number: "", dispute_id: "", amazon_case_id: "",
-  payment_number: "", comments: "",
+  return_type: null,
+  return_date: "",
+  return_id: "",
+  vret_number: "",
+  authorization_id: "",
+  warehouse: "",
+  amazon_invoice: "",
+  po_number: "",
+  tle_invoice_number: "",
+  model_sku: "",
+  qty: "",
+  amount: "",
+  srt_number: "",
+  prt_number: "",
+  dispute_id: "",
+  amazon_case_id: "",
+  tracking_number: "",
+  comments: "",
 };
 
-function RField({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+function RField({ label, children, required, wide }: { label: string; children: React.ReactNode; required?: boolean; wide?: boolean }) {
   return (
-    <label className="block">
+    <label className={`block${wide ? " sm:col-span-2" : ""}`}>
       <span className="mb-0.5 block text-[11px] font-medium text-slate-600 dark:text-slate-400">
         {label}{required ? <span className="text-red-500"> *</span> : null}
       </span>
@@ -47,9 +61,40 @@ function errorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
-/** Current month in Dubai (GMT+4) as YYYY-MM. */
 function dubaiMonth(): string {
   return new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().slice(0, 7);
+}
+
+/** Parse Maricel's "Received dt" style text into structured fields. */
+function parseReceivedDt(raw: string): {
+  dispute_id: string; srt_number: string; prt_number: string; amazon_case_id: string; remark: string;
+} {
+  const s = (raw ?? "").trim();
+  const out = { dispute_id: "", srt_number: "", prt_number: "", amazon_case_id: "", remark: "" };
+  if (!s) return out;
+
+  const dsptMatch = s.match(/DSPT\d+/);
+  if (dsptMatch) out.dispute_id = dsptMatch[0];
+
+  const srtMatch = s.match(/SRT\/[\d+]+/);
+  if (srtMatch) out.srt_number = srtMatch[0];
+
+  const prtMatch = s.match(/PRT\/(\d+)/);
+  if (prtMatch) out.prt_number = `PRT/${prtMatch[1]}`;
+
+  const caseMatch = s.match(/Case\s*ID#?\s*(\d+)/i);
+  if (caseMatch) out.amazon_case_id = caseMatch[1];
+
+  if (!out.dispute_id && !out.srt_number && !out.prt_number && !out.amazon_case_id) {
+    out.remark = s;
+  }
+  return out;
+}
+
+/** One badge showing a doc reference (DSPT, SRT/PRT, Case ID). */
+function RefBadge({ value, tone }: { value: string | null; tone: string }) {
+  if (!value) return null;
+  return <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${tone}`}>{value}</span>;
 }
 
 function ReturnsContent() {
@@ -88,17 +133,25 @@ function ReturnsContent() {
   const report = useMemo<ReportTable>(() => ({
     title: `Returns — ${month}`,
     subtitle: `${monthRows.length} returns · value ${formatAED(totalValue)} · recovered ${formatAED(totalRecovered)}`,
-    headers: ["Date", "Return ID", "Type", "Ref (Invoice/PO)", "Value", "Recovered", "Status", "Source"],
+    headers: [
+      "Date", "Shipment Req ID", "Return ID", "Auth ID", "Invoice #",
+      "Warehouse", "Model / SKU", "PO #", "ERP Invoice", "Qty", "Total Cost",
+      "Type", "SRT", "PRT", "Dispute ID", "Case ID", "Tracking #", "Comment", "Source",
+    ],
     rows: monthRows.map((r) => [
-      formatDate(r.date), r.returnId ?? "", r.type ?? "", r.reference ?? "",
-      r.amount ?? "", r.recovery ?? "", r.status ?? "", r.source === "remittance" ? "Remittance" : "Email",
+      formatDate(r.date), r.returnId ?? "", r.vretNumber ?? "", r.authorizationId ?? "",
+      r.reference ?? "", r.warehouse ?? "", r.sku ?? "", r.poNumber ?? "", r.erpInvoice ?? "",
+      r.qty != null ? String(r.qty) : "",
+      r.amount != null ? formatAED(r.amount) : "",
+      r.type ?? "", r.srtNumber ?? "", r.prtNumber ?? "", r.disputeId ?? "",
+      r.caseId ?? "", r.trackingNumber ?? "", r.comments ?? "",
+      r.source === "remittance" ? "Remittance" : "Manual",
     ]),
   }), [monthRows, month, totalValue, totalRecovered]);
 
   const exportCsv = () => downloadCsv(`returns-${month}.csv`, toCsv(report.headers, report.rows));
   const exportPdf = () => printReportHtml(report.title, renderTableReportHtml(report));
 
-  const vis = returnFieldsFor(draft.return_type);
   const addMissing = validateReturn(draft);
 
   async function saveReturn(e: FormEvent): Promise<void> {
@@ -131,7 +184,7 @@ function ReturnsContent() {
     <div>
       <PageHeader
         title="Returns"
-        subtitle="Returns this month — manually logged (+ Add return) and remittance deductions categorised as return / dispute / shortage."
+        subtitle="Amazon / marketplace returns logged manually by Maricel — auto-sync pending role approval."
         actions={
           <div className="flex items-center gap-2">
             <input
@@ -163,23 +216,27 @@ function ReturnsContent() {
       ) : monthRows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
           <p className="text-sm text-slate-500">No returns for {month}.</p>
-          <p className="mt-1 text-xs text-slate-400">
-            Returns appear here from forwarded Amazon return emails and from Vendor-Return / Return-Dispute
-            deductions categorised on remittances.
-          </p>
         </div>
       ) : (
         <div className={tableWrap}>
           <table className="min-w-full text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
               <tr>
-                <th className={thCell}>Date</th>
+                <th className={thCell}>Return date</th>
+                <th className={thCell}>Shipment Req ID</th>
                 <th className={thCell}>Return ID</th>
+                <th className={thCell}>Auth ID</th>
+                <th className={thCell}>Invoice #</th>
+                <th className={thCell}>Warehouse</th>
+                <th className={thCell}>Model / SKU</th>
+                <th className={thCell}>PO #</th>
+                <th className={thCell}>ERP Invoice</th>
+                <th className={`${thCell} text-right`}>Qty</th>
+                <th className={`${thCell} text-right`}>Total Cost</th>
                 <th className={thCell}>Type</th>
-                <th className={thCell}>Ref (Invoice/PO)</th>
-                <th className={thCell}>Value</th>
-                <th className={thCell}>Recovered</th>
-                <th className={thCell}>Status</th>
+                <th className={thCell}>Refs (SRT / PRT / Dispute)</th>
+                <th className={thCell}>Tracking #</th>
+                <th className={thCell}>Comment</th>
                 <th className={thCell}>Source</th>
               </tr>
             </thead>
@@ -187,15 +244,38 @@ function ReturnsContent() {
               {monthRows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                   <td className={tdCell}>{formatDate(r.date)}</td>
-                  <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>{r.returnId ?? "—"}</td>
-                  <td className={tdCell}>{r.type ?? "—"}</td>
+                  <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>
+                    {r.returnId ?? "—"}
+                  </td>
+                  <td className={`${tdCell} font-mono text-xs text-slate-500`}>{r.vretNumber ?? "—"}</td>
+                  <td className={`${tdCell} font-mono text-xs text-slate-500`}>{r.authorizationId ?? "—"}</td>
                   <td className={tdCell}>{r.reference ?? "—"}</td>
-                  <td className={`${tdCell} tabular-nums`}>{r.amount != null ? formatAED(r.amount) : "—"}</td>
-                  <td className={`${tdCell} tabular-nums text-emerald-700 dark:text-emerald-400`}>{r.recovery != null ? formatAED(r.recovery) : "—"}</td>
-                  <td className={tdCell}>{r.status ?? "—"}</td>
+                  <td className={tdCell}>
+                    {r.warehouse ? (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {r.warehouse}
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td className={`${tdCell} font-medium`}>{r.sku ?? "—"}</td>
+                  <td className={`${tdCell} font-mono text-xs`}>{r.poNumber ?? "—"}</td>
+                  <td className={`${tdCell} font-mono text-xs text-slate-500`}>{r.erpInvoice ?? "—"}</td>
+                  <td className={`${tdCell} text-right tabular-nums`}>{r.qty != null ? r.qty : "—"}</td>
+                  <td className={`${tdCell} text-right tabular-nums font-medium`}>
+                    {r.amount != null ? formatAED(r.amount) : "—"}
+                  </td>
+                  <td className={tdCell}>{r.type ?? "—"}</td>
+                  <td className={`${tdCell} space-x-1`}>
+                    <RefBadge value={r.srtNumber} tone="bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300" />
+                    <RefBadge value={r.prtNumber} tone="bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" />
+                    <RefBadge value={r.disputeId} tone="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" />
+                    <RefBadge value={r.caseId} tone="bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" />
+                  </td>
+                  <td className={`${tdCell} font-mono text-xs text-slate-500`}>{r.trackingNumber ?? "—"}</td>
+                  <td className={tdCell}>{r.comments ?? "—"}</td>
                   <td className={tdCell}>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${r.source === "remittance" ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" : "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"}`}>
-                      {r.source === "remittance" ? "Remittance" : "Email"}
+                      {r.source === "remittance" ? "Remittance" : "Manual"}
                     </span>
                   </td>
                 </tr>
@@ -208,39 +288,85 @@ function ReturnsContent() {
       {showAdd ? (
         <Modal title="Add a return" onClose={() => setShowAdd(false)} wide>
           <form onSubmit={saveReturn}>
+            {/* ── Header ─────────────────────────────────────── */}
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Return header</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <RField label="Return date">
+                <input type="date" className={inputClass} value={draft.return_date} onChange={(e) => setD("return_date", e.target.value)} />
+              </RField>
               <RField label="Return type" required>
                 <select className={inputClass} value={draft.return_type ?? ""} onChange={(e) => setD("return_type", (e.target.value || null) as ReturnType | null)}>
                   <option value="">— select —</option>
                   {RETURN_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </RField>
-              <RField label="Return ID" required={draft.return_type === "vendor_return" || draft.return_type === "return_dispute"}>
-                <input className={inputClass} value={draft.return_id} onChange={(e) => setD("return_id", e.target.value)} />
+              <RField label="Warehouse">
+                <input className={inputClass} placeholder="XAEE / DXB3 / AUH1…" value={draft.warehouse} onChange={(e) => setD("warehouse", e.target.value)} />
               </RField>
-              {vis.po ? <RField label="PO Number" required><input className={inputClass} value={draft.po_number} onChange={(e) => setD("po_number", e.target.value)} /></RField> : null}
-              {vis.tle ? <RField label="TLE Invoice" required><input className={inputClass} value={draft.tle_invoice_number} onChange={(e) => setD("tle_invoice_number", e.target.value)} /></RField> : null}
-              <RField label="SKU"><input className={inputClass} value={draft.model_sku} onChange={(e) => setD("model_sku", e.target.value)} /></RField>
-              <RField label="Qty"><input type="number" className={inputClass} value={draft.qty} onChange={(e) => setD("qty", e.target.value)} /></RField>
-              <RField label="Amount AED" required={draft.return_type === "return_dispute"}><input type="number" step="0.01" className={inputClass} value={draft.amount} onChange={(e) => setD("amount", e.target.value)} /></RField>
-              {vis.dispute ? <RField label="Dispute ID" required={draft.return_type === "return_dispute"}><input className={inputClass} value={draft.dispute_id} onChange={(e) => setD("dispute_id", e.target.value)} /></RField> : null}
-              {vis.caseId ? <RField label="Amazon Case ID"><input className={inputClass} value={draft.amazon_case_id} onChange={(e) => setD("amazon_case_id", e.target.value)} /></RField> : null}
-              {vis.srt ? <RField label="SRT Number" required={draft.return_type === "shortage_claim" && !draft.dispute_id && !draft.amazon_case_id}><input className={inputClass} value={draft.srt_number} onChange={(e) => setD("srt_number", e.target.value)} /></RField> : null}
-              {vis.prt ? <RField label="PRT Number" required={draft.return_type === "price_claim"}><input className={inputClass} value={draft.prt_number} onChange={(e) => setD("prt_number", e.target.value)} /></RField> : null}
-              <RField label="Payment number"><input className={inputClass} value={draft.payment_number} onChange={(e) => setD("payment_number", e.target.value)} /></RField>
-            </div>
-            <div className="mt-3">
-              <RField label="Remarks" required>
-                <textarea className={`${inputClass} min-h-[56px]`} value={draft.comments} onChange={(e) => setD("comments", e.target.value)} placeholder="Reason / context for reconciliation" />
+              <RField label="Shipment Request ID">
+                <input className={inputClass} placeholder="VRET…" value={draft.return_id} onChange={(e) => setD("return_id", e.target.value)} />
+              </RField>
+              <RField label="Return ID (numeric)">
+                <input className={inputClass} placeholder="20022007207024" value={draft.vret_number} onChange={(e) => setD("vret_number", e.target.value)} />
+              </RField>
+              <RField label="Authorization ID">
+                <input className={inputClass} placeholder="AMZN…" value={draft.authorization_id} onChange={(e) => setD("authorization_id", e.target.value)} />
               </RField>
             </div>
+
+            {/* ── Item ───────────────────────────────────────── */}
+            <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Item</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <RField label="Model / SKU">
+                <input className={inputClass} value={draft.model_sku} onChange={(e) => setD("model_sku", e.target.value)} />
+              </RField>
+              <RField label="PO #">
+                <input className={inputClass} value={draft.po_number} onChange={(e) => setD("po_number", e.target.value)} />
+              </RField>
+              <RField label="ERP Invoice (WS…)">
+                <input className={inputClass} placeholder="WS2600202" value={draft.tle_invoice_number} onChange={(e) => setD("tle_invoice_number", e.target.value)} />
+              </RField>
+              <RField label="Qty">
+                <input type="number" className={inputClass} value={draft.qty} onChange={(e) => setD("qty", e.target.value)} />
+              </RField>
+              <RField label="Total cost (AED)">
+                <input type="number" step="0.01" className={inputClass} value={draft.amount} onChange={(e) => setD("amount", e.target.value)} />
+              </RField>
+              <RField label="Amazon invoice #">
+                <input className={inputClass} placeholder="7500…" value={draft.amazon_invoice} onChange={(e) => setD("amazon_invoice", e.target.value)} />
+              </RField>
+            </div>
+
+            {/* ── Documentation ──────────────────────────────── */}
+            <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Documentation</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <RField label="SRT number">
+                <input className={inputClass} placeholder="SRT/2600…" value={draft.srt_number} onChange={(e) => setD("srt_number", e.target.value)} />
+              </RField>
+              <RField label="PRT number">
+                <input className={inputClass} placeholder="PRT/2600…" value={draft.prt_number} onChange={(e) => setD("prt_number", e.target.value)} />
+              </RField>
+              <RField label="Dispute ID">
+                <input className={inputClass} placeholder="DSPT…" value={draft.dispute_id} onChange={(e) => setD("dispute_id", e.target.value)} />
+              </RField>
+              <RField label="Amazon Case ID">
+                <input className={inputClass} placeholder="Case ID #…" value={draft.amazon_case_id} onChange={(e) => setD("amazon_case_id", e.target.value)} />
+              </RField>
+              <RField label="Tracking #">
+                <input className={inputClass} value={draft.tracking_number} onChange={(e) => setD("tracking_number", e.target.value)} />
+              </RField>
+              <RField label="Comment / condition">
+                <input className={inputClass} placeholder="GOOD PC / DEFECTIVE / NO ITEM…" value={draft.comments} onChange={(e) => setD("comments", e.target.value)} />
+              </RField>
+            </div>
+
             {addErr ? <p className="mt-2 text-xs text-red-600">{addErr}</p> : null}
             {draft.return_type && addMissing.length > 0 ? (
               <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">Needed: {addMissing.join(", ")}</p>
             ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setShowAdd(false)} className={btnSecondary}>Cancel</button>
-              <button type="submit" disabled={saving || addMissing.length > 0} className={btnPrimary}>{saving ? "Saving…" : "Save return"}</button>
+              <button type="submit" disabled={saving || (!!draft.return_type && addMissing.length > 0)} className={btnPrimary}>{saving ? "Saving…" : "Save return"}</button>
             </div>
           </form>
         </Modal>
@@ -248,6 +374,9 @@ function ReturnsContent() {
     </div>
   );
 }
+
+// parseReceivedDt is exported for the import helper but only used internally here.
+export { parseReceivedDt };
 
 export default function ReturnsPage() {
   return (

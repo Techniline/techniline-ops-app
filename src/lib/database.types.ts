@@ -1761,12 +1761,15 @@ export type Database = {
           status: string
           tle_invoice_number: string | null
           total_cost_aed: number | null
+          authorization_id: string | null
+          tracking_number: string | null
           vret_number: string | null
           warehouse: string | null
         }
         Insert: {
           amazon_case_id?: string | null
           amazon_invoice?: string | null
+          authorization_id?: string | null
           closed_at?: string | null
           comments?: string | null
           created_at?: string | null
@@ -1801,12 +1804,14 @@ export type Database = {
           status?: string
           tle_invoice_number?: string | null
           total_cost_aed?: number | null
+          tracking_number?: string | null
           vret_number?: string | null
           warehouse?: string | null
         }
         Update: {
           amazon_case_id?: string | null
           amazon_invoice?: string | null
+          authorization_id?: string | null
           closed_at?: string | null
           comments?: string | null
           created_at?: string | null
@@ -1841,6 +1846,7 @@ export type Database = {
           status?: string
           tle_invoice_number?: string | null
           total_cost_aed?: number | null
+          tracking_number?: string | null
           vret_number?: string | null
           warehouse?: string | null
         }

@@ -29,17 +29,22 @@ export const RETURN_TYPES: { value: ReturnType; label: string }[] = [
 
 export interface ReturnDraft {
   return_type: ReturnType | null;
-  return_id: string;
+  return_date: string;          // date picker — maps to date_received
+  return_id: string;            // Shipment Request ID (VRET...)
+  vret_number: string;          // numeric Return ID (second column)
+  authorization_id: string;     // AMZN auth ID
+  warehouse: string;            // XAEE / XAEC / DXB3 etc.
+  amazon_invoice: string;       // Amazon invoice number (7500...)
   po_number: string;
-  tle_invoice_number: string;
+  tle_invoice_number: string;   // ERP-Invoice (WS...)
   model_sku: string;
   qty: string;
-  amount: string;
+  amount: string;               // Total cost AED
   srt_number: string;
   prt_number: string;
   dispute_id: string;
   amazon_case_id: string;
-  payment_number: string;
+  tracking_number: string;
   comments: string;
 }
 
@@ -92,6 +97,7 @@ export async function logReturn(d: ReturnDraft, loggedBy: string): Promise<void>
   const missing = validateReturn(d);
   if (missing.length > 0) throw new Error(`Fill required: ${missing.join(", ")}`);
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
+  const str = (s: string) => s.trim() || null;
   // returns.return_id is NOT NULL — fall back to the strongest available ref.
   const returnId =
     d.return_id.trim() ||
@@ -103,21 +109,25 @@ export async function logReturn(d: ReturnDraft, loggedBy: string): Promise<void>
 
   const { error } = await supabase.from("returns").insert({
     return_id: returnId,
+    vret_number: str(d.vret_number),
+    authorization_id: str(d.authorization_id),
     return_type: d.return_type,
-    po_number: d.po_number.trim() || null,
-    tle_invoice_number: d.tle_invoice_number.trim() || null,
-    model_sku: d.model_sku.trim() || null,
+    date_received: d.return_date.trim() || new Date().toISOString().slice(0, 10),
+    warehouse: str(d.warehouse),
+    amazon_invoice: str(d.amazon_invoice),
+    po_number: str(d.po_number),
+    tle_invoice_number: str(d.tle_invoice_number),
+    model_sku: str(d.model_sku),
     qty: num(d.qty),
     total_cost_aed: num(d.amount),
-    srt_number: d.srt_number.trim() || null,
-    prt_number: d.prt_number.trim() || null,
-    dispute_id: d.dispute_id.trim() || null,
-    amazon_case_id: d.amazon_case_id.trim() || null,
-    payment_number: d.payment_number.trim() || null,
-    comments: d.comments.trim() || null,
+    srt_number: str(d.srt_number),
+    prt_number: str(d.prt_number),
+    dispute_id_ref: str(d.dispute_id),
+    amazon_case_id: str(d.amazon_case_id),
+    tracking_number: str(d.tracking_number),
+    comments: str(d.comments),
     source: "manual",
     status: "open",
-    date_received: new Date().toISOString().slice(0, 10),
     logged_by: loggedBy,
   });
   if (error) throw new Error(error.message);
@@ -128,13 +138,25 @@ export interface UnifiedReturn {
   id: string;
   source: "email" | "remittance" | "manual";
   date: string | null;
-  returnId: string | null;
-  reference: string | null; // invoice / PO
+  returnId: string | null;      // Shipment Request ID
+  vretNumber: string | null;    // numeric Return ID
+  authorizationId: string | null;
+  reference: string | null;     // Amazon invoice / PO
+  warehouse: string | null;
   sku: string | null;
+  qty: number | null;
+  poNumber: string | null;
+  erpInvoice: string | null;    // tle_invoice_number (WS...)
   type: string | null;
-  amount: number | null; // value of the return / deduction
-  recovery: number | null; // approved / recovered
+  amount: number | null;        // total cost AED
+  recovery: number | null;      // approved / recovered
   status: string | null;
+  srtNumber: string | null;
+  prtNumber: string | null;
+  disputeId: string | null;
+  caseId: string | null;
+  trackingNumber: string | null;
+  comments: string | null;
 }
 
 /**
@@ -164,12 +186,24 @@ export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
       source: r.source === "manual" ? "manual" : "email",
       date: r.date_received ?? r.created_at ?? null,
       returnId: r.return_id ?? null,
-      reference: r.amazon_invoice ?? r.po_number ?? null,
+      vretNumber: r.vret_number ?? null,
+      authorizationId: (r as unknown as Record<string, string | null>)["authorization_id"] ?? null,
+      reference: r.amazon_invoice ?? null,
+      warehouse: r.warehouse ?? null,
       sku: r.model_sku ?? null,
+      qty: r.qty ?? null,
+      poNumber: r.po_number ?? null,
+      erpInvoice: r.tle_invoice_number ?? null,
       type: r.return_type ?? "Return",
-      amount: r.refund_aed ?? r.recovery_amt_aed ?? null,
+      amount: r.total_cost_aed ?? r.refund_aed ?? r.recovery_amt_aed ?? null,
       recovery: r.recovery_amt_aed ?? null,
-      status: r.dispute_status_text ?? null,
+      status: r.dispute_status_text ?? r.status ?? null,
+      srtNumber: r.srt_number ?? null,
+      prtNumber: r.prt_number ?? null,
+      disputeId: r.dispute_id_ref ?? null,
+      caseId: r.amazon_case_id ?? null,
+      trackingNumber: (r as unknown as Record<string, string | null>)["tracking_number"] ?? null,
+      comments: r.comments ?? null,
     });
   }
 
@@ -179,12 +213,24 @@ export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
       source: "remittance",
       date: d.recovery_date ?? d.created_at ?? null,
       returnId: d.return_id ?? null,
+      vretNumber: null,
+      authorizationId: null,
       reference: d.po_number ?? d.tle_invoice_number ?? d.remittance_ref ?? null,
+      warehouse: null,
       sku: null,
+      qty: null,
+      poNumber: d.po_number ?? null,
+      erpInvoice: d.tle_invoice_number ?? null,
       type: chargeTypeLabel(d.charge_type),
       amount: d.amount_aed != null ? Math.abs(d.amount_aed) : d.claim_amount_aed ?? null,
       recovery: d.approved_amount_aed ?? null,
       status: d.dispute_status ?? (d.status === "closed" ? "Closed" : "Open"),
+      srtNumber: null,
+      prtNumber: null,
+      disputeId: null,
+      caseId: null,
+      trackingNumber: null,
+      comments: null,
     });
   }
 

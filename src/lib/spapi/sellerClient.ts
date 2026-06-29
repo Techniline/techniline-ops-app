@@ -114,6 +114,7 @@ export async function sellerProbe(): Promise<{ label: string; status: number | s
   const checks: { label: string; path: string }[] = [
     { label: "Finances event groups (Finance role)", path: `/finances/v0/financialEventGroups?MaxResultsPerPage=1&FinancialEventGroupStartedAfter=${iso(after)}` },
     { label: "FBA returns report (Fulfillment role)", path: `/reports/2021-06-30/reports?reportTypes=GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA&pageSize=1` },
+    { label: "MFN returns flat file (Direct-to-Consumer role?)", path: `/reports/2021-06-30/reports?reportTypes=GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE&pageSize=1` },
     { label: "Settlement report (Finance role)", path: `/reports/2021-06-30/reports?reportTypes=GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2&pageSize=1` },
     { label: "Orders API (needs Orders role)", path: `/orders/v0/orders?MarketplaceIds=${sellerMarketplaceId()}&CreatedAfter=${iso(after)}` },
     { label: "Pricing — competitivePricing (v0)", path: `/products/pricing/v0/competitivePricing?MarketplaceId=${sellerMarketplaceId()}&Asins=B081CS6KJY&ItemType=Asin` },

@@ -138,7 +138,9 @@ function Content() {
       const pctOfTarget = net != null && complete && expected != null && expected !== 0 ? Math.round((net / expected) * 1000) / 10 : null;
       // pendingSettlement: Easy Ship ServiceFeeEvent already billed but the ShipmentEvent
       // (product sale + referral fee) hasn't posted in the Finances API yet.
-      const pendingSettlement = sales === 0 && (order.order_total ?? 0) > 0;
+      // Guard on !posted_date: a fully-refunded order also has sales=0 but IS settled
+      // (posted_date comes from the ShipmentEvent/RefundEvent).
+      const pendingSettlement = sales === 0 && (order.order_total ?? 0) > 0 && !fin.posted_date;
       out.push({ order, fin, sales, fees: fin.fees_total ?? null, net, expected: complete ? expected : null, expectedComplete: complete, variance, pctOfTarget, isCanceled: false, pendingSettlement });
     }
     return out.sort((a, b) => {
