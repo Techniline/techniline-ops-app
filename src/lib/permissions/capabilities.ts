@@ -10,6 +10,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   "seller_central",
   "seller_orders",
   "seller_finance",
+  "stock_reservation",
+  "stock_reservation_manager",
 ] as const;
 
 /**
@@ -33,4 +35,10 @@ export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
   "648993fe-d2e7-446a-ad71-c7b3ff81fae7": ["lp_tracker"],
   // Vihan
   "c4abda49-13e9-41fd-acae-88acd4aa7fcb": "all",
+  // Stock Reservation team — add user IDs after creating accounts in Supabase
+  // Grace (manager): add "stock_reservation" | "stock_reservation_manager"; set role = "manager" on her users row
+  // "GRACE_UUID":    ["stock_reservation", "stock_reservation_manager"],
+  // "MANOJ_UUID":    ["stock_reservation"],
+  // "ASHISH_UUID":   ["stock_reservation"],
+  // "NISHANTHA_UUID":["stock_reservation"],
 };

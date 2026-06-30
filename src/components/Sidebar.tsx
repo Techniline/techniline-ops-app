@@ -15,6 +15,8 @@ import {
   canViewLogisticsPage,
   canViewLpTracker,
   canViewSellerCentral,
+  canViewStockReservation,
+  canManageStockReservation,
   isLogisticsOnly,
   isLpOnly,
   isManager,
@@ -125,6 +127,17 @@ export function Sidebar({
       items: [
         { href: "/cocoblu", label: "Cocoblu", icon: CocobluIcon, show: canViewCocoblu(profile) },
         { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
+      ],
+    },
+    {
+      heading: "Procurement",
+      items: [
+        {
+          href: canManageStockReservation(profile) ? "/stock-reservation/manager" : "/stock-reservation",
+          label: "Stock Reservation",
+          icon: CargoIcon,
+          show: canViewStockReservation(profile),
+        },
       ],
     },
   ];
