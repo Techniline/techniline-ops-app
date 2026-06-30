@@ -129,60 +129,141 @@ async function handleConfirm(
 
 // ── PDF parser ────────────────────────────────────────────────────────────────
 
-const PO_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    impo_number: {
-      type: "string",
-      description: "The full document number, e.g. 'IMPO/2600036'.",
-    },
-    vendor: {
-      type: ["string", "null"],
-      description: "Vendor / supplier company name.",
-    },
-    po_date: {
-      type: ["string", "null"],
-      description: "Purchase order date as YYYY-MM-DD if parseable, else null.",
-    },
-    items: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          brand:       { type: ["string", "null"], description: "Brand name (e.g. Wharfedale, Quad Industrial)." },
-          item_code:   { type: "string",           description: "Model No / item code (e.g. CPD3600, DELTAX215)." },
-          description: { type: ["string", "null"], description: "Full product description." },
-          qty:         { type: "number",           description: "Order quantity as a number." },
-        },
-        required: ["brand", "item_code", "description", "qty"],
-      },
-    },
-  },
-  required: ["impo_number", "vendor", "po_date", "items"],
-} as const;
+const KNOWN_BRANDS = [
+  "Behringer", "Turbosound", "Midas", "TC Electronics", "TC Helicon", "Klark Teknik",
+  "Wharfedale", "Quad Industrial", "Crown", "QSC",
+];
+const BRAND_LINE_RE = new RegExp(`^(${KNOWN_BRANDS.join("|")})\\s*$`, "i");
 
-const PO_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF.
-
-Extract:
-- impo_number: the document number in the format IMPO/XXXXXXX (e.g. "IMPO/2600036")
-- vendor: the supplier company name (e.g. "IAG Group LTD")
-- po_date: the date as YYYY-MM-DD (e.g. "2026-06-18"), null if unclear
-- items: every product line in the table with brand, item_code (Model No), description, and qty
-
-The PDF text may have jumbled columns — use judgement to pair item_code/brand/description/qty correctly.
-Each item row starts with a serial number (Sr). Brand sometimes appears on a separate line below the item.
-Skip header rows, footer text, totals, and Terms & Conditions lines.`;
-
-/** Basic regex fallback — extracts IMPO number only, no line items. */
-function basicExtract(text: string): UploadPreview {
-  const m = text.match(/IMPO\/(\d+)/);
-  const impoNumber = m ? `IMPO/${m[1]}` : "IMPO/UNKNOWN";
+/**
+ * Pure-regex parser — works without an AI key.
+ *
+ * Techniline POs have two column orderings depending on which page column the
+ * PDF renderer outputs first:
+ *   Pattern A  →  {Sr} {ModelNo} {Description...} {Qty}   (brand on next line)
+ *   Pattern B  →  {Sr} {Qty} {ModelNo} {Description...}   (brand on next or same line)
+ *
+ * We scan each table section (between the "Sr Brand…" header and "Terms & Conditions")
+ * and classify every row by checking whether the token after Sr is a decimal number.
+ */
+function regexExtract(text: string): { impo_number: string; vendor: string | null; po_date: string | null; lines: UploadPreviewLine[] } {
+  // ── Header fields ────────────────────────────────────────────────────────
+  const impoM = text.match(/IMPO\/(\d+)/);
+  const impoNumber = impoM ? `IMPO/${impoM[1]}` : "IMPO/UNKNOWN";
   const dateM = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   const poDate = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : null;
-  return { impo_number: impoNumber, vendor: null, po_date: poDate, lines: [], file_name: "" };
+
+  // Vendor sits just before or after the IMPO number block
+  let vendor: string | null = null;
+  const vendorM = text.match(/(?:Vendors?\s+Name[^]*?\n)([\w][\w ,.()\-]+(?:Ltd|LLC|Pte|Inc|GmbH|Group)[.,]?[^\n]*)/i);
+  if (vendorM) vendor = vendorM[1].trim();
+
+  // ── Line items ───────────────────────────────────────────────────────────
+  const lines: UploadPreviewLine[] = [];
+
+  // Every page header is "Sr Brand Model No Description Qty" — find all table sections
+  const headerRe = /Sr\s+Brand\s+Model\s+No\s+Description\s+Qty/g;
+  let hMatch: RegExpExecArray | null;
+
+  while ((hMatch = headerRe.exec(text)) !== null) {
+    const sectionStart = hMatch.index + hMatch[0].length;
+    const tcIdx = text.indexOf("Terms & Conditions", sectionStart);
+    const sectionEnd = tcIdx > sectionStart ? tcIdx : sectionStart + 6000;
+    const section = text.slice(sectionStart, sectionEnd);
+    const rows = section.split("\n").map((l) => l.trim()).filter(Boolean);
+
+    let i = 0;
+    while (i < rows.length) {
+      const row = rows[i];
+      // Must start with a serial number
+      const srM = row.match(/^(\d+)\s+(.*)/);
+      if (!srM) { i++; continue; }
+
+      const rest = srM[2].trim();
+
+      let brand: string | null = null;
+      let item_code = "";
+      let description = "";
+      let qty_incoming = 0;
+
+      // Pattern B: next token is decimal qty (e.g. "14.00")
+      const qtyFirstM = rest.match(/^(\d+(?:\.\d+)?)\s+([\w/]+)\s*(.*)/);
+      // Pattern A: next token is a model code (starts with letter/digit, no decimal)
+      const modelFirstM = rest.match(/^([A-Z0-9][A-Z0-9/\-]+)\s+(.*?)\s+(\d+(?:\.\d+)?)$/);
+
+      if (qtyFirstM && !isNaN(parseFloat(qtyFirstM[1])) && parseFloat(qtyFirstM[1]) < 10000) {
+        qty_incoming = parseFloat(qtyFirstM[1]);
+        const secondToken = qtyFirstM[2];
+        const remaining   = qtyFirstM[3].trim();
+
+        // Check if secondToken is actually a known brand (Pattern C: Sr Qty Brand ModelNo Desc)
+        const isBrand = KNOWN_BRANDS.some((b) => b.toLowerCase() === secondToken.toLowerCase());
+        if (isBrand) {
+          brand = secondToken;
+          const modelAndDesc = remaining.match(/^(\S+)\s*(.*)/);
+          item_code   = modelAndDesc ? modelAndDesc[1] : remaining;
+          description = modelAndDesc ? modelAndDesc[2].trim() : "";
+        } else {
+          item_code   = secondToken;
+          description = remaining;
+        }
+        i++;
+        // Collect wrapped description lines
+        while (i < rows.length && !rows[i].match(/^\d+\s+/) && !BRAND_LINE_RE.test(rows[i])) {
+          description += " " + rows[i];
+          i++;
+        }
+        // Brand on its own line
+        if (i < rows.length && BRAND_LINE_RE.test(rows[i])) { brand = rows[i]; i++; }
+      } else if (modelFirstM) {
+        item_code   = modelFirstM[1];
+        description = modelFirstM[2].trim();
+        qty_incoming = parseFloat(modelFirstM[3]);
+        i++;
+        if (i < rows.length && BRAND_LINE_RE.test(rows[i])) { brand = rows[i]; i++; }
+      } else {
+        i++;
+        continue;
+      }
+
+      if (item_code && qty_incoming > 0) {
+        lines.push({
+          brand:       brand?.trim() || null,
+          item_code:   item_code.trim(),
+          description: description.replace(/\s+/g, " ").trim() || null,
+          category:    null,
+          qty_incoming: Math.round(qty_incoming),
+        });
+      }
+    }
+  }
+
+  return { impo_number: impoNumber, vendor, po_date: poDate, lines };
 }
+
+const AI_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF text.
+
+The table columns are: Sr | Brand | Model No | Description | Qty
+However the text extraction sometimes produces two different column orderings:
+  - "{Sr} {ModelNo} {Description} {Qty}" with brand on a separate next line
+  - "{Sr} {Qty} {ModelNo} {Description}" with brand on a separate next line or inline
+
+Return ONLY a raw JSON object (no markdown, no explanation) with this exact shape:
+{
+  "impo_number": "IMPO/XXXXXXX",
+  "vendor": "Supplier Company Name or null",
+  "po_date": "YYYY-MM-DD or null",
+  "items": [
+    { "brand": "Behringer", "item_code": "PMP1680S", "description": "Mixer Powered...", "qty": 14 }
+  ]
+}
+
+Rules:
+- Include every numbered product row (Sr 1, 2, 3…). Do NOT skip any.
+- brand: the brand column value (Behringer / Turbosound / Midas / TC Electronics / TC Helicon / Klark Teknik etc.)
+- item_code: the Model No (e.g. PMP1680S, B115D, iQ15, GOXLRMINIWhite)
+- qty: integer quantity
+- Skip header rows, page footers, "Terms & Conditions", and blank lines.`;
 
 async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise<UploadPreview> {
   const doc = await getDocumentProxy(pdf);
@@ -193,63 +274,63 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
     throw new Error("Could not read text from this PDF. Make sure it is a text-based PDF (not a scanned image).");
   }
 
-  // Without AI key, fall back to basic extraction
-  if (!process.env.ANTHROPIC_API_KEY) {
-    const basic = basicExtract(docText);
-    basic.file_name = fileName;
-    return basic;
+  // Try AI first if API key is available
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const client = new Anthropic();
+      const response = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 8192,
+        system: "You are a data extraction assistant. Always respond with valid JSON only — no markdown fences, no explanation.",
+        messages: [
+          {
+            role: "user",
+            content: `${AI_PROMPT}\n\n---DOCUMENT TEXT---\n${docText.slice(0, 40000)}`,
+          },
+        ],
+      });
+
+      const block = response.content.find((b) => b.type === "text");
+      if (block && block.type === "text") {
+        let jsonText = block.text.trim();
+        // Strip markdown fences if the model added them despite instructions
+        const fenceM = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (fenceM) jsonText = fenceM[1];
+
+        const raw = JSON.parse(jsonText) as {
+          impo_number?: string;
+          vendor?: string | null;
+          po_date?: string | null;
+          items?: Array<{ brand?: string | null; item_code?: string; description?: string | null; qty?: number }>;
+        };
+
+        const lines: UploadPreviewLine[] = (raw.items ?? [])
+          .filter((i) => i.item_code?.trim())
+          .map((i) => ({
+            brand:        i.brand?.trim() || null,
+            item_code:    (i.item_code ?? "").trim(),
+            description:  i.description?.trim() || null,
+            category:     null,
+            qty_incoming: typeof i.qty === "number" && i.qty > 0 ? Math.round(i.qty) : 1,
+          }));
+
+        if (lines.length > 0) {
+          const fallback = regexExtract(docText);
+          return {
+            impo_number: raw.impo_number?.trim() || fallback.impo_number,
+            vendor:      raw.vendor?.trim() || fallback.vendor,
+            po_date:     raw.po_date?.trim() || fallback.po_date,
+            lines,
+            file_name:   fileName,
+          };
+        }
+      }
+    } catch {
+      // AI failed — fall through to regex
+    }
   }
 
-  const client = new Anthropic();
-  const params = {
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4096,
-    output_config: { format: { type: "json_schema", schema: PO_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${PO_PROMPT}\n\n---DOCUMENT TEXT---\n${docText.slice(0, 24000)}`,
-      },
-    ],
-  } as unknown as Anthropic.MessageCreateParamsNonStreaming;
-
-  const response = await client.messages.create(params);
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") {
-    const basic = basicExtract(docText);
-    basic.file_name = fileName;
-    return basic;
-  }
-
-  let raw: {
-    impo_number?: string;
-    vendor?: string | null;
-    po_date?: string | null;
-    items?: Array<{ brand?: string | null; item_code?: string; description?: string | null; qty?: number }>;
-  };
-  try {
-    raw = JSON.parse(block.text);
-  } catch {
-    const basic = basicExtract(docText);
-    basic.file_name = fileName;
-    return basic;
-  }
-
-  const lines: UploadPreviewLine[] = (raw.items ?? [])
-    .filter((i) => i.item_code?.trim())
-    .map((i) => ({
-      brand:       i.brand?.trim() || null,
-      item_code:   (i.item_code ?? "").trim(),
-      description: i.description?.trim() || null,
-      category:    null,
-      qty_incoming: typeof i.qty === "number" && i.qty > 0 ? Math.round(i.qty) : 1,
-    }));
-
-  return {
-    impo_number: raw.impo_number?.trim() || basicExtract(docText).impo_number,
-    vendor:      raw.vendor?.trim() || null,
-    po_date:     raw.po_date?.trim() || null,
-    lines,
-    file_name:   fileName,
-  };
+  // Regex fallback (works without an API key)
+  const extracted = regexExtract(docText);
+  return { ...extracted, file_name: fileName };
 }
