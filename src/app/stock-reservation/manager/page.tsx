@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import Link from "next/link";
+
 import { useAuth } from "@/app/providers/AuthProvider";
 import { RouteGuard } from "@/components/RouteGuard";
 import { supabase } from "@/lib/supabaseClient";
@@ -384,6 +386,15 @@ function ManagerPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
+      {/* Breadcrumb */}
+      <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+        <Link href="/dashboard" className="hover:text-slate-600 dark:hover:text-slate-200">Dashboard</Link>
+        <span>/</span>
+        <Link href="/stock-reservation" className="hover:text-slate-600 dark:hover:text-slate-200">Stock Reservation</Link>
+        <span>/</span>
+        <span className="text-slate-600 dark:text-slate-300">Manager</span>
+      </div>
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
