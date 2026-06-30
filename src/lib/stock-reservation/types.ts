@@ -43,6 +43,12 @@ export interface StockReservation {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
+  // new fields added 2026-06-30
+  amount_paid: number | null;
+  payment_method: string | null;
+  customer_phone: string | null;
+  required_by_date: string | null;
+  quote_ref: string | null;
   // joined
   impo_line?: ImpoLineWithAvailability;
   requester_name?: string | null;

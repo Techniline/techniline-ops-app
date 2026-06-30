@@ -19,4 +19,5 @@ export {
   fetchMyReservations,
   fetchPendingReservations,
   fetchAllReservations,
+  fetchManagerStats,
 } from "./queries";

@@ -11,6 +11,7 @@ import {
   fetchImpos,
   fetchAllReservations,
   fetchPendingReservations,
+  fetchManagerStats,
 } from "@/lib/stock-reservation";
 import type { Impo, StockReservation, UploadPreviewLine, UploadConfirmPayload } from "@/lib/stock-reservation";
 
@@ -123,12 +124,17 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
         />
         {uploading ? (
           <div className="flex flex-col items-center gap-2">
-            <svg className="h-6 w-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <svg className="h-6 w-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
             <p className="text-sm text-slate-500">Parsing PDF…</p>
           </div>
         ) : (
           <>
-            <svg className="mx-auto mb-3 h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+            <svg className="mx-auto mb-3 h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Drop Purchase Order PDF here or click to browse</p>
             <p className="mt-1 text-xs text-slate-400">One PDF per IMPO · IMPO number is read from the document automatically</p>
           </>
@@ -138,7 +144,6 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
     );
   }
 
-  // Preview step
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
@@ -156,7 +161,7 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
 
       <div className="mb-4">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-500">IMPO Number <span className="text-slate-400">(extracted from document — edit if needed)</span></span>
+          <span className="text-xs font-medium text-slate-500">IMPO Number <span className="text-slate-400">(extracted — edit if needed)</span></span>
           <input
             type="text"
             value={editedImpo}
@@ -164,7 +169,7 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
             className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
         </label>
-        <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
+        <p className="mt-1.5 inline-block rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
           ETA is not in the PO — set it after saving from the IMPO list.
         </p>
       </div>
@@ -186,7 +191,7 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
                 <td className="px-3 py-1.5 text-slate-400">{i + 1}</td>
                 <td className="px-3 py-1.5 font-medium text-slate-800 dark:text-slate-200">{l.item_code}</td>
                 <td className="px-3 py-1.5 text-slate-500">{l.brand ?? "—"}</td>
-                <td className="px-3 py-1.5 text-slate-500 max-w-xs truncate">{l.description ?? "—"}</td>
+                <td className="max-w-xs truncate px-3 py-1.5 text-slate-500">{l.description ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right font-medium text-slate-700 dark:text-slate-300">{l.qty_incoming}</td>
               </tr>
             ))}
@@ -247,38 +252,45 @@ function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
-      <div className="mb-3 flex items-start justify-between">
-        <div>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-slate-900 dark:text-slate-100">
             {res.requester_name ?? "User"} · {line?.item_code ?? "—"}
           </p>
           <p className="text-sm text-slate-500">
             {line?.impo?.impo_number ?? "—"} · ETA {line?.impo?.eta ? fmtDate(line.impo.eta) : "—"}
-            {res.customer_ref && <> · <span className="text-indigo-600">{res.customer_ref}</span></>}
+            {res.customer_ref && <> · <span className="font-medium text-indigo-600">{res.customer_ref}</span></>}
+            {res.customer_phone && <> · {res.customer_phone}</>}
           </p>
-          {res.notes && <p className="mt-1 text-xs text-slate-400 italic">{res.notes}</p>}
+          <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-400">
+            {res.amount_paid != null && res.amount_paid > 0 && (
+              <span className="font-medium text-emerald-700">
+                AED {res.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })} paid ({res.payment_method?.replace("_", " ")})
+              </span>
+            )}
+            {res.required_by_date && <span>Required by: {fmtDate(res.required_by_date)}</span>}
+            {res.quote_ref && <span>Ref: {res.quote_ref}</span>}
+          </div>
+          {res.notes && <p className="mt-1 text-xs italic text-slate-400">{res.notes}</p>}
         </div>
-        <span className="shrink-0 text-sm font-bold text-slate-700 dark:text-slate-300">{res.qty_requested} unit{res.qty_requested !== 1 ? "s" : ""} requested</span>
+        <span className="shrink-0 text-sm font-bold text-slate-700 dark:text-slate-300">
+          {res.qty_requested} unit{res.qty_requested !== 1 ? "s" : ""} requested
+        </span>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-500">Approve qty</span>
           <input
-            type="number"
-            min={1}
-            max={res.qty_requested}
-            value={qty}
+            type="number" min={1} max={res.qty_requested} value={qty}
             onChange={(e) => setQty(Math.max(1, Number(e.target.value)))}
             className="w-24 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
         </label>
-        <label className="flex flex-1 flex-col gap-1 min-w-[160px]">
+        <label className="flex min-w-[160px] flex-1 flex-col gap-1">
           <span className="text-xs font-medium text-slate-500">Note (optional)</span>
           <input
-            type="text"
-            placeholder="Reason or note to requester…"
-            value={notes}
+            type="text" placeholder="Reason or note to requester…" value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
@@ -305,10 +317,325 @@ function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
   );
 }
 
+// ── Report Tab ────────────────────────────────────────────────────────────────
+
+interface ReportTabProps {
+  reservations: StockReservation[];
+  impos: Impo[];
+}
+
+function ReportTab({ reservations, impos }: ReportTabProps) {
+  const [filterImpo, setFilterImpo] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterBrand, setFilterBrand] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [showEmailPanel, setShowEmailPanel] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailCc, setEmailCc] = useState("");
+
+  const filtered = useMemo(() => {
+    return reservations.filter((r) => {
+      const line = r.impo_line as unknown as { brand?: string | null; impo?: { id?: string; impo_number?: string } } | undefined;
+      if (filterImpo && line?.impo?.id !== filterImpo) return false;
+      if (filterStatus && r.status !== filterStatus) return false;
+      if (filterBrand && !(line?.brand ?? "").toLowerCase().includes(filterBrand.toLowerCase())) return false;
+      if (filterDateFrom && r.created_at.slice(0, 10) < filterDateFrom) return false;
+      if (filterDateTo && r.created_at.slice(0, 10) > filterDateTo) return false;
+      return true;
+    });
+  }, [reservations, filterImpo, filterStatus, filterBrand, filterDateFrom, filterDateTo]);
+
+  // Group by IMPO
+  const grouped = useMemo(() => {
+    const map = new Map<string, { impoNumber: string; rows: StockReservation[] }>();
+    for (const r of filtered) {
+      const line = r.impo_line as unknown as { impo?: { id?: string; impo_number?: string } } | undefined;
+      const impoId = line?.impo?.id ?? "unknown";
+      const impoNumber = line?.impo?.impo_number ?? "Unknown IMPO";
+      if (!map.has(impoId)) map.set(impoId, { impoNumber, rows: [] });
+      map.get(impoId)!.rows.push(r);
+    }
+    return Array.from(map.values()).sort((a, b) => a.impoNumber.localeCompare(b.impoNumber));
+  }, [filtered]);
+
+  const totals = useMemo(() => ({
+    qty: filtered.reduce((s, r) => s + r.qty_requested, 0),
+    deposits: filtered.reduce((s, r) => s + (r.amount_paid ?? 0), 0),
+    count: filtered.length,
+  }), [filtered]);
+
+  function printReport() { window.print(); }
+
+  function exportCsv() {
+    const rows = [
+      ["IMPO", "SKU", "Brand", "Description", "Customer", "Phone", "Salesperson", "Qty", "AED Paid", "Payment", "Required By", "Quote Ref", "Status", "Date"],
+      ...filtered.map((r) => {
+        const line = r.impo_line as unknown as { item_code?: string; brand?: string | null; description?: string | null; impo?: { impo_number?: string } } | undefined;
+        return [
+          line?.impo?.impo_number ?? "",
+          line?.item_code ?? "",
+          line?.brand ?? "",
+          line?.description ?? "",
+          r.customer_ref ?? "",
+          r.customer_phone ?? "",
+          r.requester_name ?? "",
+          r.qty_requested,
+          r.amount_paid ?? 0,
+          r.payment_method ?? "",
+          r.required_by_date ?? "",
+          r.quote_ref ?? "",
+          r.status,
+          r.created_at.slice(0, 10),
+        ];
+      }),
+    ];
+    const csv = rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `allocation-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const emailSubject = `Stock Allocation Report — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  const emailBody = useMemo(() => {
+    const lines = [
+      `Stock Allocation Report`,
+      `Generated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`,
+      ``,
+      `Total reservations: ${totals.count}`,
+      `Total units: ${totals.qty}`,
+      `Total deposits: AED ${totals.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}`,
+      ``,
+    ];
+    for (const group of grouped) {
+      const groupQty = group.rows.reduce((s, r) => s + r.qty_requested, 0);
+      const groupDeposits = group.rows.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+      lines.push(`--- ${group.impoNumber} (${group.rows.length} reservations, ${groupQty} units, AED ${groupDeposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}) ---`);
+      for (const r of group.rows) {
+        const line = r.impo_line as unknown as { item_code?: string } | undefined;
+        lines.push(`  ${line?.item_code ?? "—"} | ${r.customer_ref ?? "—"} | Qty: ${r.qty_requested} | ${r.status} | AED ${r.amount_paid ?? 0}`);
+      }
+      lines.push("");
+    }
+    return lines.join("\n");
+  }, [grouped, totals]);
+
+  const mailtoLink = `mailto:${emailTo}?cc=${emailCc}&subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+
+  const activeFilters = [filterImpo, filterStatus, filterBrand, filterDateFrom, filterDateTo].filter(Boolean).length;
+
+  return (
+    <div>
+      {/* Filters */}
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Filters {activeFilters > 0 && <span className="ml-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">{activeFilters} active</span>}
+          </h3>
+          {activeFilters > 0 && (
+            <button
+              onClick={() => { setFilterImpo(""); setFilterStatus(""); setFilterBrand(""); setFilterDateFrom(""); setFilterDateTo(""); }}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <select
+            value={filterImpo} onChange={(e) => setFilterImpo(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">All IMPOs</option>
+            {impos.map((i) => (
+              <option key={i.id} value={i.id}>{i.impo_number}</option>
+            ))}
+          </select>
+
+          <select
+            value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <input
+            type="text" placeholder="Filter by brand…" value={filterBrand}
+            onChange={(e) => setFilterBrand(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+
+          <input
+            type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+            title="From date"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+
+          <input
+            type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+            title="To date"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </div>
+      </div>
+
+      {/* Summary bar + action buttons */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex gap-6 text-sm">
+          <span><span className="font-bold text-slate-900 dark:text-slate-100">{totals.count}</span> <span className="text-slate-500">reservations</span></span>
+          <span><span className="font-bold text-slate-900 dark:text-slate-100">{totals.qty}</span> <span className="text-slate-500">units</span></span>
+          <span><span className="font-bold text-slate-900 dark:text-slate-100">AED {totals.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}</span> <span className="text-slate-500">deposits</span></span>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={printReport} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+            Print
+          </button>
+          <button onClick={exportCsv} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowEmailPanel(!showEmailPanel)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              showEmailPanel
+                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                : "border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+            Email Report
+          </button>
+        </div>
+      </div>
+
+      {/* Email panel */}
+      {showEmailPanel && (
+        <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Email Allocation Report</h4>
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500">To</span>
+              <input
+                type="email" placeholder="recipient@company.com" value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-500">CC (optional)</span>
+              <input
+                type="email" placeholder="cc@company.com" value={emailCc}
+                onChange={(e) => setEmailCc(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+          </div>
+          <div className="mb-3">
+            <p className="mb-1 text-xs font-medium text-slate-500">Subject (auto-generated)</p>
+            <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">{emailSubject}</p>
+          </div>
+          <div className="mb-3">
+            <p className="mb-1 text-xs font-medium text-slate-500">Preview</p>
+            <pre className="max-h-40 overflow-y-auto rounded-lg bg-white px-3 py-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">{emailBody.slice(0, 500)}{emailBody.length > 500 ? "…" : ""}</pre>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowEmailPanel(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Cancel</button>
+            <a
+              href={mailtoLink}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Open in Email Client
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Report table grouped by IMPO */}
+      {grouped.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+          No reservations match the current filters.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map((group) => {
+            const groupQty = group.rows.reduce((s, r) => s + r.qty_requested, 0);
+            const groupDeposits = group.rows.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+            return (
+              <div key={group.impoNumber} className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                {/* IMPO group header */}
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/60">
+                  <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />
+                  </svg>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{group.impoNumber}</span>
+                  <span className="text-xs text-slate-400">{group.rows.length} reservations · {groupQty} units · AED {groupDeposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}</span>
+                </div>
+
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-100 bg-white text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+                    <tr>
+                      <th className="px-4 py-2 text-left">SKU</th>
+                      <th className="px-4 py-2 text-left">Customer</th>
+                      <th className="px-4 py-2 text-left">Salesperson</th>
+                      <th className="px-4 py-2 text-right">Qty</th>
+                      <th className="px-4 py-2 text-right">AED Paid</th>
+                      <th className="px-4 py-2 text-left">Status</th>
+                      <th className="px-4 py-2 text-left">Req. By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {group.rows.map((r) => {
+                      const line = r.impo_line as unknown as { item_code?: string; brand?: string | null } | undefined;
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                          <td className="px-4 py-2.5">
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
+                            {line?.brand && <p className="text-xs text-slate-400">{line.brand}</p>}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <p className="text-slate-700 dark:text-slate-300">{r.customer_ref ?? "—"}</p>
+                            {r.customer_phone && <p className="text-xs text-slate-400">{r.customer_phone}</p>}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-500">{r.requester_name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-right font-medium text-slate-900 dark:text-slate-100">{r.qty_requested}</td>
+                          <td className="px-4 py-2.5 text-right text-slate-700 dark:text-slate-300">
+                            {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-500">
+                            {r.required_by_date ? fmtDate(r.required_by_date) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Manager Page ─────────────────────────────────────────────────────────
 
 function ManagerPage() {
-  useAuth(); // ensure auth context is initialized
+  useAuth();
   const [token, setToken] = useState("");
 
   useEffect(() => {
@@ -320,19 +647,26 @@ function ManagerPage() {
   const [impos, setImpos] = useState<Impo[]>([]);
   const [pending, setPending] = useState<StockReservation[]>([]);
   const [all, setAll] = useState<StockReservation[]>([]);
+  const [managerStats, setManagerStats] = useState<{ reservedUnits: number; depositsCollected: number; availableUnits: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [editingEta, setEditingEta] = useState<{ impoId: string; eta: string } | null>(null);
   const [savingEta, setSavingEta] = useState(false);
-  const [activeTab, setActiveTab] = useState<"approvals" | "impos" | "activity">("approvals");
+  const [activeTab, setActiveTab] = useState<"approvals" | "impos" | "activity" | "report">("approvals");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [i, p, a] = await Promise.all([fetchImpos(), fetchPendingReservations(), fetchAllReservations()]);
+      const [i, p, a, s] = await Promise.all([
+        fetchImpos(),
+        fetchPendingReservations(),
+        fetchAllReservations(),
+        fetchManagerStats(),
+      ]);
       setImpos(i);
       setPending(p);
       setAll(a);
+      setManagerStats(s);
     } finally {
       setLoading(false);
     }
@@ -342,8 +676,21 @@ function ManagerPage() {
 
   const nextEta = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const upcoming = impos.filter((i) => i.eta != null && i.eta >= today && i.status !== "cancelled").sort((a, b) => a.eta!.localeCompare(b.eta!));
+    const upcoming = impos
+      .filter((i) => i.eta != null && i.eta >= today && i.status !== "cancelled")
+      .sort((a, b) => a.eta!.localeCompare(b.eta!));
     return upcoming[0]?.eta ?? null;
+  }, [impos]);
+
+  const arrivingSoon = useMemo(() => {
+    const today = new Date();
+    const in7 = new Date(today);
+    in7.setDate(today.getDate() + 7);
+    const todayStr = today.toISOString().slice(0, 10);
+    const in7Str = in7.toISOString().slice(0, 10);
+    return impos.filter(
+      (i) => i.eta != null && i.eta >= todayStr && i.eta <= in7Str && i.status !== "cancelled" && i.status !== "arrived"
+    ).length;
   }, [impos]);
 
   async function saveEta() {
@@ -365,12 +712,21 @@ function ManagerPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400">
-        <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+        <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
       </div>
     );
   }
 
-  const totalSkus = impos.reduce((s, i) => s + i.total_skus, 0);
+  const kpis = [
+    { label: "Pending Action", value: pending.length, highlight: pending.length > 0 },
+    { label: "Arriving Soon (7d)", value: arrivingSoon, highlight: arrivingSoon > 0 },
+    { label: "Reserved Units", value: managerStats?.reservedUnits ?? "…" },
+    { label: "Deposits Collected", value: managerStats ? `AED ${managerStats.depositsCollected.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "…" },
+    { label: "Still Available", value: managerStats?.availableUnits ?? "…" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
@@ -378,9 +734,7 @@ function ManagerPage() {
       <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
         <Link href="/dashboard" className="hover:text-slate-600 dark:hover:text-slate-200">Dashboard</Link>
         <span>/</span>
-        <Link href="/stock-reservation" className="hover:text-slate-600 dark:hover:text-slate-200">Stock Reservation</Link>
-        <span>/</span>
-        <span className="text-slate-600 dark:text-slate-300">Manager</span>
+        <span className="text-slate-600 dark:text-slate-300">Stock Reservation — Manager</span>
       </div>
 
       {/* Header */}
@@ -393,39 +747,42 @@ function ManagerPage() {
           onClick={() => setShowUpload(!showUpload)}
           className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
           Upload Sheet
         </button>
       </div>
 
-      {/* Upload panel (inline, expands) */}
+      {/* Upload panel */}
       {showUpload && (
         <div className="mb-6">
           <UploadPanel token={token} onDone={() => { setShowUpload(false); load(); }} />
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { label: "Active IMPOs", value: impos.filter((i) => i.status !== "cancelled").length },
-          { label: "Total SKUs", value: totalSkus },
-          { label: "Pending Approvals", value: pending.length, highlight: pending.length > 0 },
-          { label: "Next ETA", value: nextEta ? fmtDate(nextEta) : "—" },
-        ].map((kpi) => (
-          <div key={kpi.label} className={`rounded-2xl border p-4 shadow-sm ${kpi.highlight ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
+      {/* KPI cards — 5 cards */}
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {kpis.map((kpi) => (
+          <div
+            key={kpi.label}
+            className={`rounded-2xl border p-4 shadow-sm ${kpi.highlight ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{kpi.label}</p>
-            <p className={`mt-1 text-2xl font-bold ${kpi.highlight ? "text-amber-700 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>{kpi.value}</p>
+            <p className={`mt-1 text-xl font-bold leading-tight ${kpi.highlight ? "text-amber-700 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>
+              {kpi.value}
+            </p>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900 w-fit">
+      <div className="mb-4 w-fit flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
         {([
           { key: "approvals", label: `Approvals${pending.length > 0 ? ` (${pending.length})` : ""}` },
-          { key: "impos", label: `IMPO List (${impos.length})` },
-          { key: "activity", label: "Activity" },
+          { key: "impos",     label: `IMPO List (${impos.length})` },
+          { key: "activity",  label: "Activity" },
+          { key: "report",    label: "Allocation Report" },
         ] as { key: typeof activeTab; label: string }[]).map((t) => (
           <button
             key={t.key}
@@ -499,10 +856,12 @@ function ManagerPage() {
                           <span className="text-slate-600 dark:text-slate-400">{fmtDate(impo.eta)}</span>
                           <button
                             onClick={() => setEditingEta({ impoId: impo.id, eta: impo.eta ?? "" })}
-                            className="text-slate-300 hover:text-indigo-500 transition-colors"
+                            className="text-slate-300 transition-colors hover:text-indigo-500"
                             title="Edit ETA"
                           >
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
                           </button>
                         </div>
                       )}
@@ -513,7 +872,7 @@ function ManagerPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">{impo.total_skus}</td>
-                    <td className="px-4 py-3 text-xs text-slate-400 max-w-[160px] truncate">{impo.source_file_name ?? "—"}</td>
+                    <td className="max-w-[160px] truncate px-4 py-3 text-xs text-slate-400">{impo.source_file_name ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(impo.created_at.slice(0, 10))}</td>
                     <td className="px-4 py-3 text-right">
                       <a href={`/stock-reservation?impo=${impo.id}`} className="text-xs text-indigo-500 hover:underline">View lines →</a>
@@ -532,45 +891,52 @@ function ManagerPage() {
           {all.length === 0 ? (
             <p className="p-8 text-center text-slate-400">No reservation activity yet.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
-                <tr>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-left">Requested by</th>
-                  <th className="px-4 py-3 text-left">SKU</th>
-                  <th className="px-4 py-3 text-left">IMPO</th>
-                  <th className="px-4 py-3 text-right">Req</th>
-                  <th className="px-4 py-3 text-right">Approved</th>
-                  <th className="px-4 py-3 text-left">Customer</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {all.map((r) => {
-                  const line = r.impo_line as unknown as { item_code?: string; impo?: { impo_number?: string } } | undefined;
-                  return (
-                    <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(r.created_at.slice(0, 10))}</td>
-                      <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{r.requester_name ?? "—"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-500">{line?.impo?.impo_number ?? "—"}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{r.qty_requested}</td>
-                      <td className="px-4 py-3 text-right font-medium text-green-600">{r.qty_approved ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-500">{r.customer_ref ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 max-w-[160px] truncate">{r.grace_notes ?? r.notes ?? "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-left">Requested by</th>
+                    <th className="px-4 py-3 text-left">SKU</th>
+                    <th className="px-4 py-3 text-left">IMPO</th>
+                    <th className="px-4 py-3 text-left">Customer</th>
+                    <th className="px-4 py-3 text-right">Qty</th>
+                    <th className="px-4 py-3 text-right">Paid</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {all.map((r) => {
+                    const line = r.impo_line as unknown as { item_code?: string; impo?: { impo_number?: string } } | undefined;
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                        <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(r.created_at.slice(0, 10))}</td>
+                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{r.requester_name ?? "—"}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</td>
+                        <td className="px-4 py-3 text-slate-500">{line?.impo?.impo_number ?? "—"}</td>
+                        <td className="px-4 py-3 text-slate-500">{r.customer_ref ?? "—"}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">{r.qty_requested}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
+      )}
+
+      {/* Tab: Allocation Report */}
+      {activeTab === "report" && (
+        <ReportTab reservations={all} impos={impos} />
       )}
     </div>
   );

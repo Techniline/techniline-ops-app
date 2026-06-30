@@ -9,14 +9,18 @@ import {
   fetchAllLinesWithAvailability,
   fetchMyReservations,
 } from "@/lib/stock-reservation";
-import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
+import type { ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "card";
+type ResFilter = "all" | "pending" | "approved" | "rejected";
+
 function fmtDate(d: string | null) {
   if (!d) return "—";
-  const dt = new Date(d);
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(d + (d.length === 10 ? "T00:00:00" : "")).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  });
 }
 
 function statusBadge(status: string) {
@@ -29,71 +33,46 @@ function statusBadge(status: string) {
   return map[status] ?? "bg-slate-100 text-slate-500";
 }
 
-// ── Combined SKU type (same item_code merged within one IMPO) ─────────────────
+// ── Inline reservation form ───────────────────────────────────────────────────
 
-interface CombinedLine {
-  item_code: string;
-  brand: string | null;
-  description: string | null;
-  qty_incoming: number;
-  qty_available: number;
-  impo: Impo;
-  impo_id: string;
-  primaryLine: ImpoLineWithAvailability; // the underlying line with most availability
-}
-
-function combineSameSkus(lines: ImpoLineWithAvailability[]): CombinedLine[] {
-  const map = new Map<string, CombinedLine>();
-  for (const line of lines) {
-    const key = line.item_code.toLowerCase();
-    const existing = map.get(key);
-    if (existing) {
-      map.set(key, {
-        ...existing,
-        qty_incoming:  existing.qty_incoming  + line.qty_incoming,
-        qty_available: existing.qty_available + line.qty_available,
-        primaryLine:   line.qty_available > existing.primaryLine.qty_available ? line : existing.primaryLine,
-      });
-    } else {
-      map.set(key, {
-        item_code:    line.item_code,
-        brand:        line.brand,
-        description:  line.description,
-        qty_incoming: line.qty_incoming,
-        qty_available: line.qty_available,
-        impo:         line.impo,
-        impo_id:      line.impo_id,
-        primaryLine:  line,
-      });
-    }
-  }
-  return Array.from(map.values());
-}
-
-// ── Reserve Modal ─────────────────────────────────────────────────────────────
-
-interface ReserveModalProps {
+interface InlineReserveFormProps {
   line: ImpoLineWithAvailability;
+  token: string;
   onClose: () => void;
   onSuccess: () => void;
-  token: string;
 }
 
-function ReserveModal({ line, onClose, onSuccess, token }: ReserveModalProps) {
-  const [qty, setQty] = useState(1);
-  const [customerRef, setCustomerRef] = useState("");
+function InlineReserveForm({ line, token, onClose, onSuccess }: InlineReserveFormProps) {
+  const [qty, setQty] = useState(Math.min(1, line.qty_available));
+  const [amountPaid, setAmountPaid] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [requiredByDate, setRequiredByDate] = useState("");
+  const [quoteRef, setQuoteRef] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
+    if (!customerName.trim()) { setError("Customer name is required."); return; }
     setSaving(true);
     setError(null);
     try {
       const res = await fetch("/api/stock-reservation/reserve", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ impo_line_id: line.id, qty_requested: qty, customer_ref: customerRef.trim() || undefined, notes: notes.trim() || undefined }),
+        body: JSON.stringify({
+          impo_line_id: line.id,
+          qty_requested: qty,
+          customer_ref: customerName.trim(),
+          customer_phone: customerPhone.trim() || undefined,
+          amount_paid: amountPaid ? parseFloat(amountPaid) : 0,
+          payment_method: paymentMethod,
+          required_by_date: requiredByDate || undefined,
+          quote_ref: quoteRef.trim() || undefined,
+          notes: notes.trim() || undefined,
+        }),
       });
       const data = await res.json() as { ok: boolean; error?: string };
       if (!data.ok) { setError(data.error ?? "Failed."); return; }
@@ -106,112 +85,115 @@ function ReserveModal({ line, onClose, onSuccess, token }: ReserveModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Reserve Stock</h2>
-        <p className="mb-4 text-sm text-slate-500">
-          {line.item_code} · {line.description ?? "—"} · IMPO {line.impo.impo_number} · ETA {fmtDate(line.impo.eta)}
-        </p>
-
-        <div className="mb-3">
-          <p className="mb-1 text-xs font-medium text-slate-500">Available</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{line.qty_available} <span className="text-sm font-normal text-slate-500">of {line.qty_incoming}</span></p>
+    <div className="border-t border-indigo-100 bg-indigo-50/40 px-4 py-4 dark:border-indigo-900/30 dark:bg-indigo-950/20">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">
+            {line.item_code} · {line.impo.impo_number} · ETA {fmtDate(line.impo.eta)}
+          </p>
+          <p className="text-xs text-slate-500">{line.qty_available} of {line.qty_incoming} units available</p>
         </div>
-
-        <label className="mb-3 block">
-          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Quantity to Reserve</span>
-          <input
-            type="number"
-            min={1}
-            max={line.qty_available}
-            value={qty}
-            onChange={(e) => setQty(Math.max(1, Math.min(line.qty_available, Number(e.target.value))))}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          />
-        </label>
-
-        <label className="mb-3 block">
-          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Customer / Project Reference</span>
-          <input
-            type="text"
-            placeholder="e.g. Al Futtaim Project"
-            value={customerRef}
-            onChange={(e) => setCustomerRef(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          />
-        </label>
-
-        <label className="mb-4 block">
-          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Notes (optional)</span>
-          <textarea
-            rows={2}
-            placeholder="Any additional context…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          />
-        </label>
-
-        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Cancel</button>
-          <button
-            onClick={submit}
-            disabled={saving || qty < 1 || qty > line.qty_available}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Submit Request"}
-          </button>
-        </div>
+        <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
-    </div>
-  );
-}
 
-// ── Sold-out prompt: suggest next IMPO ────────────────────────────────────────
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Quantity *</span>
+          <input
+            type="number" min={1} max={line.qty_available} value={qty}
+            onChange={(e) => setQty(Math.max(1, Math.min(line.qty_available, Number(e.target.value))))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
 
-interface SoldOutPromptProps {
-  itemCode: string;
-  currentImpo: string;
-  nextLine: ImpoLineWithAvailability | null;
-  onClose: () => void;
-  onReserveNext: (line: ImpoLineWithAvailability) => void;
-}
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Amount Paid (AED)</span>
+          <input
+            type="number" min={0} step="0.01" placeholder="0.00" value={amountPaid}
+            onChange={(e) => setAmountPaid(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
 
-function SoldOutPrompt({ itemCode, currentImpo, nextLine, onClose, onReserveNext }: SoldOutPromptProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-        </div>
-        <h2 className="mb-2 text-base font-semibold text-slate-900 dark:text-slate-100">
-          {itemCode} is fully reserved in {currentImpo}
-        </h2>
-        {nextLine ? (
-          <>
-            <p className="mb-4 text-sm text-slate-500">
-              {nextLine.qty_available} unit{nextLine.qty_available !== 1 ? "s" : ""} available in <strong>{nextLine.impo.impo_number}</strong> (ETA: {fmtDate(nextLine.impo.eta)})
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Cancel</button>
-              <button
-                onClick={() => onReserveNext(nextLine)}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-              >
-                Reserve from {fmtDate(nextLine.impo.eta)}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="mb-4 text-sm text-slate-500">No other incoming shipment has this item. Contact Grace to arrange a new order.</p>
-            <div className="flex justify-end">
-              <button onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">Close</button>
-            </div>
-          </>
-        )}
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Payment Method</span>
+          <select
+            value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="cash">Cash</option>
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="cheque">Cheque</option>
+            <option value="card">Card</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Required By</span>
+          <input
+            type="date" value={requiredByDate}
+            onChange={(e) => setRequiredByDate(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Customer Name *</span>
+          <input
+            type="text" placeholder="e.g. Al Futtaim Group" value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Customer Phone</span>
+          <input
+            type="tel" placeholder="+971 50 000 0000" value={customerPhone}
+            onChange={(e) => setCustomerPhone(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Quote / SO Reference</span>
+          <input
+            type="text" placeholder="e.g. SO-2026-001" value={quoteRef}
+            onChange={(e) => setQuoteRef(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Notes for Grace</span>
+          <input
+            type="text" placeholder="Any context or special instructions…" value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+      </div>
+
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving || qty < 1}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {saving ? "Submitting…" : "Submit Request"}
+        </button>
       </div>
     </div>
   );
@@ -233,10 +215,8 @@ function StockReservationPage() {
   const [myReservations, setMyReservations] = useState<StockReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterEta, setFilterEta] = useState<string>("all");
-
-  const [reservingLine, setReservingLine] = useState<ImpoLineWithAvailability | null>(null);
-  const [soldOutLine, setSoldOutLine] = useState<ImpoLineWithAvailability | null>(null);
+  const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
+  const [resFilter, setResFilter] = useState<ResFilter>("all");
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -255,20 +235,16 @@ function StockReservationPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Real-time ETA updates — when Grace saves a new ETA, update in place
+  // Real-time ETA updates from Grace
   useEffect(() => {
     const channel = supabase
       .channel("stock-reservation-impos-eta")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "impos" },
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "impos" },
         (payload) => {
           const updated = payload.new as { id: string; eta: string | null };
           setLines((prev) =>
             prev.map((line) =>
-              line.impo_id === updated.id
-                ? { ...line, impo: { ...line.impo, eta: updated.eta } }
-                : line
+              line.impo_id === updated.id ? { ...line, impo: { ...line.impo, eta: updated.eta } } : line
             )
           );
         }
@@ -277,53 +253,42 @@ function StockReservationPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Group lines by ETA date
-  const allEtas = useMemo(() => {
-    const seen = new Set<string>();
-    for (const l of lines) if (l.impo.eta) seen.add(l.impo.eta);
-    return Array.from(seen).sort();
-  }, [lines]);
+  // Stats derived from myReservations (no extra fetch)
+  const stats = useMemo(() => {
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const pending = myReservations.filter((r) => r.status === "pending").length;
+    const approvedThisMonth = myReservations.filter(
+      (r) => r.status === "approved" && r.created_at.startsWith(thisMonth)
+    ).length;
+    const deposits = myReservations.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+    return { pending, approvedThisMonth, deposits };
+  }, [myReservations]);
 
-  const filteredLines = useMemo(() => {
-    const q = search.toLowerCase();
-    return lines.filter((l) => {
-      if (filterEta !== "all" && l.impo.eta !== filterEta) return false;
-      if (!q) return true;
-      return (
-        l.item_code.toLowerCase().includes(q) ||
-        (l.description ?? "").toLowerCase().includes(q) ||
-        (l.brand ?? "").toLowerCase().includes(q) ||
-        (l.category ?? "").toLowerCase().includes(q) ||
-        l.impo.impo_number.toLowerCase().includes(q)
-      );
-    });
-  }, [lines, search, filterEta]);
+  // Search results: only lines with qty_available > 0, matching query
+  const searchResults = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return [];
+    return lines.filter(
+      (l) =>
+        l.qty_available > 0 &&
+        (l.item_code.toLowerCase().includes(q) ||
+          (l.brand ?? "").toLowerCase().includes(q) ||
+          (l.description ?? "").toLowerCase().includes(q) ||
+          l.impo.impo_number.toLowerCase().includes(q))
+    );
+  }, [lines, search]);
 
-  // Group by impo_id, combine duplicate SKUs within each IMPO, sort by ETA
-  const grouped = useMemo(() => {
-    const map = new Map<string, { impoNumber: string; eta: string | null; rawLines: ImpoLineWithAvailability[] }>();
-    for (const l of filteredLines) {
-      if (!map.has(l.impo_id)) map.set(l.impo_id, { impoNumber: l.impo.impo_number, eta: l.impo.eta, rawLines: [] });
-      map.get(l.impo_id)!.rawLines.push(l);
-    }
-    return Array.from(map.values())
-      .map((g) => ({ impoNumber: g.impoNumber, eta: g.eta, lines: combineSameSkus(g.rawLines) }))
-      .sort((a, b) => (a.eta ?? "").localeCompare(b.eta ?? ""));
-  }, [filteredLines]);
+  const filteredReservations = useMemo(() => {
+    if (resFilter === "all") return myReservations;
+    return myReservations.filter((r) => r.status === resFilter);
+  }, [myReservations, resFilter]);
 
-  function handleReserveClick(combined: CombinedLine) {
-    if (combined.qty_available <= 0) {
-      setSoldOutLine(combined.primaryLine);
-    } else {
-      setReservingLine(combined.primaryLine);
-    }
-  }
-
-  function nextAvailableForItem(itemCode: string, excludeImpoId: string): ImpoLineWithAvailability | null {
-    return lines
-      .filter((l) => l.item_code === itemCode && l.impo_id !== excludeImpoId && l.qty_available > 0)
-      .sort((a, b) => (a.impo.eta ?? "").localeCompare(b.impo.eta ?? ""))[0] ?? null;
-  }
+  const resCounts = useMemo(() => ({
+    all: myReservations.length,
+    pending: myReservations.filter((r) => r.status === "pending").length,
+    approved: myReservations.filter((r) => r.status === "approved").length,
+    rejected: myReservations.filter((r) => r.status === "rejected").length,
+  }), [myReservations]);
 
   async function cancelReservation(resId: string) {
     if (!confirm("Cancel this reservation?")) return;
@@ -338,7 +303,10 @@ function StockReservationPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400">
-        <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+        <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
       </div>
     );
   }
@@ -347,190 +315,221 @@ function StockReservationPage() {
     <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
       {/* Header */}
       <div className="mb-6">
-        <a href="/" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+        <a
+          href="/"
+          className="mb-2 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
           Dashboard
         </a>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Stock Reservation</h1>
-        <p className="mt-1 text-sm text-slate-500">Reserve incoming stock from open IMPOs before it arrives.</p>
+        <p className="mt-1 text-sm text-slate-500">Reserve incoming stock from open shipments for your customers.</p>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap gap-3">
+      {/* Stats cards */}
+      <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className={`rounded-2xl border p-4 shadow-sm ${stats.pending > 0 ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending Approval</p>
+          <p className={`mt-1 text-2xl font-bold ${stats.pending > 0 ? "text-amber-700 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>
+            {stats.pending}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Approved This Month</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.approvedThisMonth}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Deposits Collected</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+            {stats.deposits > 0 ? `AED ${stats.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Quick Reserve */}
+      <div className="mb-2">
+        <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">Quick Reserve</h2>
         <input
           type="text"
-          placeholder="Search SKU, brand, description…"
+          placeholder="Search by SKU, brand or description to find available stock…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          onChange={(e) => { setSearch(e.target.value); setExpandedLineId(null); }}
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
-        <select
-          value={filterEta}
-          onChange={(e) => setFilterEta(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        >
-          <option value="all">All ETAs</option>
-          {allEtas.map((e) => (
-            <option key={e} value={e}>{fmtDate(e)}</option>
-          ))}
-        </select>
       </div>
 
-      {/* IMPO groups */}
-      {grouped.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-900">
-          {lines.length === 0 ? "No incoming stock uploaded yet. Grace will upload the shipment sheet." : "No results match your search."}
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {grouped.map((group) => (
-            <div key={group.impoNumber} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              {/* IMPO header */}
-              <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/60">
-                <svg className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" /></svg>
-                <div>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.impoNumber}</span>
-                  <span className="ml-2 text-xs text-slate-400">ETA: {fmtDate(group.eta)}</span>
-                </div>
-                <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                  {group.lines.length} SKU{group.lines.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-
-              {/* SKU grid */}
-              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {group.lines.map((combined) => {
-                  const pct = combined.qty_incoming > 0 ? Math.round((combined.qty_available / combined.qty_incoming) * 100) : 0;
-                  const soldOut = combined.qty_available <= 0;
-                  return (
-                    <div
-                      key={`${combined.impo_id}-${combined.item_code}`}
-                      className={`flex flex-col rounded-xl border p-3 transition-all ${
-                        soldOut
-                          ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/50"
-                          : "border-indigo-100 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+      {/* Search results */}
+      {search.trim() ? (
+        <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {searchResults.length === 0 ? (
+            <p className="p-8 text-center text-sm text-slate-400">
+              No available stock matches &ldquo;{search}&rdquo;. Try a different SKU or brand.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {searchResults.map((line) => (
+                <div key={line.id}>
+                  {/* Result row */}
+                  <div className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                    <div className="min-w-0 flex-1">
+                      {line.brand && (
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{line.brand}</p>
+                      )}
+                      <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{line.item_code}</p>
+                      {line.description && (
+                        <p className="truncate text-xs text-slate-500">{line.description}</p>
+                      )}
+                    </div>
+                    <div className="hidden shrink-0 text-right sm:block">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{line.impo.impo_number}</p>
+                      <p className="text-xs text-slate-400">ETA: {fmtDate(line.impo.eta)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-bold text-emerald-600">{line.qty_available}</p>
+                      <p className="text-xs text-slate-400">of {line.qty_incoming}</p>
+                    </div>
+                    <button
+                      onClick={() => setExpandedLineId(expandedLineId === line.id ? null : line.id)}
+                      className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                        expandedLineId === line.id
+                          ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                          : "bg-indigo-600 text-white hover:bg-indigo-700"
                       }`}
                     >
-                      {combined.brand && (
-                        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{combined.brand}</span>
-                      )}
-                      <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{combined.item_code}</p>
-                      {/* IMPO + ETA */}
-                      <p className="mt-0.5 truncate text-[10px] text-slate-400">
-                        {combined.impo.impo_number}
-                        {combined.impo.eta && <span className="ml-1">· {fmtDate(combined.impo.eta)}</span>}
-                      </p>
-                      {combined.description && (
-                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">{combined.description}</p>
-                      )}
+                      {expandedLineId === line.id ? "Close" : "Reserve"}
+                    </button>
+                  </div>
 
-                      {/* Availability bar */}
-                      <div className="mt-2 mb-1">
-                        <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700">
-                          <div
-                            className={`h-1.5 rounded-full transition-all ${soldOut ? "bg-red-400" : pct <= 25 ? "bg-amber-400" : "bg-emerald-400"}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                      <p className={`text-xs font-medium ${soldOut ? "text-red-500" : pct <= 25 ? "text-amber-600" : "text-emerald-600"}`}>
-                        {soldOut ? "Fully reserved" : `${combined.qty_available} of ${combined.qty_incoming} available`}
-                      </p>
-
-                      <button
-                        onClick={() => handleReserveClick(combined)}
-                        className={`mt-3 w-full rounded-lg py-1.5 text-xs font-semibold transition-colors ${
-                          soldOut
-                            ? "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-400"
-                            : "bg-indigo-600 text-white hover:bg-indigo-700"
-                        }`}
-                      >
-                        {soldOut ? "Check next shipment" : "Reserve"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                  {/* Inline form */}
+                  {expandedLineId === line.id && (
+                    <InlineReserveForm
+                      line={line}
+                      token={token}
+                      onClose={() => setExpandedLineId(null)}
+                      onSuccess={() => { setExpandedLineId(null); setSearch(""); load(); }}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+      ) : (
+        <div className="mb-8 rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400 dark:border-slate-800">
+          Enter a SKU, brand or description above to find available stock
         </div>
       )}
 
       {/* My Reservations */}
-      {myReservations.length > 0 && (
-        <div className="mt-8">
-          <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">My Reservations</h2>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
-                <tr>
-                  <th className="px-4 py-3 text-left">SKU</th>
-                  <th className="px-4 py-3 text-left">IMPO</th>
-                  <th className="px-4 py-3 text-left">ETA</th>
-                  <th className="px-4 py-3 text-left">Qty</th>
-                  <th className="px-4 py-3 text-left">Customer</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Notes</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {myReservations.map((r) => {
-                  const line = r.impo_line as unknown as ImpoLineWithAvailability | undefined;
-                  return (
-                    <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{line?.impo?.impo_number ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-500">{fmtDate(line?.impo?.eta ?? null)}</td>
-                      <td className="px-4 py-3">
-                        {r.qty_approved != null ? (
-                          <span><span className="font-bold text-green-600">{r.qty_approved}</span><span className="text-slate-400"> / {r.qty_requested} req</span></span>
-                        ) : r.qty_requested}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{r.customer_ref ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{r.grace_notes ?? r.notes ?? "—"}</td>
-                      <td className="px-4 py-3 text-right">
-                        {r.status === "pending" && (
-                          <button
-                            onClick={() => cancelReservation(r.id)}
-                            className="text-xs text-red-500 hover:underline"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">My Reservations</h2>
+          <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+            {(["all", "pending", "approved", "rejected"] as ResFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setResFilter(f)}
+                className={`rounded-lg px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                  resFilter === f
+                    ? "bg-indigo-600 text-white shadow"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                }`}
+              >
+                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                {resCounts[f] > 0 ? ` (${resCounts[f]})` : ""}
+              </button>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* Modals */}
-      {reservingLine && (
-        <ReserveModal
-          line={reservingLine}
-          token={token}
-          onClose={() => setReservingLine(null)}
-          onSuccess={() => { setReservingLine(null); load(); }}
-        />
-      )}
-      {soldOutLine && (
-        <SoldOutPrompt
-          itemCode={soldOutLine.item_code}
-          currentImpo={soldOutLine.impo.impo_number}
-          nextLine={nextAvailableForItem(soldOutLine.item_code, soldOutLine.impo_id)}
-          onClose={() => setSoldOutLine(null)}
-          onReserveNext={(l) => { setSoldOutLine(null); setReservingLine(l); }}
-        />
-      )}
+        {filteredReservations.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+            {myReservations.length === 0
+              ? "No reservations yet. Search above to make your first reservation."
+              : `No ${resFilter === "all" ? "" : resFilter + " "}reservations.`}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left">SKU</th>
+                    <th className="px-4 py-3 text-left">IMPO · ETA</th>
+                    <th className="px-4 py-3 text-left">Customer</th>
+                    <th className="px-4 py-3 text-right">Qty</th>
+                    <th className="px-4 py-3 text-right">Paid</th>
+                    <th className="px-4 py-3 text-left">Method</th>
+                    <th className="px-4 py-3 text-left">Req. By</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredReservations.map((r) => {
+                    const line = r.impo_line as unknown as ImpoLineWithAvailability | undefined;
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
+                          {r.quote_ref && <p className="text-xs text-slate-400">{r.quote_ref}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-slate-600 dark:text-slate-400">{line?.impo?.impo_number ?? "—"}</p>
+                          <p className="text-xs text-slate-400">{fmtDate(line?.impo?.eta ?? null)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-slate-700 dark:text-slate-300">{r.customer_ref ?? "—"}</p>
+                          {r.customer_phone && <p className="text-xs text-slate-400">{r.customer_phone}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {r.qty_approved != null ? (
+                            <span>
+                              <span className="font-bold text-green-600">{r.qty_approved}</span>
+                              <span className="text-xs text-slate-400"> / {r.qty_requested}</span>
+                            </span>
+                          ) : (
+                            r.qty_requested
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">
+                          {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+                        </td>
+                        <td className="px-4 py-3 capitalize text-slate-500">
+                          {r.payment_method?.replace("_", " ") ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {r.required_by_date ? fmtDate(r.required_by_date) : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
+                            {r.status}
+                          </span>
+                          {r.grace_notes && (
+                            <p className="mt-0.5 text-xs italic text-slate-400">{r.grace_notes}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {r.status === "pending" && (
+                            <button
+                              onClick={() => cancelReservation(r.id)}
+                              className="text-xs text-red-500 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

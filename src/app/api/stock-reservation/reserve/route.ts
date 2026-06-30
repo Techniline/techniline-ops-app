@@ -7,6 +7,11 @@ interface ReserveBody {
   impo_line_id: string;
   qty_requested: number;
   customer_ref?: string;
+  customer_phone?: string;
+  amount_paid?: number;
+  payment_method?: string;
+  required_by_date?: string;
+  quote_ref?: string;
   notes?: string;
 }
 
@@ -28,7 +33,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { impo_line_id, qty_requested, customer_ref, notes } = body;
+  const { impo_line_id, qty_requested, customer_ref, customer_phone, amount_paid, payment_method, required_by_date, quote_ref, notes } = body;
   if (!impo_line_id) return Response.json({ ok: false, error: "impo_line_id required." }, { status: 400 });
   if (!qty_requested || qty_requested < 1) return Response.json({ ok: false, error: "qty_requested must be >= 1." }, { status: 400 });
 
@@ -64,6 +69,11 @@ export async function POST(request: Request): Promise<Response> {
       requested_by: auth.uid,
       qty_requested,
       customer_ref: customer_ref ?? null,
+      customer_phone: customer_phone ?? null,
+      amount_paid: typeof amount_paid === "number" ? amount_paid : 0,
+      payment_method: payment_method ?? null,
+      required_by_date: required_by_date ?? null,
+      quote_ref: quote_ref ?? null,
       notes: notes ?? null,
       status: "pending",
     })
