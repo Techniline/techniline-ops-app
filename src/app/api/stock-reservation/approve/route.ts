@@ -10,9 +10,10 @@ interface ApproveBody {
   grace_notes?: string;
 }
 
-interface EtaBody {
+interface PatchBody {
   impo_id: string;
-  eta: string;
+  eta?: string;
+  status?: "pending" | "in_transit" | "arrived" | "cancelled";
 }
 
 // ── POST /api/stock-reservation/approve — approve or reject (manager only) ───
@@ -110,25 +111,29 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json({ ok: true });
 }
 
-// ── PATCH /api/stock-reservation/approve — update IMPO ETA (manager only) ───
+// ── PATCH /api/stock-reservation/approve — update IMPO ETA or status (manager only) ──
 
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await authorizeStockReservation(request, true);
   if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   const svc = auth.serviceClient;
 
-  let body: EtaBody;
+  let body: PatchBody;
   try {
-    body = await request.json() as EtaBody;
+    body = await request.json() as PatchBody;
   } catch {
     return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { impo_id, eta } = body;
+  const { impo_id, eta, status } = body;
   if (!impo_id) return Response.json({ ok: false, error: "impo_id required." }, { status: 400 });
-  if (!eta) return Response.json({ ok: false, error: "eta required." }, { status: 400 });
+  if (!eta && !status) return Response.json({ ok: false, error: "eta or status required." }, { status: 400 });
 
-  const { error } = await svc.from("impos").update({ eta }).eq("id", impo_id);
+  const patch: Record<string, string> = {};
+  if (eta) patch.eta = eta;
+  if (status) patch.status = status;
+
+  const { error } = await svc.from("impos").update(patch).eq("id", impo_id);
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
   return Response.json({ ok: true });
 }
