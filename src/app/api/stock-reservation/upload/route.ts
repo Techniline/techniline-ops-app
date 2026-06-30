@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extractText, getDocumentProxy } from "unpdf";
 
+import { logAiUsage } from "@/lib/logistics/aiUsage";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import type { UploadConfirmPayload, UploadPreview, UploadPreviewLine } from "@/lib/stock-reservation/types";
 
@@ -217,14 +218,18 @@ function regexExtract(text: string): { impo_number: string; vendor: string | nul
   return { impo_number: impoNumber, vendor, po_date: poDate, lines };
 }
 
+const AI_MODEL = "claude-haiku-4-5-20251001";
+
 const AI_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF text.
 
-The PDF text extractor produces a SINGLE flat string (no newlines). Each item row follows this format:
-  "{Sr} {Qty.2decimals}{ModelCode} {Description} {Brand}"
-  e.g. "1 14.00PMP1680S Mixer Powered 10 CH (6 Mono & 2 Stereo) 2x800W Peak... Behringer"
+The PDF text extractor produces a SINGLE flat string (no newlines). The document contains numbered product line items. Each item has:
+- A sequential Sr number (1, 2, 3…)
+- A quantity (may be integer or decimal like 14.00 or 2)
+- A model/item code (alphanumeric, e.g. PMP1680S, 1002SFX, iQ15, FBT60)
+- A description
+- A brand name at the end (e.g. Behringer, Turbosound, Midas, TC Electronics, TC Helicon, Klark Teknik, Wharfedale, Crown, QSC)
 
-The Qty and ModelCode are MERGED with no space between them. Brand appears at the END of each item.
-Known brands: Behringer, Turbosound, Midas, TC Electronics, TC Helicon, Klark Teknik, Wharfedale.
+IMPORTANT: The Qty and ModelCode may be MERGED with no space between them (e.g. "14.00PMP1680S" means qty=14, model=PMP1680S). Or they may be separated by a space. Parse carefully regardless of format.
 
 Return ONLY a raw JSON object (no markdown, no explanation) with this exact shape:
 {
@@ -232,15 +237,17 @@ Return ONLY a raw JSON object (no markdown, no explanation) with this exact shap
   "vendor": "Supplier Company Name or null",
   "po_date": "YYYY-MM-DD or null",
   "items": [
-    { "brand": "Behringer", "item_code": "PMP1680S", "description": "Mixer Powered...", "qty": 14 }
+    { "brand": "Behringer", "item_code": "PMP1680S", "description": "Mixer Powered 10 CH...", "qty": 14 }
   ]
 }
 
 Rules:
-- Include every numbered product row (Sr 1, 2, 3…). Do NOT skip any.
-- item_code: the Model No immediately after the Qty (e.g. PMP1680S, 1002SFX, iQ15)
-- qty: integer quantity
-- Skip "Terms & Conditions", page headers, and footer text.`;
+- Include EVERY numbered product row (Sr 1, 2, 3… all the way to the last one). Do NOT skip any.
+- item_code: the Model No for the product (letters+digits, e.g. PMP1680S, 1002SFX, iQ15)
+- qty: integer quantity (round decimals like 14.00 → 14)
+- description: product description text only, no brand, no codes
+- brand: one of the known brands above, or null if unclear
+- Skip page headers, "Terms & Conditions", "Stamp & Signature", totals rows, and any non-product text.`;
 
 async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise<UploadPreview> {
   const doc = await getDocumentProxy(pdf);
@@ -251,20 +258,13 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
     throw new Error("Could not read text from this PDF. Make sure it is a text-based PDF (not a scanned image).");
   }
 
-  // ── Regex parser (fast, no API cost) ─────────────────────────────────────
-  const extracted = regexExtract(docText);
-
-  // If regex found items, use them directly — no API call needed
-  if (extracted.lines.length > 0) {
-    return { ...extracted, file_name: fileName };
-  }
-
-  // ── AI fallback (when regex finds nothing — different PDF format) ─────────
+  // ── AI primary parser ─────────────────────────────────────────────────────
+  // Regex is brittle across PDF formats; AI handles any layout variation.
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       const client = new Anthropic();
       const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: AI_MODEL,
         max_tokens: 8192,
         system: "You are a data extraction assistant. Always respond with valid JSON only — no markdown fences, no explanation.",
         messages: [
@@ -299,21 +299,25 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
           }));
 
         if (lines.length > 0) {
-          const fallback = regexExtract(docText);
+          await logAiUsage("stock-reservation-upload", AI_MODEL, response.usage);
+          // Use regex only to fill in header fields if AI left them blank
+          const header = regexExtract(docText);
           return {
-            impo_number: raw.impo_number?.trim() || fallback.impo_number,
-            vendor:      raw.vendor?.trim() || fallback.vendor,
-            po_date:     raw.po_date?.trim() || fallback.po_date,
+            impo_number: raw.impo_number?.trim() || header.impo_number,
+            vendor:      raw.vendor?.trim() || header.vendor,
+            po_date:     raw.po_date?.trim() || header.po_date,
             lines,
             file_name:   fileName,
           };
         }
       }
-    } catch {
-      // AI failed — fall through to regex
+    } catch (e) {
+      console.error("[stock-reservation/upload] AI parse failed:", e instanceof Error ? e.message : e);
+      // Fall through to regex
     }
   }
 
-  // Both regex and AI failed — return what regex found (may be empty)
+  // ── Regex fallback (no API key, or AI failed) ─────────────────────────────
+  const extracted = regexExtract(docText);
   return { ...extracted, file_name: fileName };
 }

@@ -9,7 +9,7 @@ import {
   fetchAllLinesWithAvailability,
   fetchMyReservations,
 } from "@/lib/stock-reservation";
-import type { ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
+import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,47 @@ function statusBadge(status: string) {
     cancelled: "bg-slate-100 text-slate-500",
   };
   return map[status] ?? "bg-slate-100 text-slate-500";
+}
+
+// ── Combined SKU type (same item_code merged within one IMPO) ─────────────────
+
+interface CombinedLine {
+  item_code: string;
+  brand: string | null;
+  description: string | null;
+  qty_incoming: number;
+  qty_available: number;
+  impo: Impo;
+  impo_id: string;
+  primaryLine: ImpoLineWithAvailability; // the underlying line with most availability
+}
+
+function combineSameSkus(lines: ImpoLineWithAvailability[]): CombinedLine[] {
+  const map = new Map<string, CombinedLine>();
+  for (const line of lines) {
+    const key = line.item_code.toLowerCase();
+    const existing = map.get(key);
+    if (existing) {
+      map.set(key, {
+        ...existing,
+        qty_incoming:  existing.qty_incoming  + line.qty_incoming,
+        qty_available: existing.qty_available + line.qty_available,
+        primaryLine:   line.qty_available > existing.primaryLine.qty_available ? line : existing.primaryLine,
+      });
+    } else {
+      map.set(key, {
+        item_code:    line.item_code,
+        brand:        line.brand,
+        description:  line.description,
+        qty_incoming: line.qty_incoming,
+        qty_available: line.qty_available,
+        impo:         line.impo,
+        impo_id:      line.impo_id,
+        primaryLine:  line,
+      });
+    }
+  }
+  return Array.from(map.values());
 }
 
 // ── Reserve Modal ─────────────────────────────────────────────────────────────
@@ -214,6 +255,28 @@ function StockReservationPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Real-time ETA updates — when Grace saves a new ETA, update in place
+  useEffect(() => {
+    const channel = supabase
+      .channel("stock-reservation-impos-eta")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "impos" },
+        (payload) => {
+          const updated = payload.new as { id: string; eta: string | null };
+          setLines((prev) =>
+            prev.map((line) =>
+              line.impo_id === updated.id
+                ? { ...line, impo: { ...line.impo, eta: updated.eta } }
+                : line
+            )
+          );
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // Group lines by ETA date
   const allEtas = useMemo(() => {
     const seen = new Set<string>();
@@ -236,21 +299,23 @@ function StockReservationPage() {
     });
   }, [lines, search, filterEta]);
 
-  // Group by impo_id then eta
+  // Group by impo_id, combine duplicate SKUs within each IMPO, sort by ETA
   const grouped = useMemo(() => {
-    const map = new Map<string, { impoNumber: string; eta: string | null; lines: ImpoLineWithAvailability[] }>();
+    const map = new Map<string, { impoNumber: string; eta: string | null; rawLines: ImpoLineWithAvailability[] }>();
     for (const l of filteredLines) {
-      if (!map.has(l.impo_id)) map.set(l.impo_id, { impoNumber: l.impo.impo_number, eta: l.impo.eta, lines: [] });
-      map.get(l.impo_id)!.lines.push(l);
+      if (!map.has(l.impo_id)) map.set(l.impo_id, { impoNumber: l.impo.impo_number, eta: l.impo.eta, rawLines: [] });
+      map.get(l.impo_id)!.rawLines.push(l);
     }
-    return Array.from(map.values()).sort((a, b) => (a.eta ?? "").localeCompare(b.eta ?? ""));
+    return Array.from(map.values())
+      .map((g) => ({ impoNumber: g.impoNumber, eta: g.eta, lines: combineSameSkus(g.rawLines) }))
+      .sort((a, b) => (a.eta ?? "").localeCompare(b.eta ?? ""));
   }, [filteredLines]);
 
-  function handleReserveClick(line: ImpoLineWithAvailability) {
-    if (line.qty_available <= 0) {
-      setSoldOutLine(line);
+  function handleReserveClick(combined: CombinedLine) {
+    if (combined.qty_available <= 0) {
+      setSoldOutLine(combined.primaryLine);
     } else {
-      setReservingLine(line);
+      setReservingLine(combined.primaryLine);
     }
   }
 
@@ -334,24 +399,29 @@ function StockReservationPage() {
 
               {/* SKU grid */}
               <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {group.lines.map((line) => {
-                  const pct = line.qty_incoming > 0 ? Math.round((line.qty_available / line.qty_incoming) * 100) : 0;
-                  const soldOut = line.qty_available <= 0;
+                {group.lines.map((combined) => {
+                  const pct = combined.qty_incoming > 0 ? Math.round((combined.qty_available / combined.qty_incoming) * 100) : 0;
+                  const soldOut = combined.qty_available <= 0;
                   return (
                     <div
-                      key={line.id}
+                      key={`${combined.impo_id}-${combined.item_code}`}
                       className={`flex flex-col rounded-xl border p-3 transition-all ${
                         soldOut
                           ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/50"
                           : "border-indigo-100 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
                       }`}
                     >
-                      {line.brand && (
-                        <span className="mb-1 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{line.brand}</span>
+                      {combined.brand && (
+                        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{combined.brand}</span>
                       )}
-                      <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{line.item_code}</p>
-                      {line.description && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{line.description}</p>
+                      <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{combined.item_code}</p>
+                      {/* IMPO + ETA */}
+                      <p className="mt-0.5 truncate text-[10px] text-slate-400">
+                        {combined.impo.impo_number}
+                        {combined.impo.eta && <span className="ml-1">· {fmtDate(combined.impo.eta)}</span>}
+                      </p>
+                      {combined.description && (
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">{combined.description}</p>
                       )}
 
                       {/* Availability bar */}
@@ -364,11 +434,11 @@ function StockReservationPage() {
                         </div>
                       </div>
                       <p className={`text-xs font-medium ${soldOut ? "text-red-500" : pct <= 25 ? "text-amber-600" : "text-emerald-600"}`}>
-                        {soldOut ? "Fully reserved" : `${line.qty_available} of ${line.qty_incoming} available`}
+                        {soldOut ? "Fully reserved" : `${combined.qty_available} of ${combined.qty_incoming} available`}
                       </p>
 
                       <button
-                        onClick={() => handleReserveClick(line)}
+                        onClick={() => handleReserveClick(combined)}
                         className={`mt-3 w-full rounded-lg py-1.5 text-xs font-semibold transition-colors ${
                           soldOut
                             ? "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-400"
