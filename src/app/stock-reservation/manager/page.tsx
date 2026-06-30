@@ -901,7 +901,7 @@ function ManagerPage() {
                       <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(impo.created_at.slice(0, 10))}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-3">
-                          <a href={`/stock-reservation?impo=${impo.id}`} className="text-xs text-indigo-500 hover:underline">View lines →</a>
+                          <a href={`/stock-reservation/manager/lines?impo=${impo.id}`} className="text-xs text-indigo-500 hover:underline">View lines →</a>
                           {impoView === "active" && (
                             <button
                               onClick={() => markReceived(impo.id)}
