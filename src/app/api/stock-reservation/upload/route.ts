@@ -11,15 +11,21 @@ export const maxDuration = 60;
 // ── POST /api/stock-reservation/upload?action=preview|confirm ─────────────────
 
 export async function POST(request: Request): Promise<Response> {
-  const auth = await authorizeStockReservation(request, true);
-  if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+  try {
+    const auth = await authorizeStockReservation(request, true);
+    if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
-  const url = new URL(request.url);
-  const action = url.searchParams.get("action") ?? "preview";
+    const url = new URL(request.url);
+    const action = url.searchParams.get("action") ?? "preview";
 
-  if (action === "preview") return handlePreview(request);
-  if (action === "confirm") return handleConfirm(request, auth);
-  return Response.json({ ok: false, error: "Unknown action." }, { status: 400 });
+    if (action === "preview") return handlePreview(request);
+    if (action === "confirm") return handleConfirm(request, auth);
+    return Response.json({ ok: false, error: "Unknown action." }, { status: 400 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[stock-reservation/upload]", msg);
+    return Response.json({ ok: false, error: `Server error: ${msg}` }, { status: 500 });
+  }
 }
 
 // ── Preview: parse the PO PDF ─────────────────────────────────────────────────
