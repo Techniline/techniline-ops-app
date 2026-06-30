@@ -6,8 +6,8 @@ export type {
   ImpoStatus,
   StockReservation,
   ReservationStatus,
-  UploadPreviewGroup,
   UploadPreviewLine,
+  UploadPreview,
   UploadConfirmPayload,
 } from "./types";
 

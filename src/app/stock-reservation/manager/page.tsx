@@ -12,8 +12,7 @@ import {
   fetchAllReservations,
   fetchPendingReservations,
 } from "@/lib/stock-reservation";
-import type { Impo, StockReservation } from "@/lib/stock-reservation";
-import type { UploadPreviewGroup, UploadConfirmPayload } from "@/lib/stock-reservation";
+import type { Impo, StockReservation, UploadPreviewLine, UploadConfirmPayload } from "@/lib/stock-reservation";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -42,11 +41,18 @@ interface UploadPanelProps {
   onDone: () => void;
 }
 
+interface ParsedPreview {
+  impo_number: string;
+  vendor: string | null;
+  po_date: string | null;
+  lines: UploadPreviewLine[];
+  file_name: string;
+}
+
 function UploadPanel({ token, onDone }: UploadPanelProps) {
   const [step, setStep] = useState<"select" | "preview" | "saving">("select");
-  const [groups, setGroups] = useState<UploadPreviewGroup[]>([]);
-  const [fileName, setFileName] = useState("");
-  const [editedGroups, setEditedGroups] = useState<Array<{ impo_number: string; eta: string }>>([]);
+  const [preview, setPreview] = useState<ParsedPreview | null>(null);
+  const [editedImpo, setEditedImpo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,11 +68,10 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
         headers: { Authorization: `Bearer ${token}` },
         body: form,
       });
-      const data = await res.json() as { ok: boolean; error?: string; groups?: UploadPreviewGroup[]; fileName?: string };
+      const data = await res.json() as ParsedPreview & { ok: boolean; error?: string };
       if (!data.ok) { setError(data.error ?? "Upload failed."); return; }
-      setGroups(data.groups ?? []);
-      setEditedGroups((data.groups ?? []).map((g) => ({ impo_number: g.suggestedImpoNumber, eta: g.eta })));
-      setFileName(data.fileName ?? file.name);
+      setPreview(data);
+      setEditedImpo(data.impo_number ?? "");
       setStep("preview");
     } catch {
       setError("Network error during upload.");
@@ -76,15 +81,13 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
   }
 
   async function confirm() {
+    if (!preview) return;
     setStep("saving");
     setError(null);
     const payload: UploadConfirmPayload = {
-      source_file_name: fileName,
-      groups: groups.map((g, i) => ({
-        impo_number: editedGroups[i].impo_number,
-        eta: editedGroups[i].eta,
-        lines: g.lines,
-      })),
+      impo_number: editedImpo.trim(),
+      lines: preview.lines,
+      source_file_name: preview.file_name,
     };
     try {
       const res = await fetch("/api/stock-reservation/upload?action=confirm", {
@@ -92,7 +95,7 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
-      const data = await res.json() as { ok: boolean; error?: string; savedImpos?: number; savedLines?: number };
+      const data = await res.json() as { ok: boolean; error?: string };
       if (!data.ok) { setError(data.error ?? "Confirm failed."); setStep("preview"); return; }
       onDone();
     } catch {
@@ -100,6 +103,8 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
       setStep("preview");
     }
   }
+
+  function reset() { setStep("select"); setPreview(null); setEditedImpo(""); setError(null); }
 
   if (step === "select") {
     return (
@@ -112,17 +117,20 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".xlsx,.xls,.csv"
+          accept=".pdf"
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
         {uploading ? (
-          <p className="text-sm text-slate-500">Parsing file…</p>
+          <div className="flex flex-col items-center gap-2">
+            <svg className="h-6 w-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <p className="text-sm text-slate-500">Parsing PDF…</p>
+          </div>
         ) : (
           <>
             <svg className="mx-auto mb-3 h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Drop Excel file here or click to browse</p>
-            <p className="mt-1 text-xs text-slate-400">Columns: Brand, Item Code, Description, Category, Qty, ETA (and optionally IMPO)</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Drop Purchase Order PDF here or click to browse</p>
+            <p className="mt-1 text-xs text-slate-400">One PDF per IMPO · IMPO number is read from the document automatically</p>
           </>
         )}
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -136,86 +144,66 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-slate-100">Review & Confirm</h3>
-          <p className="text-sm text-slate-400">{fileName} · {groups.length} group{groups.length !== 1 ? "s" : ""} · {groups.reduce((s, g) => s + g.lines.length, 0)} SKUs</p>
+          <p className="text-sm text-slate-400">
+            {preview?.file_name}
+            {preview?.vendor && <> · {preview.vendor}</>}
+            {preview?.po_date && <> · PO date: {preview.po_date}</>}
+            {" · "}{preview?.lines.length ?? 0} SKUs
+          </p>
         </div>
-        <button onClick={() => { setStep("select"); setGroups([]); setError(null); }} className="text-sm text-slate-400 hover:text-slate-700">Back</button>
+        <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-700">Back</button>
       </div>
 
-      <p className="mb-3 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-        Review the IMPO numbers below. Each group represents one shipment. You can edit the IMPO number and ETA before saving.
-      </p>
+      <div className="mb-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">IMPO Number <span className="text-slate-400">(extracted from document — edit if needed)</span></span>
+          <input
+            type="text"
+            value={editedImpo}
+            onChange={(e) => setEditedImpo(e.target.value)}
+            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+        <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
+          ETA is not in the PO — set it after saving from the IMPO list.
+        </p>
+      </div>
 
-      <div className="space-y-4 max-h-96 overflow-y-auto">
-        {groups.map((g, i) => (
-          <div key={i} className="rounded-xl border border-slate-100 p-4 dark:border-slate-800">
-            <div className="mb-3 flex flex-wrap gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-500">IMPO Number</span>
-                <input
-                  type="text"
-                  value={editedGroups[i]?.impo_number ?? ""}
-                  onChange={(e) => {
-                    const next = [...editedGroups];
-                    next[i] = { ...next[i], impo_number: e.target.value };
-                    setEditedGroups(next);
-                  }}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-500">ETA</span>
-                <input
-                  type="date"
-                  value={editedGroups[i]?.eta ?? ""}
-                  onChange={(e) => {
-                    const next = [...editedGroups];
-                    next[i] = { ...next[i], eta: e.target.value };
-                    setEditedGroups(next);
-                  }}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
-                />
-              </label>
-              <span className="self-end rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800">
-                {g.lines.length} SKUs
-              </span>
-            </div>
-            <div className="max-h-32 overflow-y-auto rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
-              <table className="w-full text-xs">
-                <thead className="text-slate-400">
-                  <tr>
-                    <th className="pb-1 text-left">Item Code</th>
-                    <th className="pb-1 text-left">Brand</th>
-                    <th className="pb-1 text-right">Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.lines.slice(0, 20).map((l, li) => (
-                    <tr key={li}>
-                      <td className="py-0.5 font-medium text-slate-700 dark:text-slate-300">{l.item_code}</td>
-                      <td className="py-0.5 text-slate-400">{l.brand ?? "—"}</td>
-                      <td className="py-0.5 text-right text-slate-600">{l.qty_incoming}</td>
-                    </tr>
-                  ))}
-                  {g.lines.length > 20 && (
-                    <tr><td colSpan={3} className="py-0.5 text-slate-400 text-center">… and {g.lines.length - 20} more</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
+      <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-800">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-slate-50 text-slate-400 dark:bg-slate-800">
+            <tr>
+              <th className="px-3 py-2 text-left">#</th>
+              <th className="px-3 py-2 text-left">Model No</th>
+              <th className="px-3 py-2 text-left">Brand</th>
+              <th className="px-3 py-2 text-left">Description</th>
+              <th className="px-3 py-2 text-right">Qty</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {(preview?.lines ?? []).map((l, i) => (
+              <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <td className="px-3 py-1.5 text-slate-400">{i + 1}</td>
+                <td className="px-3 py-1.5 font-medium text-slate-800 dark:text-slate-200">{l.item_code}</td>
+                <td className="px-3 py-1.5 text-slate-500">{l.brand ?? "—"}</td>
+                <td className="px-3 py-1.5 text-slate-500 max-w-xs truncate">{l.description ?? "—"}</td>
+                <td className="px-3 py-1.5 text-right font-medium text-slate-700 dark:text-slate-300">{l.qty_incoming}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={() => { setStep("select"); setGroups([]); }} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button onClick={reset} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Cancel</button>
         <button
           onClick={confirm}
-          disabled={step === "saving" || editedGroups.some((g) => !g.impo_number.trim() || !g.eta)}
+          disabled={step === "saving" || !editedImpo.trim() || !preview?.lines.length}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >
-          {step === "saving" ? "Saving…" : "Save to System"}
+          {step === "saving" ? "Saving…" : `Save ${preview?.lines.length ?? 0} SKUs`}
         </button>
       </div>
     </div>
@@ -354,7 +342,7 @@ function ManagerPage() {
 
   const nextEta = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const upcoming = impos.filter((i) => i.eta >= today && i.status !== "cancelled").sort((a, b) => a.eta.localeCompare(b.eta));
+    const upcoming = impos.filter((i) => i.eta != null && i.eta >= today && i.status !== "cancelled").sort((a, b) => a.eta!.localeCompare(b.eta!));
     return upcoming[0]?.eta ?? null;
   }, [impos]);
 
@@ -510,7 +498,7 @@ function ManagerPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-slate-600 dark:text-slate-400">{fmtDate(impo.eta)}</span>
                           <button
-                            onClick={() => setEditingEta({ impoId: impo.id, eta: impo.eta })}
+                            onClick={() => setEditingEta({ impoId: impo.id, eta: impo.eta ?? "" })}
                             className="text-slate-300 hover:text-indigo-500 transition-colors"
                             title="Edit ETA"
                           >

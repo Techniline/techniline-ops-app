@@ -4,7 +4,7 @@ export type ReservationStatus = "pending" | "approved" | "rejected" | "cancelled
 export interface Impo {
   id: string;
   impo_number: string;
-  eta: string;              // ISO date string
+  eta: string | null;       // ISO date string; null until Grace sets it
   status: ImpoStatus;
   notes: string | null;
   uploaded_by: string | null;
@@ -52,13 +52,6 @@ export interface ImpoWithLines extends Impo {
   lines: ImpoLineWithAvailability[];
 }
 
-/** Shape used by the upload preview step */
-export interface UploadPreviewGroup {
-  eta: string;
-  suggestedImpoNumber: string;
-  lines: UploadPreviewLine[];
-}
-
 export interface UploadPreviewLine {
   brand: string | null;
   item_code: string;
@@ -67,12 +60,18 @@ export interface UploadPreviewLine {
   qty_incoming: number;
 }
 
-/** Shape sent to the confirm-upload endpoint */
+/** Shape returned by the parse step */
+export interface UploadPreview {
+  impo_number: string;
+  vendor: string | null;
+  po_date: string | null;
+  lines: UploadPreviewLine[];
+  file_name: string;
+}
+
+/** Shape sent to the confirm step */
 export interface UploadConfirmPayload {
-  groups: Array<{
-    impo_number: string;
-    eta: string;
-    lines: UploadPreviewLine[];
-  }>;
+  impo_number: string;    // Grace can edit before confirming
+  lines: UploadPreviewLine[];
   source_file_name: string;
 }

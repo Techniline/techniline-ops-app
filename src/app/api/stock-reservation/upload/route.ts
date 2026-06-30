@@ -1,31 +1,32 @@
-import * as XLSX from "xlsx";
+import Anthropic from "@anthropic-ai/sdk";
+import { extractText, getDocumentProxy } from "unpdf";
 
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
-import type { UploadConfirmPayload, UploadPreviewGroup, UploadPreviewLine } from "@/lib/stock-reservation/types";
+import type { UploadConfirmPayload, UploadPreview, UploadPreviewLine } from "@/lib/stock-reservation/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // ── POST /api/stock-reservation/upload?action=preview|confirm ─────────────────
 
 export async function POST(request: Request): Promise<Response> {
-  const auth = await authorizeStockReservation(request, true); // manager only
+  const auth = await authorizeStockReservation(request, true);
   if (!auth) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
   const url = new URL(request.url);
   const action = url.searchParams.get("action") ?? "preview";
 
-  if (action === "preview") return handlePreview(request, auth.serviceClient);
+  if (action === "preview") return handlePreview(request);
   if (action === "confirm") return handleConfirm(request, auth);
   return Response.json({ ok: false, error: "Unknown action." }, { status: 400 });
 }
 
-// ── Preview: parse Excel, return grouped rows ─────────────────────────────────
+// ── Preview: parse the PO PDF ─────────────────────────────────────────────────
 
-async function handlePreview(request: Request, _svc: unknown) {
+async function handlePreview(request: Request) {
   let bytes: Uint8Array;
-  let fileName = "upload.xlsx";
+  let fileName = "upload.pdf";
   try {
     const form = await request.formData();
     const file = form.get("file");
@@ -37,50 +38,24 @@ async function handlePreview(request: Request, _svc: unknown) {
     return Response.json({ ok: false, error: "Could not read the upload." }, { status: 400 });
   }
 
-  let rows: ParsedRow[];
+  let preview: UploadPreview;
   try {
-    rows = parseExcel(bytes);
+    preview = await parsePurchaseOrderPdf(bytes, fileName);
   } catch (e) {
-    return Response.json({ ok: false, error: e instanceof Error ? e.message : "Could not parse Excel." }, { status: 400 });
+    return Response.json(
+      { ok: false, error: e instanceof Error ? e.message : "Could not parse the PDF." },
+      { status: 400 }
+    );
   }
 
-  if (rows.length === 0) {
-    return Response.json({ ok: false, error: "No data rows found in the file." }, { status: 400 });
+  if (preview.lines.length === 0) {
+    return Response.json({ ok: false, error: "No line items found in the PDF." }, { status: 400 });
   }
 
-  // Group by IMPO number (if column exists) or by ETA
-  const groupMap = new Map<string, { eta: string; impo: string; lines: UploadPreviewLine[] }>();
-  let groupCounter = 1;
-
-  for (const row of rows) {
-    const impoKey = row.impo_number?.trim() || "";
-    const etaKey = row.eta_raw ?? "";
-    const mapKey = impoKey || etaKey || "unknown";
-
-    if (!groupMap.has(mapKey)) {
-      const suggested = impoKey || `IMPO-${formatDateSlug(row.eta_raw)}-${String(groupCounter++).padStart(2, "0")}`;
-      groupMap.set(mapKey, { eta: row.eta_iso ?? "", impo: suggested, lines: [] });
-    }
-
-    groupMap.get(mapKey)!.lines.push({
-      brand: row.brand || null,
-      item_code: row.item_code,
-      description: row.description || null,
-      category: row.category || null,
-      qty_incoming: row.qty,
-    });
-  }
-
-  const groups: UploadPreviewGroup[] = Array.from(groupMap.values()).map((g) => ({
-    eta: g.eta,
-    suggestedImpoNumber: g.impo,
-    lines: g.lines,
-  }));
-
-  return Response.json({ ok: true, groups, fileName });
+  return Response.json({ ok: true, ...preview });
 }
 
-// ── Confirm: save IMPOs + lines to DB ────────────────────────────────────────
+// ── Confirm: save IMPO + lines to DB ─────────────────────────────────────────
 
 async function handleConfirm(
   request: Request,
@@ -94,186 +69,187 @@ async function handleConfirm(
     return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  if (!payload.groups?.length) {
-    return Response.json({ ok: false, error: "No groups provided." }, { status: 400 });
+  if (!payload.impo_number?.trim()) {
+    return Response.json({ ok: false, error: "IMPO number is required." }, { status: 400 });
+  }
+  if (!payload.lines?.length) {
+    return Response.json({ ok: false, error: "No lines provided." }, { status: 400 });
   }
 
-  // Validate IMPO numbers are filled
-  for (const g of payload.groups) {
-    if (!g.impo_number?.trim()) {
-      return Response.json({ ok: false, error: "All groups must have an IMPO number." }, { status: 400 });
-    }
-    if (!g.eta) {
-      return Response.json({ ok: false, error: "All groups must have an ETA date." }, { status: 400 });
+  // Upsert IMPO (by impo_number — idempotent re-upload; eta stays null until Grace sets it)
+  const { data: impoData, error: impoErr } = await svc
+    .from("impos")
+    .upsert(
+      {
+        impo_number: payload.impo_number.trim(),
+        eta: null,
+        status: "pending",
+        uploaded_by: auth!.uid,
+        source_file_name: payload.source_file_name ?? null,
+        total_skus: payload.lines.length,
+      },
+      { onConflict: "impo_number" }
+    )
+    .select("id")
+    .single();
+
+  if (impoErr || !impoData) {
+    return Response.json(
+      { ok: false, error: `Failed to save IMPO: ${impoErr?.message}` },
+      { status: 500 }
+    );
+  }
+
+  const impoId = (impoData as { id: string }).id;
+
+  // Replace all lines (re-upload = replace)
+  await svc.from("impo_lines").delete().eq("impo_id", impoId);
+
+  const lines = payload.lines.map((l) => ({
+    impo_id: impoId,
+    brand: l.brand ?? null,
+    item_code: l.item_code,
+    description: l.description ?? null,
+    category: l.category ?? null,
+    qty_incoming: l.qty_incoming,
+  }));
+
+  for (let i = 0; i < lines.length; i += 100) {
+    const { error: lineErr } = await svc.from("impo_lines").insert(lines.slice(i, i + 100));
+    if (lineErr) {
+      return Response.json(
+        { ok: false, error: `Failed to save lines: ${lineErr.message}` },
+        { status: 500 }
+      );
     }
   }
 
-  let savedImpos = 0;
-  let savedLines = 0;
+  return Response.json({ ok: true, impo_number: payload.impo_number, saved_lines: lines.length });
+}
 
-  for (const group of payload.groups) {
-    // Upsert IMPO (by impo_number — idempotent re-upload)
-    const { data: impoData, error: impoErr } = await svc
-      .from("impos")
-      .upsert(
-        {
-          impo_number: group.impo_number.trim(),
-          eta: group.eta,
-          status: "pending",
-          uploaded_by: auth!.uid,
-          source_file_name: payload.source_file_name ?? null,
-          total_skus: group.lines.length,
+// ── PDF parser ────────────────────────────────────────────────────────────────
+
+const PO_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    impo_number: {
+      type: "string",
+      description: "The full document number, e.g. 'IMPO/2600036'.",
+    },
+    vendor: {
+      type: ["string", "null"],
+      description: "Vendor / supplier company name.",
+    },
+    po_date: {
+      type: ["string", "null"],
+      description: "Purchase order date as YYYY-MM-DD if parseable, else null.",
+    },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          brand:       { type: ["string", "null"], description: "Brand name (e.g. Wharfedale, Quad Industrial)." },
+          item_code:   { type: "string",           description: "Model No / item code (e.g. CPD3600, DELTAX215)." },
+          description: { type: ["string", "null"], description: "Full product description." },
+          qty:         { type: "number",           description: "Order quantity as a number." },
         },
-        { onConflict: "impo_number" }
-      )
-      .select("id")
-      .single();
+        required: ["brand", "item_code", "description", "qty"],
+      },
+    },
+  },
+  required: ["impo_number", "vendor", "po_date", "items"],
+} as const;
 
-    if (impoErr || !impoData) {
-      return Response.json({ ok: false, error: `Failed to save IMPO ${group.impo_number}: ${impoErr?.message}` }, { status: 500 });
-    }
+const PO_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF.
 
-    const impoId = (impoData as { id: string }).id;
+Extract:
+- impo_number: the document number in the format IMPO/XXXXXXX (e.g. "IMPO/2600036")
+- vendor: the supplier company name (e.g. "IAG Group LTD")
+- po_date: the date as YYYY-MM-DD (e.g. "2026-06-18"), null if unclear
+- items: every product line in the table with brand, item_code (Model No), description, and qty
 
-    // Delete existing lines for this IMPO (re-upload replaces)
-    await svc.from("impo_lines").delete().eq("impo_id", impoId);
+The PDF text may have jumbled columns — use judgement to pair item_code/brand/description/qty correctly.
+Each item row starts with a serial number (Sr). Brand sometimes appears on a separate line below the item.
+Skip header rows, footer text, totals, and Terms & Conditions lines.`;
 
-    // Insert lines in batches of 100
-    const lines = group.lines.map((l) => ({
-      impo_id: impoId,
-      brand: l.brand ?? null,
-      item_code: l.item_code,
-      description: l.description ?? null,
-      category: l.category ?? null,
-      qty_incoming: l.qty_incoming,
+/** Basic regex fallback — extracts IMPO number only, no line items. */
+function basicExtract(text: string): UploadPreview {
+  const m = text.match(/IMPO\/(\d+)/);
+  const impoNumber = m ? `IMPO/${m[1]}` : "IMPO/UNKNOWN";
+  const dateM = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const poDate = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : null;
+  return { impo_number: impoNumber, vendor: null, po_date: poDate, lines: [], file_name: "" };
+}
+
+async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise<UploadPreview> {
+  const doc = await getDocumentProxy(pdf);
+  const { text } = await extractText(doc, { mergePages: true });
+  const docText = (text ?? "").trim();
+
+  if (docText.length < 20) {
+    throw new Error("Could not read text from this PDF. Make sure it is a text-based PDF (not a scanned image).");
+  }
+
+  // Without AI key, fall back to basic extraction
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const basic = basicExtract(docText);
+    basic.file_name = fileName;
+    return basic;
+  }
+
+  const client = new Anthropic();
+  const params = {
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 4096,
+    output_config: { format: { type: "json_schema", schema: PO_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `${PO_PROMPT}\n\n---DOCUMENT TEXT---\n${docText.slice(0, 24000)}`,
+      },
+    ],
+  } as unknown as Anthropic.MessageCreateParamsNonStreaming;
+
+  const response = await client.messages.create(params);
+  const block = response.content.find((b) => b.type === "text");
+  if (!block || block.type !== "text") {
+    const basic = basicExtract(docText);
+    basic.file_name = fileName;
+    return basic;
+  }
+
+  let raw: {
+    impo_number?: string;
+    vendor?: string | null;
+    po_date?: string | null;
+    items?: Array<{ brand?: string | null; item_code?: string; description?: string | null; qty?: number }>;
+  };
+  try {
+    raw = JSON.parse(block.text);
+  } catch {
+    const basic = basicExtract(docText);
+    basic.file_name = fileName;
+    return basic;
+  }
+
+  const lines: UploadPreviewLine[] = (raw.items ?? [])
+    .filter((i) => i.item_code?.trim())
+    .map((i) => ({
+      brand:       i.brand?.trim() || null,
+      item_code:   (i.item_code ?? "").trim(),
+      description: i.description?.trim() || null,
+      category:    null,
+      qty_incoming: typeof i.qty === "number" && i.qty > 0 ? Math.round(i.qty) : 1,
     }));
 
-    for (let i = 0; i < lines.length; i += 100) {
-      const { error: lineErr } = await svc.from("impo_lines").insert(lines.slice(i, i + 100));
-      if (lineErr) {
-        return Response.json({ ok: false, error: `Failed to save lines for IMPO ${group.impo_number}: ${lineErr.message}` }, { status: 500 });
-      }
-    }
-
-    savedImpos++;
-    savedLines += lines.length;
-  }
-
-  return Response.json({ ok: true, savedImpos, savedLines });
-}
-
-// ── Excel parser ──────────────────────────────────────────────────────────────
-
-interface ParsedRow {
-  impo_number: string | null;
-  brand: string | null;
-  item_code: string;
-  description: string | null;
-  category: string | null;
-  qty: number;
-  eta_raw: string | null;
-  eta_iso: string | null;
-}
-
-function parseExcel(bytes: Uint8Array): ParsedRow[] {
-  const wb = XLSX.read(bytes, { type: "array", cellDates: true });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) throw new Error("Workbook has no sheets.");
-  const ws = wb.Sheets[sheetName];
-  const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-  if (raw.length < 2) throw new Error("Sheet appears empty.");
-
-  // Find header row (first row with recognisable column names)
-  const headerRow = (raw[0] as unknown[]).map((c) => String(c).trim().toLowerCase());
-
-  const colIdx = (names: string[]) => {
-    for (const n of names) {
-      const i = headerRow.findIndex((h) => h.includes(n));
-      if (i !== -1) return i;
-    }
-    return -1;
+  return {
+    impo_number: raw.impo_number?.trim() || basicExtract(docText).impo_number,
+    vendor:      raw.vendor?.trim() || null,
+    po_date:     raw.po_date?.trim() || null,
+    lines,
+    file_name:   fileName,
   };
-
-  const brandCol   = colIdx(["brand"]);
-  const codeCol    = colIdx(["item code", "sku", "code", "model"]);
-  const descCol    = colIdx(["description", "desc", "name"]);
-  const catCol     = colIdx(["category", "cat"]);
-  const qtyCol     = colIdx(["qty", "quantity"]);
-  const etaCol     = colIdx(["eta", "arrival", "date"]);
-  const impoCol    = colIdx(["impo"]);
-
-  if (codeCol === -1) throw new Error("Could not find an Item Code column (looked for: item code, sku, code, model).");
-  if (qtyCol  === -1) throw new Error("Could not find a Qty column (looked for: qty, quantity).");
-
-  const rows: ParsedRow[] = [];
-
-  for (let i = 1; i < raw.length; i++) {
-    const row = raw[i] as unknown[];
-    const code = String(row[codeCol] ?? "").trim();
-    if (!code) continue;
-
-    const qtyRaw = row[qtyCol];
-    const qty = Number(qtyRaw);
-    if (!qty || qty <= 0) continue;
-
-    const etaRaw = etaCol !== -1 ? row[etaCol] : null;
-    const { raw: etaRawStr, iso: etaIso } = parseEta(etaRaw);
-
-    rows.push({
-      impo_number: impoCol !== -1 ? String(row[impoCol] ?? "").trim() || null : null,
-      brand:       brandCol !== -1 ? String(row[brandCol] ?? "").trim() || null : null,
-      item_code:   code,
-      description: descCol !== -1 ? String(row[descCol] ?? "").trim() || null : null,
-      category:    catCol !== -1 ? String(row[catCol] ?? "").trim() || null : null,
-      qty,
-      eta_raw:     etaRawStr,
-      eta_iso:     etaIso,
-    });
-  }
-
-  return rows;
-}
-
-function parseEta(val: unknown): { raw: string | null; iso: string | null } {
-  if (!val && val !== 0) return { raw: null, iso: null };
-
-  // JS Date from cellDates:true
-  if (val instanceof Date) {
-    const iso = val.toISOString().slice(0, 10);
-    return { raw: iso, iso };
-  }
-
-  const s = String(val).trim();
-  if (!s) return { raw: null, iso: null };
-
-  // Try ISO: 2026-07-03
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { raw: s, iso: s };
-
-  // Try d/m/yyyy or d-m-yyyy
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) {
-    const iso = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-    return { raw: s, iso };
-  }
-
-  // Excel serial number
-  const n = Number(s);
-  if (!isNaN(n) && n > 40000) {
-    const d = XLSX.SSF.parse_date_code(n);
-    if (d) {
-      const iso = `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
-      return { raw: s, iso };
-    }
-  }
-
-  return { raw: s, iso: null };
-}
-
-function formatDateSlug(raw: string | null): string {
-  if (!raw) return "TBD";
-  // e.g. "2026-07-03" → "2607"
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return `${m[1].slice(2)}${m[2]}`;
-  return raw.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase();
 }

@@ -238,12 +238,12 @@ function StockReservationPage() {
 
   // Group by impo_id then eta
   const grouped = useMemo(() => {
-    const map = new Map<string, { impoNumber: string; eta: string; lines: ImpoLineWithAvailability[] }>();
+    const map = new Map<string, { impoNumber: string; eta: string | null; lines: ImpoLineWithAvailability[] }>();
     for (const l of filteredLines) {
       if (!map.has(l.impo_id)) map.set(l.impo_id, { impoNumber: l.impo.impo_number, eta: l.impo.eta, lines: [] });
       map.get(l.impo_id)!.lines.push(l);
     }
-    return Array.from(map.values()).sort((a, b) => a.eta.localeCompare(b.eta));
+    return Array.from(map.values()).sort((a, b) => (a.eta ?? "").localeCompare(b.eta ?? ""));
   }, [filteredLines]);
 
   function handleReserveClick(line: ImpoLineWithAvailability) {
@@ -257,7 +257,7 @@ function StockReservationPage() {
   function nextAvailableForItem(itemCode: string, excludeImpoId: string): ImpoLineWithAvailability | null {
     return lines
       .filter((l) => l.item_code === itemCode && l.impo_id !== excludeImpoId && l.qty_available > 0)
-      .sort((a, b) => a.impo.eta.localeCompare(b.impo.eta))[0] ?? null;
+      .sort((a, b) => (a.impo.eta ?? "").localeCompare(b.impo.eta ?? ""))[0] ?? null;
   }
 
   async function cancelReservation(resId: string) {
