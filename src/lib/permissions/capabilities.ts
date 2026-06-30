@@ -36,7 +36,7 @@ export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
   // Vihan
   "c4abda49-13e9-41fd-acae-88acd4aa7fcb": "all",
   // Stock Reservation team
-  "8d93ded3-ac73-4456-9d76-d48a6d2736f7": ["stock_reservation", "stock_reservation_manager"], // Grace
+  "8d93ded3-ac73-4456-9d76-d48a6d2736f7": ["stock_reservation", "stock_reservation_manager", "lp_tracker"], // Grace
   "66141df5-410c-4202-8f71-7430776bbc13": ["stock_reservation"],                               // Manoj
   "61d62657-aea7-4e99-ae98-fcfba3d552f5": ["stock_reservation"],                               // Ashish
   "8fddb800-02c9-49a4-a1f4-14070b9ab7fe": ["stock_reservation"],                               // Nishantha
