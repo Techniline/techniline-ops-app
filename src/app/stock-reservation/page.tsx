@@ -14,7 +14,7 @@ import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/sto
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "card";
-type ResFilter = "all" | "pending" | "approved" | "rejected";
+type ResFilter = "active" | "pending" | "approved" | "rejected" | "history";
 
 function fmtDate(d: string | null) {
   if (!d) return "—";
@@ -259,7 +259,8 @@ function StockReservationPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
-  const [resFilter, setResFilter] = useState<ResFilter>("all");
+  const [resFilter, setResFilter] = useState<ResFilter>("active");
+  const [historyDays, setHistoryDays] = useState<30 | 90 | 365 | 0>(30);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -323,15 +324,27 @@ function StockReservationPage() {
   }, [lines, search]);
 
   const filteredReservations = useMemo(() => {
-    if (resFilter === "all") return myReservations;
-    return myReservations.filter((r) => r.status === resFilter);
-  }, [myReservations, resFilter]);
+    switch (resFilter) {
+      case "active":   return myReservations.filter((r) => r.status === "pending" || r.status === "approved");
+      case "pending":  return myReservations.filter((r) => r.status === "pending");
+      case "approved": return myReservations.filter((r) => r.status === "approved");
+      case "rejected": return myReservations.filter((r) => r.status === "rejected");
+      case "history": {
+        if (historyDays === 0) return myReservations;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - historyDays);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        return myReservations.filter((r) => r.created_at.slice(0, 10) >= cutoffStr);
+      }
+    }
+  }, [myReservations, resFilter, historyDays]);
 
   const resCounts = useMemo(() => ({
-    all: myReservations.length,
-    pending: myReservations.filter((r) => r.status === "pending").length,
+    active:   myReservations.filter((r) => r.status === "pending" || r.status === "approved").length,
+    pending:  myReservations.filter((r) => r.status === "pending").length,
     approved: myReservations.filter((r) => r.status === "approved").length,
     rejected: myReservations.filter((r) => r.status === "rejected").length,
+    history:  myReservations.length,
   }), [myReservations]);
 
   async function cancelReservation(resId: string) {
@@ -470,21 +483,42 @@ function StockReservationPage() {
       <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">My Reservations</h2>
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
-            {(["all", "pending", "approved", "rejected"] as ResFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setResFilter(f)}
-                className={`rounded-lg px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                  resFilter === f
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                }`}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Date scope — only visible on History tab */}
+            {resFilter === "history" && (
+              <select
+                value={historyDays}
+                onChange={(e) => setHistoryDays(Number(e.target.value) as 30 | 90 | 365 | 0)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
               >
-                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-                {resCounts[f] > 0 ? ` (${resCounts[f]})` : ""}
-              </button>
-            ))}
+                <option value={30}>Last 30 days</option>
+                <option value={90}>Last 90 days</option>
+                <option value={365}>Last 12 months</option>
+                <option value={0}>All time</option>
+              </select>
+            )}
+            <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+              {([
+                { key: "active",   label: "Active" },
+                { key: "pending",  label: "Pending" },
+                { key: "approved", label: "Approved" },
+                { key: "rejected", label: "Rejected" },
+                { key: "history",  label: "History" },
+              ] as { key: ResFilter; label: string }[]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setResFilter(key)}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
+                    resFilter === key
+                      ? "bg-indigo-600 text-white shadow"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {label}
+                  {resCounts[key] > 0 && key !== "history" ? ` (${resCounts[key]})` : ""}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -492,7 +526,11 @@ function StockReservationPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-900">
             {myReservations.length === 0
               ? "No reservations yet. Search above to make your first reservation."
-              : `No ${resFilter === "all" ? "" : resFilter + " "}reservations.`}
+              : resFilter === "active"
+              ? "No active reservations — all caught up."
+              : resFilter === "history"
+              ? "No reservations in this date range."
+              : `No ${resFilter} reservations.`}
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
