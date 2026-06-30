@@ -282,6 +282,10 @@ function StockReservationPage() {
     <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
       {/* Header */}
       <div className="mb-6">
+        <a href="/" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          Dashboard
+        </a>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Stock Reservation</h1>
         <p className="mt-1 text-sm text-slate-500">Reserve incoming stock from open IMPOs before it arrives.</p>
       </div>
