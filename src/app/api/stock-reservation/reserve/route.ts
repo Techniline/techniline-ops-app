@@ -37,54 +37,40 @@ export async function POST(request: Request): Promise<Response> {
   if (!impo_line_id) return Response.json({ ok: false, error: "impo_line_id required." }, { status: 400 });
   if (!qty_requested || qty_requested < 1) return Response.json({ ok: false, error: "qty_requested must be >= 1." }, { status: 400 });
 
-  // Fetch the line and compute current availability (with locking via service role)
-  const { data: line, error: lineErr } = await svc
-    .from("impo_lines")
-    .select("id, qty_incoming")
-    .eq("id", impo_line_id)
-    .single();
+  // Atomic check-and-insert via Postgres function.
+  // The function locks the impo_line row (FOR UPDATE) before reading reservation
+  // counts, so concurrent calls for the same line queue up — eliminating the
+  // read-then-write race condition that two separate API calls would have.
+  const { data, error: rpcErr } = await svc.rpc("create_reservation", {
+    p_impo_line_id:    impo_line_id,
+    p_requested_by:    auth.uid,
+    p_qty_requested:   qty_requested,
+    p_customer_ref:    customer_ref    ?? null,
+    p_customer_phone:  customer_phone  ?? null,
+    p_amount_paid:     typeof amount_paid === "number" ? amount_paid : 0,
+    p_payment_method:  payment_method  ?? null,
+    p_required_by_date: required_by_date ?? null,
+    p_quote_ref:       quote_ref       ?? null,
+    p_notes:           notes           ?? null,
+  });
 
-  if (lineErr || !line) return Response.json({ ok: false, error: "IMPO line not found." }, { status: 404 });
-
-  const { data: existing } = await svc
-    .from("stock_reservations")
-    .select("qty_requested")
-    .eq("impo_line_id", impo_line_id)
-    .in("status", ["pending", "approved"]);
-
-  const totalReserved = (existing ?? []).reduce((s: number, r: { qty_requested: number }) => s + r.qty_requested, 0);
-  const available = (line as { qty_incoming: number }).qty_incoming - totalReserved;
-
-  if (qty_requested > available) {
-    return Response.json(
-      { ok: false, error: `Only ${available} unit(s) available in this IMPO.`, available },
-      { status: 409 }
-    );
+  if (rpcErr) {
+    const msg = rpcErr.message ?? "";
+    // Parse the structured error thrown by the Postgres function
+    if (msg.includes("INSUFFICIENT_STOCK:")) {
+      const available = parseInt(msg.split(":")[1] ?? "0", 10);
+      return Response.json(
+        { ok: false, error: `Only ${available} unit(s) available in this IMPO.`, available },
+        { status: 409 }
+      );
+    }
+    if (msg.includes("not found")) {
+      return Response.json({ ok: false, error: "IMPO line not found." }, { status: 404 });
+    }
+    return Response.json({ ok: false, error: msg }, { status: 500 });
   }
 
-  const { data: res, error: insErr } = await svc
-    .from("stock_reservations")
-    .insert({
-      impo_line_id,
-      requested_by: auth.uid,
-      qty_requested,
-      customer_ref: customer_ref ?? null,
-      customer_phone: customer_phone ?? null,
-      amount_paid: typeof amount_paid === "number" ? amount_paid : 0,
-      payment_method: payment_method ?? null,
-      required_by_date: required_by_date ?? null,
-      quote_ref: quote_ref ?? null,
-      notes: notes ?? null,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !res) {
-    return Response.json({ ok: false, error: insErr?.message ?? "Insert failed." }, { status: 500 });
-  }
-
-  return Response.json({ ok: true, id: (res as { id: string }).id });
+  return Response.json({ ok: true, id: data as string });
 }
 
 // ── DELETE /api/stock-reservation/reserve — cancel own reservation ────────────
