@@ -9,7 +9,7 @@ import {
   fetchAllLinesWithAvailability,
   fetchMyReservations,
 } from "@/lib/stock-reservation";
-import type { ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
+import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -199,6 +199,49 @@ function InlineReserveForm({ line, token, onClose, onSuccess }: InlineReserveFor
   );
 }
 
+// ── Combined SKU type (same item_code merged within one IMPO) ─────────────────
+
+interface CombinedLine {
+  key: string;                             // composite key for expandedLineId
+  item_code: string;
+  brand: string | null;
+  description: string | null;
+  qty_incoming: number;
+  qty_available: number;
+  impo: Impo;
+  impo_id: string;
+  primaryLine: ImpoLineWithAvailability;   // line with most individual availability
+}
+
+function combineSameSkus(lines: ImpoLineWithAvailability[]): CombinedLine[] {
+  const map = new Map<string, CombinedLine>();
+  for (const line of lines) {
+    const k = `${line.impo_id}/${line.item_code.toLowerCase()}`;
+    const existing = map.get(k);
+    if (existing) {
+      map.set(k, {
+        ...existing,
+        qty_incoming:  existing.qty_incoming  + line.qty_incoming,
+        qty_available: existing.qty_available + line.qty_available,
+        primaryLine:   line.qty_available > existing.primaryLine.qty_available ? line : existing.primaryLine,
+      });
+    } else {
+      map.set(k, {
+        key: k,
+        item_code:     line.item_code,
+        brand:         line.brand,
+        description:   line.description,
+        qty_incoming:  line.qty_incoming,
+        qty_available: line.qty_available,
+        impo:          line.impo,
+        impo_id:       line.impo_id,
+        primaryLine:   line,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 function StockReservationPage() {
@@ -264,11 +307,11 @@ function StockReservationPage() {
     return { pending, approvedThisMonth, deposits };
   }, [myReservations]);
 
-  // Search results: only lines with qty_available > 0, matching query
-  const searchResults = useMemo(() => {
+  // Search results: filter → combine same SKU within same IMPO → return CombinedLine[]
+  const searchResults = useMemo((): CombinedLine[] => {
     const q = search.toLowerCase().trim();
     if (!q) return [];
-    return lines.filter(
+    const matching = lines.filter(
       (l) =>
         l.qty_available > 0 &&
         (l.item_code.toLowerCase().includes(q) ||
@@ -276,6 +319,7 @@ function StockReservationPage() {
           (l.description ?? "").toLowerCase().includes(q) ||
           l.impo.impo_number.toLowerCase().includes(q))
     );
+    return combineSameSkus(matching);
   }, [lines, search]);
 
   const filteredReservations = useMemo(() => {
@@ -369,43 +413,43 @@ function StockReservationPage() {
             </p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {searchResults.map((line) => (
-                <div key={line.id}>
+              {searchResults.map((combined) => (
+                <div key={combined.key}>
                   {/* Result row */}
                   <div className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                     <div className="min-w-0 flex-1">
-                      {line.brand && (
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{line.brand}</p>
+                      {combined.brand && (
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{combined.brand}</p>
                       )}
-                      <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{line.item_code}</p>
-                      {line.description && (
-                        <p className="truncate text-xs text-slate-500">{line.description}</p>
+                      <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{combined.item_code}</p>
+                      {combined.description && (
+                        <p className="truncate text-xs text-slate-500">{combined.description}</p>
                       )}
                     </div>
                     <div className="hidden shrink-0 text-right sm:block">
-                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{line.impo.impo_number}</p>
-                      <p className="text-xs text-slate-400">ETA: {fmtDate(line.impo.eta)}</p>
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{combined.impo.impo_number}</p>
+                      <p className="text-xs text-slate-400">ETA: {fmtDate(combined.impo.eta)}</p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-bold text-emerald-600">{line.qty_available}</p>
-                      <p className="text-xs text-slate-400">of {line.qty_incoming}</p>
+                      <p className="text-sm font-bold text-emerald-600">{combined.qty_available}</p>
+                      <p className="text-xs text-slate-400">of {combined.qty_incoming}</p>
                     </div>
                     <button
-                      onClick={() => setExpandedLineId(expandedLineId === line.id ? null : line.id)}
+                      onClick={() => setExpandedLineId(expandedLineId === combined.key ? null : combined.key)}
                       className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                        expandedLineId === line.id
+                        expandedLineId === combined.key
                           ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
                           : "bg-indigo-600 text-white hover:bg-indigo-700"
                       }`}
                     >
-                      {expandedLineId === line.id ? "Close" : "Reserve"}
+                      {expandedLineId === combined.key ? "Close" : "Reserve"}
                     </button>
                   </div>
 
-                  {/* Inline form */}
-                  {expandedLineId === line.id && (
+                  {/* Inline form — uses primaryLine (most availability within the combined group) */}
+                  {expandedLineId === combined.key && (
                     <InlineReserveForm
-                      line={line}
+                      line={combined.primaryLine}
                       token={token}
                       onClose={() => setExpandedLineId(null)}
                       onSuccess={() => { setExpandedLineId(null); setSearch(""); load(); }}
