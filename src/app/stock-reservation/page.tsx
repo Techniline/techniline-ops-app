@@ -320,7 +320,15 @@ function StockReservationPage() {
     const approvedThisMonth = myReservations.filter(
       (r) => r.status === "approved" && r.created_at.startsWith(thisMonth)
     ).length;
-    const deposits = myReservations.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+    // Count deposit once per group order; standalone orders counted individually
+    const seenGroups = new Set<string>();
+    const deposits = myReservations.reduce((s, r) => {
+      if (r.group_id) {
+        if (seenGroups.has(r.group_id)) return s;
+        seenGroups.add(r.group_id);
+      }
+      return s + (r.amount_paid ?? 0);
+    }, 0);
     return { pending, approvedThisMonth, deposits };
   }, [myReservations]);
 

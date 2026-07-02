@@ -382,16 +382,20 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
               const todayStr = today.toISOString().slice(0, 10);
               const in7 = new Date(today.getTime() + 7 * 86_400_000);
               const in7Str = in7.toISOString().slice(0, 10);
-              const [pendingRes, reservedRes, depositsRes, arrivingRes, nextRes] = await Promise.all([
+              const [pendingRes, reservedRes, groupDepositsRes, standaloneDepositsRes, arrivingRes, nextRes] = await Promise.all([
                 sb.from("stock_reservations").select("id").eq("status", "pending"),
                 sb.from("stock_reservations").select("qty_requested").in("status", ["pending", "approved"]),
-                sb.from("stock_reservations").select("amount_paid").neq("status", "cancelled"),
+                // Group orders: one deposit per group, not per SKU line
+                sb.from("reservation_groups").select("amount_paid").neq("status", "cancelled"),
+                sb.from("stock_reservations").select("amount_paid").neq("status", "cancelled").is("group_id", null),
                 sb.from("impos").select("id").gte("eta", todayStr).lte("eta", in7Str).neq("status", "cancelled").neq("status", "arrived"),
                 sb.from("impos").select("impo_number, eta").neq("status", "cancelled").neq("status", "arrived").not("eta", "is", null).order("eta", { ascending: true }).limit(1),
               ]);
               const pendingCount = (pendingRes.data ?? []).length;
               const reserved = (reservedRes.data ?? []).reduce((s: number, r: { qty_requested: number }) => s + r.qty_requested, 0);
-              const deposits = (depositsRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0);
+              const deposits =
+                (groupDepositsRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0) +
+                (standaloneDepositsRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0);
               const arrivingSoon = (arrivingRes.data ?? []).length;
               const nextImpo = (nextRes.data ?? [])[0] as { impo_number: string; eta: string } | undefined;
               const nextEta = nextImpo?.eta
@@ -420,12 +424,16 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
             try {
               const sb = supabase as any;
               const [myRes, nextImpoRes] = await Promise.all([
-                sb.from("stock_reservations").select("id, status, amount_paid").eq("requested_by", profile.id).in("status", ["pending", "approved"]),
+                sb.from("stock_reservations").select("id, status, amount_paid, group_id").eq("requested_by", profile.id).in("status", ["pending", "approved"]),
                 sb.from("impos").select("impo_number, eta").neq("status", "cancelled").neq("status", "arrived").not("eta", "is", null).order("eta", { ascending: true }).limit(1),
               ]);
               const active = (myRes.data ?? []).length;
               const pending = (myRes.data ?? []).filter((r: { status: string }) => r.status === "pending").length;
-              const deposits = (myRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0);
+              const seenGroups = new Set<string>();
+              const deposits = (myRes.data ?? []).reduce((s: number, r: { amount_paid: number | null; group_id: string | null }) => {
+                if (r.group_id) { if (seenGroups.has(r.group_id)) return s; seenGroups.add(r.group_id); }
+                return s + (r.amount_paid ?? 0);
+              }, 0);
               const next = (nextImpoRes.data ?? [])[0] as { impo_number: string; eta: string } | undefined;
               const nextEta = next?.eta
                 ? new Date(next.eta + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })

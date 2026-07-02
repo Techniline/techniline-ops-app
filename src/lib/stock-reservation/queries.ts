@@ -119,15 +119,20 @@ export async function fetchManagerStats(): Promise<{
   depositsCollected: number;
   availableUnits: number;
 }> {
-  const [linesRes, reservedRes, depositsRes] = await Promise.all([
+  const [linesRes, reservedRes, groupDepositsRes, standaloneDepositsRes] = await Promise.all([
     supabase.from("impo_lines").select("qty_incoming"),
     supabase.from("stock_reservations").select("qty_requested").in("status", ["pending", "approved"]),
-    supabase.from("stock_reservations").select("amount_paid").neq("status", "cancelled"),
+    // Group orders: count the deposit once per group (not once per SKU line)
+    supabase.from("reservation_groups").select("amount_paid").neq("status", "cancelled"),
+    // Standalone orders: single-SKU reservations with no group
+    supabase.from("stock_reservations").select("amount_paid").neq("status", "cancelled").is("group_id", null),
   ]);
 
   const totalIn = ((linesRes.data ?? []) as { qty_incoming: number }[]).reduce((s, l) => s + l.qty_incoming, 0);
   const reserved = ((reservedRes.data ?? []) as { qty_requested: number }[]).reduce((s, r) => s + r.qty_requested, 0);
-  const deposits = ((depositsRes.data ?? []) as { amount_paid: number | null }[]).reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+  const deposits =
+    ((groupDepositsRes.data ?? []) as { amount_paid: number | null }[]).reduce((s, r) => s + (r.amount_paid ?? 0), 0) +
+    ((standaloneDepositsRes.data ?? []) as { amount_paid: number | null }[]).reduce((s, r) => s + (r.amount_paid ?? 0), 0);
 
   return { reservedUnits: reserved, depositsCollected: deposits, availableUnits: Math.max(0, totalIn - reserved) };
 }

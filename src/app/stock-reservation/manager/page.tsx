@@ -577,12 +577,22 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
     return Array.from(map.values()).sort((a, b) => a.impoNumber.localeCompare(b.impoNumber));
   }, [filtered]);
 
-  const totals = useMemo(() => ({
-    qty:      filtered.reduce((s, r) => s + r.qty_requested, 0),
-    approved: filtered.reduce((s, r) => s + (r.qty_approved ?? 0), 0),
-    deposits: filtered.reduce((s, r) => s + (r.amount_paid ?? 0), 0),
-    count:    filtered.length,
-  }), [filtered]);
+  const totals = useMemo(() => {
+    const seenGroups = new Set<string>();
+    const deposits = filtered.reduce((s, r) => {
+      if (r.group_id) {
+        if (seenGroups.has(r.group_id)) return s;
+        seenGroups.add(r.group_id);
+      }
+      return s + (r.amount_paid ?? 0);
+    }, 0);
+    return {
+      qty:      filtered.reduce((s, r) => s + r.qty_requested, 0),
+      approved: filtered.reduce((s, r) => s + (r.qty_approved ?? 0), 0),
+      deposits,
+      count:    filtered.length,
+    };
+  }, [filtered]);
 
   const activeFilters = [filterImpo, filterStatus, filterSalesperson, filterBrand, filterDateFrom, filterDateTo].filter(Boolean).length;
 
