@@ -1,8 +1,7 @@
 import { after } from "next/server";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
-  GRACE_UID,
-  getUserEmailById,
+  getManagerProfiles,
   createApproveRejectTokens,
   buildGraceNotificationHtml,
   sendStockEmail,
@@ -89,17 +88,17 @@ export async function POST(request: Request): Promise<Response> {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const svcAny = svc as any;
-      const [resRes, profileData, graceEmail] = await Promise.all([
+      const [resRes, profileData, managers] = await Promise.all([
         svcAny
           .from("stock_reservations")
           .select("*, impo_line:impo_lines(*, impo:impos(*))")
           .eq("id", reservationId)
           .single(),
         svcAny.from("users").select("full_name").eq("id", auth.uid).maybeSingle(),
-        getUserEmailById(svc, GRACE_UID),
+        getManagerProfiles(svc),
       ]);
 
-      if (!resRes.data || !graceEmail) return;
+      if (!resRes.data || !managers.length) return;
 
       const reservation = resRes.data as Record<string, unknown>;
       const requesterName =
@@ -127,14 +126,22 @@ export async function POST(request: Request): Promise<Response> {
         createdAt: reservation.created_at as string,
       };
 
-      const { approveToken, rejectToken } = await createApproveRejectTokens(svc, reservationId);
       const base = `${APP_URL}/api/stock-reservation/email-action`;
-      const html = buildGraceNotificationHtml(emailData, `${base}?token=${approveToken}`, `${base}?token=${rejectToken}`);
       const subject = `📦 New Reservation Request — ${emailData.itemCode} × ${emailData.qtyRequested} from ${requesterName}`;
-      await sendStockEmail(graceEmail, subject, html, {
-        fromName: `${requesterName} (via Techniline Ops)`,
-        replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
-      });
+
+      // Send each manager their own email with unique action tokens tied to their UID
+      for (const mgr of managers) {
+        try {
+          const { approveToken, rejectToken } = await createApproveRejectTokens(svc, reservationId, mgr.uid);
+          const html = buildGraceNotificationHtml(emailData, `${base}?token=${approveToken}`, `${base}?token=${rejectToken}`);
+          await sendStockEmail(mgr.email, subject, html, {
+            fromName: `${requesterName} (via Techniline Ops)`,
+            replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
+          });
+        } catch (err) {
+          console.error(`[reserve] notification to ${mgr.email} failed:`, err);
+        }
+      }
     } catch (e) {
       console.error("[reserve] Grace notification failed:", e);
     }

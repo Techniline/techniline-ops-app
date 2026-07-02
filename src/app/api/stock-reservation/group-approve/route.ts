@@ -123,7 +123,7 @@ export async function POST(request: Request): Promise<Response> {
     .is("used_at", null);
 
   // Notify salesperson
-  after(() => notifyGroupSalesperson(auth.serviceClient, group_id, grace_notes ?? null));
+  after(() => notifyGroupSalesperson(auth.serviceClient, group_id, grace_notes ?? null, auth.uid));
 
   return Response.json({
     ok: true,
@@ -135,7 +135,8 @@ export async function POST(request: Request): Promise<Response> {
 async function notifyGroupSalesperson(
   svc: SupabaseClient,
   groupId: string,
-  graceNotes: string | null
+  graceNotes: string | null,
+  approverUid?: string
 ): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,8 +153,13 @@ async function notifyGroupSalesperson(
 
     const grp = grpData as Record<string, unknown>;
     const requesterUid = grp.requested_by as string;
-    const requesterEmail = await getUserEmailById(svc, requesterUid);
+    const [requesterEmail, approverEmail, approverProfile] = await Promise.all([
+      getUserEmailById(svc, requesterUid),
+      approverUid ? getUserEmailById(svc, approverUid) : Promise.resolve(null),
+      approverUid ? svcAny.from("users").select("full_name").eq("id", approverUid).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
     if (!requesterEmail) return;
+    const approverName = (approverProfile.data as { full_name?: string } | null)?.full_name ?? "Manager";
 
     const requesterName = (grp.requester as { full_name?: string } | null)?.full_name ?? "Salesperson";
     const groupStatus = grp.status as string;
@@ -230,7 +236,7 @@ async function notifyGroupSalesperson(
       </tr></thead>
       <tbody>${lineTableRows}</tbody>
     </table>
-    ${graceNotes ? `<p style="margin:14px 0 0;font-size:12px;color:#475569;font-style:italic">Grace's notes: ${esc(graceNotes)}</p>` : ""}
+    ${graceNotes ? `<p style="margin:14px 0 0;font-size:12px;color:#475569;font-style:italic">Reviewer's notes: ${esc(graceNotes)}</p>` : ""}
   </div>
   <div style="background:#f8fafc;padding:24px 36px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
     <a href="${APP_URL_LOCAL}/stock-reservation" style="display:inline-block;padding:13px 30px;background:#4f46e5;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">View My Reservations &rarr;</a>
@@ -248,7 +254,10 @@ async function notifyGroupSalesperson(
       ? `❌ Order Rejected — ${customerRef} · ${totalLines} lines`
       : `⚠️ Order Partially Approved — ${customerRef} · ${approvedLines}/${totalLines} lines approved`;
 
-    await sendStockEmail(requesterEmail, subject, html);
+    await sendStockEmail(requesterEmail, subject, html, {
+      fromName: approverName,
+      replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
+    });
   } catch (e) {
     console.error("[group-approve] salesperson notification failed:", e);
   }

@@ -4,6 +4,7 @@ import {
   getUserEmailById,
   sendStockEmail,
 } from "@/lib/stock-reservation/emailService";
+// GRACE_UID used as fallback when token has no reviewer_uid (legacy tokens)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const { data: tokenRow, error: tokenErr } = await svcAny
     .from("stock_reservation_email_tokens")
-    .select("id, reservation_id, action, expires_at, used_at")
+    .select("id, reservation_id, action, expires_at, used_at, reviewer_uid")
     .eq("id", token)
     .maybeSingle();
 
@@ -70,7 +71,9 @@ export async function GET(request: Request): Promise<Response> {
     action: "approve" | "reject";
     expires_at: string;
     used_at: string | null;
+    reviewer_uid: string | null;
   };
+  const reviewerUid = t.reviewer_uid ?? GRACE_UID;
 
   if (t.used_at) {
     return new Response(
@@ -134,7 +137,7 @@ export async function GET(request: Request): Promise<Response> {
         .update({
           status: "approved",
           qty_approved: line.qty_requested,
-          reviewed_by: GRACE_UID,
+          reviewed_by: reviewerUid,
           reviewed_at: now,
         })
         .eq("id", line.id)
@@ -146,7 +149,7 @@ export async function GET(request: Request): Promise<Response> {
         .from("stock_reservations")
         .update({
           status: "rejected",
-          reviewed_by: GRACE_UID,
+          reviewed_by: reviewerUid,
           reviewed_at: now,
         })
         .eq("id", line.id)
@@ -158,7 +161,7 @@ export async function GET(request: Request): Promise<Response> {
   const newGroupStatus = action === "approve" ? "approved" : "rejected";
   await svcAny
     .from("reservation_groups")
-    .update({ status: newGroupStatus, reviewed_by: GRACE_UID, reviewed_at: now })
+    .update({ status: newGroupStatus, reviewed_by: reviewerUid, reviewed_at: now })
     .eq("id", anchor.group_id);
 
   // Mark all tokens for these reservations used
@@ -170,7 +173,7 @@ export async function GET(request: Request): Promise<Response> {
     .is("used_at", null);
 
   // Notify salesperson (fire and forget)
-  void notifyGroupSalesperson(svc, anchor.group_id, action);
+  void notifyGroupSalesperson(svc, anchor.group_id, action, reviewerUid);
 
   const isApproved = action === "approve";
   return new Response(
@@ -190,7 +193,8 @@ export async function GET(request: Request): Promise<Response> {
 async function notifyGroupSalesperson(
   svc: ReturnType<typeof makeSvc>,
   groupId: string,
-  action: "approve" | "reject"
+  action: "approve" | "reject",
+  approverUid?: string
 ): Promise<void> {
   if (!svc) return;
   try {
@@ -205,8 +209,13 @@ async function notifyGroupSalesperson(
 
     if (!grpData) return;
     const grp = grpData as Record<string, unknown>;
-    const requesterEmail = await getUserEmailById(svc, grp.requested_by as string);
+    const [requesterEmail, approverEmail, approverProfile] = await Promise.all([
+      getUserEmailById(svc, grp.requested_by as string),
+      approverUid ? getUserEmailById(svc, approverUid) : Promise.resolve(null),
+      approverUid ? svcAny.from("users").select("full_name").eq("id", approverUid).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
     if (!requesterEmail) return;
+    const approverName = (approverProfile.data as { full_name?: string } | null)?.full_name ?? "Manager";
 
     const requesterName = (grp.requester as { full_name?: string } | null)?.full_name ?? "Salesperson";
     const customerRef = grp.customer_ref as string;
@@ -277,7 +286,10 @@ async function notifyGroupSalesperson(
       ? `✅ Order Approved — ${customerRef} · ${totalLines} lines`
       : `❌ Order Rejected — ${customerRef} · ${totalLines} lines`;
 
-    await sendStockEmail(requesterEmail, subject, html);
+    await sendStockEmail(requesterEmail, subject, html, {
+      fromName: approverName,
+      replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
+    });
   } catch (e) {
     console.error("[group-email-action] salesperson notification failed:", e);
   }

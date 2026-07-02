@@ -6,6 +6,7 @@ import {
   sendStockEmail,
   type ReservationEmailData,
 } from "@/lib/stock-reservation/emailService";
+// GRACE_UID used as fallback when token has no reviewer_uid (legacy tokens)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export async function GET(request: Request): Promise<Response> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: tokenRow, error: tokenErr } = await (svc as any)
     .from("stock_reservation_email_tokens")
-    .select("id, reservation_id, action, expires_at, used_at")
+    .select("id, reservation_id, action, expires_at, used_at, reviewer_uid")
     .eq("id", token)
     .maybeSingle();
 
@@ -60,6 +61,7 @@ export async function GET(request: Request): Promise<Response> {
     action: "approve" | "reject";
     expires_at: string;
     used_at: string | null;
+    reviewer_uid: string | null;
   };
 
   if (t.used_at) {
@@ -103,9 +105,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const action = t.action;
+  const reviewerUid = t.reviewer_uid ?? GRACE_UID;
   const updatePayload: Record<string, unknown> = {
     status: action === "approve" ? "approved" : "rejected",
-    reviewed_by: GRACE_UID,
+    reviewed_by: reviewerUid,
     reviewed_at: new Date().toISOString(),
   };
   if (action === "approve") {
@@ -141,8 +144,14 @@ export async function GET(request: Request): Promise<Response> {
       const impo = (impoLine.impo as Record<string, unknown> | null) ?? {};
       const requester = reservation.requester as { full_name?: string } | null;
 
-      const requesterEmail = await getUserEmailById(svc, reservation.requested_by as string);
+      const [requesterEmail, approverEmail, approverProfile] = await Promise.all([
+        getUserEmailById(svc, reservation.requested_by as string),
+        getUserEmailById(svc, reviewerUid),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (svc as any).from("users").select("full_name").eq("id", reviewerUid).maybeSingle(),
+      ]);
       if (!requesterEmail) return;
+      const approverName = (approverProfile.data as { full_name?: string } | null)?.full_name ?? "Manager";
 
       const qtyRequested = reservation.qty_requested as number;
       const qtyApproved = action === "approve" ? qtyRequested : null;
@@ -175,7 +184,10 @@ export async function GET(request: Request): Promise<Response> {
           : `❌ Reservation Rejected — ${emailData.itemCode} × ${qtyRequested}`;
 
       const html = buildSalespersonDecisionHtml(emailData, outcome);
-      await sendStockEmail(requesterEmail, subject, html);
+      await sendStockEmail(requesterEmail, subject, html, {
+        fromName: approverName,
+        replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
+      });
     } catch (e) {
       console.error("[email-action] salesperson notification failed:", e);
     }

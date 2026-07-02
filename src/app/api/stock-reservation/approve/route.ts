@@ -143,9 +143,14 @@ async function scheduleSalespersonNotification(
     if (!res) return;
 
     const reservation = res as Record<string, unknown>;
-    const requesterEmail = await getUserEmailById(svc, reservation.requested_by as string);
+    const [requesterEmail, approverEmail, approverProfile] = await Promise.all([
+      getUserEmailById(svc, reservation.requested_by as string),
+      getUserEmailById(svc, reservation.reviewed_by as string ?? ""),
+      svcAny.from("users").select("full_name").eq("id", reservation.reviewed_by).maybeSingle(),
+    ]);
     if (!requesterEmail) return;
 
+    const approverName = (approverProfile.data as { full_name?: string } | null)?.full_name ?? "Manager";
     const impoLine = (reservation.impo_line as Record<string, unknown> | null) ?? {};
     const impo = (impoLine.impo as Record<string, unknown> | null) ?? {};
     const requester = reservation.requester as { full_name?: string } | null;
@@ -180,7 +185,10 @@ async function scheduleSalespersonNotification(
         : `❌ Reservation Rejected — ${emailData.itemCode} × ${qtyRequested}`;
 
     const html = buildSalespersonDecisionHtml(emailData, finalOutcome);
-    await sendStockEmail(requesterEmail, subject, html);
+    await sendStockEmail(requesterEmail, subject, html, {
+      fromName: approverName,
+      replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
+    });
 
     // Mark any pending email tokens as used (Grace acted via dashboard)
     await svcAny

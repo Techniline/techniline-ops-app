@@ -1,8 +1,7 @@
 import { after } from "next/server";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
-  GRACE_UID,
-  getUserEmailById,
+  getManagerProfiles,
   sendStockEmail,
   createApproveRejectTokens,
 } from "@/lib/stock-reservation/emailService";
@@ -114,12 +113,11 @@ export async function POST(request: Request): Promise<Response> {
   // If SOME lines failed, partial success is still ok — report which failed
   after(async () => {
     try {
-      const [profileData, graceEmail, emailTokens] = await Promise.all([
+      const [profileData, managers] = await Promise.all([
         svc.from("users").select("full_name").eq("id", auth.uid).maybeSingle(),
-        getUserEmailById(auth.serviceClient, GRACE_UID),
-        createApproveRejectTokens(auth.serviceClient, reservationIds[0]).catch(() => null),
+        getManagerProfiles(auth.serviceClient),
       ]);
-      if (!graceEmail) return;
+      if (!managers.length) return;
 
       const requesterName = (profileData.data as { full_name?: string } | null)?.full_name ?? auth.email ?? "Salesperson";
 
@@ -165,7 +163,7 @@ export async function POST(request: Request): Promise<Response> {
         ? `AED ${amount_paid.toLocaleString("en")}${payment_method ? ` · ${payment_method}` : ""}`
         : null;
 
-      const html = `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:660px;margin:0 auto;color:#1e293b;background:#f8fafc">
+      const bodyHtml = `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:660px;margin:0 auto;color:#1e293b;background:#f8fafc">
   <div style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);padding:30px 36px;border-radius:16px 16px 0 0">
     <table style="border-collapse:collapse;width:100%"><tr>
       <td style="width:56px;vertical-align:middle">
@@ -211,33 +209,40 @@ export async function POST(request: Request): Promise<Response> {
     </table>
     ${notes ? `<p style="margin:14px 0 0;font-size:12px;color:#64748b;font-style:italic">Notes: ${notes}</p>` : ""}
   </div>
-  <div style="background:#f8fafc;padding:24px 36px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
-    ${emailTokens ? `
-    <p style="margin:0 0 16px;font-size:14px;color:#64748b">Approve or reject all lines at once, or review individually in the dashboard.</p>
-    <table style="border-collapse:collapse;margin:0 auto 16px"><tr>
-      <td style="padding:0 8px">
-        <a href="${APP_URL}/api/stock-reservation/group-email-action?token=${emailTokens.approveToken}" style="display:inline-block;padding:13px 26px;background:#059669;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">&#9989; Approve All</a>
-      </td>
-      <td style="padding:0 8px">
-        <a href="${APP_URL}/api/stock-reservation/group-email-action?token=${emailTokens.rejectToken}" style="display:inline-block;padding:13px 26px;background:#dc2626;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">&#10060; Reject All</a>
-      </td>
-    </tr></table>
-    <a href="${APP_URL}/stock-reservation/manager" style="font-size:13px;color:#6366f1;text-decoration:none">Review individually in Dashboard &rarr;</a>
-    ` : `
-    <p style="margin:0 0 16px;font-size:14px;color:#64748b">Review each line item and approve or reject individually in the manager dashboard.</p>
-    <a href="${APP_URL}/stock-reservation/manager" style="display:inline-block;padding:13px 30px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">Review Order in Dashboard &rarr;</a>
-    `}
-  </div>
+  __ACTION_SECTION__
   <div style="background:#f1f5f9;padding:14px 36px;border-radius:0 0 16px 16px;border:1px solid #e2e8f0;border-top:none;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">Techniline Ops &middot; Stock Reservation System</p>
   </div>
 </div>`;
 
       const subject = `📦 New Order Request — ${customer_ref} · ${lineRows.length} SKUs · ${totalQty} units from ${requesterName}`;
-      await sendStockEmail(graceEmail, subject, html, {
-        fromName: `${requesterName} (via Techniline Ops)`,
-        replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
-      });
+
+      // Send each manager their own email with unique action tokens tied to their UID
+      for (const mgr of managers) {
+        try {
+          const mgrTokens = await createApproveRejectTokens(auth.serviceClient, reservationIds[0], mgr.uid).catch(() => null);
+          const actionSection = mgrTokens
+            ? `<div style="background:#f8fafc;padding:24px 36px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+    <p style="margin:0 0 16px;font-size:14px;color:#64748b">Approve or reject all lines at once, or review individually in the dashboard.</p>
+    <table style="border-collapse:collapse;margin:0 auto 16px"><tr>
+      <td style="padding:0 8px"><a href="${APP_URL}/api/stock-reservation/group-email-action?token=${mgrTokens.approveToken}" style="display:inline-block;padding:13px 26px;background:#059669;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">&#9989; Approve All</a></td>
+      <td style="padding:0 8px"><a href="${APP_URL}/api/stock-reservation/group-email-action?token=${mgrTokens.rejectToken}" style="display:inline-block;padding:13px 26px;background:#dc2626;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">&#10060; Reject All</a></td>
+    </tr></table>
+    <a href="${APP_URL}/stock-reservation/manager" style="font-size:13px;color:#6366f1;text-decoration:none">Review individually in Dashboard &rarr;</a>
+  </div>`
+            : `<div style="background:#f8fafc;padding:24px 36px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+    <a href="${APP_URL}/stock-reservation/manager" style="display:inline-block;padding:13px 30px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">Review Order in Dashboard &rarr;</a>
+  </div>`;
+
+          const html = bodyHtml.replace("__ACTION_SECTION__", actionSection);
+          await sendStockEmail(mgr.email, subject, html, {
+            fromName: `${requesterName} (via Techniline Ops)`,
+            replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
+          });
+        } catch (err) {
+          console.error(`[group] notification to ${mgr.email} failed:`, err);
+        }
+      }
     } catch (e) {
       console.error("[group] Grace notification failed:", e);
     }

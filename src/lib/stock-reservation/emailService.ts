@@ -202,7 +202,7 @@ export function buildSalespersonDecisionHtml(
   );
 
   if (data.graceNotes) {
-    fields.push(["Grace's Notes", `<em style="color:#475569">${esc(data.graceNotes)}</em>`]);
+    fields.push(["Reviewer's Notes", `<em style="color:#475569">${esc(data.graceNotes)}</em>`]);
   }
   if (data.discountOffered && data.discountOffered > 0)
     fields.push(["Discount Given", `<strong style="color:#059669">${data.discountOffered}%</strong>`]);
@@ -279,16 +279,41 @@ export async function getUserEmailById(svc: SupabaseClient, uid: string): Promis
   }
 }
 
+/** Returns uid + email + display name for every user with stock_reservation_manager capability. */
+export async function getManagerProfiles(
+  svc: SupabaseClient
+): Promise<{ uid: string; email: string; name: string }[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (svc as any)
+    .from("users")
+    .select("id, full_name")
+    .contains("portal_access", ["stock_reservation_manager"]);
+
+  if (!data?.length) return [];
+
+  const profiles = await Promise.all(
+    (data as { id: string; full_name: string | null }[]).map(async (row) => {
+      const email = await getUserEmailById(svc, row.id);
+      if (!email) return null;
+      return { uid: row.id, email, name: row.full_name ?? email };
+    })
+  );
+
+  return profiles.filter((p): p is { uid: string; email: string; name: string } => p !== null);
+}
+
+/** Create one approve + one reject token for a specific manager (reviewer_uid stored on token). */
 export async function createApproveRejectTokens(
   svc: SupabaseClient,
-  reservationId: string
+  reservationId: string,
+  reviewerUid?: string
 ): Promise<{ approveToken: string; rejectToken: string }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (svc as any)
     .from("stock_reservation_email_tokens")
     .insert([
-      { reservation_id: reservationId, action: "approve" },
-      { reservation_id: reservationId, action: "reject" },
+      { reservation_id: reservationId, action: "approve", reviewer_uid: reviewerUid ?? null },
+      { reservation_id: reservationId, action: "reject", reviewer_uid: reviewerUid ?? null },
     ])
     .select("id, action");
 
