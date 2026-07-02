@@ -20,9 +20,19 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "to, subject, and html are required." }, { status: 400 });
   }
 
+  // Resolve sender name from the logged-in user's profile
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: userRow } = await (auth.serviceClient as any)
+    .from("users")
+    .select("full_name")
+    .eq("id", auth.uid)
+    .maybeSingle();
+  const senderName = (userRow as { full_name?: string } | null)?.full_name ?? "Manager";
+
   try {
     await sendStockEmail(to, subject, html, {
-      fromName: "Techniline Stock Reports",
+      fromName: senderName,
+      replyTo: auth.email ? { address: auth.email, name: senderName } : undefined,
       cc: cc || undefined,
     });
     return Response.json({ ok: true });
