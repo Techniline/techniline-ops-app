@@ -801,9 +801,11 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
     setSendingEmail(true);
     setEmailError("");
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const tok = sessionData.session?.access_token ?? "";
       const res = await fetch("/api/stock-reservation/report-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
         body: JSON.stringify({ to: emailTo, cc: emailCc || undefined, subject: emailSubject, html: emailHtml }),
       });
       const data = await res.json() as { ok: boolean; error?: string };
