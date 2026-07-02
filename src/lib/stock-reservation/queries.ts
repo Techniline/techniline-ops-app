@@ -136,13 +136,14 @@ export async function fetchManagerStats(): Promise<{
 export async function fetchAllReservations(): Promise<StockReservation[]> {
   const { data, error } = await supabase
     .from("stock_reservations")
-    .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name)")
+    .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name), reviewer:users!reviewed_by(full_name)")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r: unknown) => ({
     ...(r as StockReservation),
     requester_name: ((r as Record<string, unknown>).requester as { full_name?: string } | null)?.full_name ?? null,
+    reviewer_name: ((r as Record<string, unknown>).reviewer as { full_name?: string } | null)?.full_name ?? null,
   }));
 }
 
@@ -151,19 +152,36 @@ export async function fetchPendingGrouped(): Promise<{
   standalone: StockReservation[];
   groups: Map<string, { group: ReservationGroup; lines: StockReservation[] }>;
 }> {
-  const { data, error } = await supabase
-    .from("stock_reservations")
-    .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name), group:reservation_groups(*)")
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+  const [{ data, error }, reservedRes] = await Promise.all([
+    supabase
+      .from("stock_reservations")
+      .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name), group:reservation_groups(*)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
+    supabase.rpc("get_reserved_qty_by_line"),
+  ]);
 
   if (error) throw new Error(error.message);
+
+  const reservedMap = new Map<string, number>(
+    ((reservedRes.data ?? []) as { impo_line_id: string; total_reserved: number }[])
+      .map((r) => [r.impo_line_id, r.total_reserved])
+  );
 
   const standalone: StockReservation[] = [];
   const groupMap = new Map<string, { group: ReservationGroup; lines: StockReservation[] }>();
 
   for (const row of (data ?? []) as unknown[]) {
     const r = row as StockReservation & { group?: ReservationGroup | null };
+
+    // Attach availability to impo_line
+    const impoLine = (r as unknown as Record<string, unknown>).impo_line as (ImpoLineWithAvailability & Record<string, unknown>) | undefined;
+    if (impoLine) {
+      const totalReserved = reservedMap.get(r.impo_line_id) ?? 0;
+      impoLine.qty_reserved = totalReserved;
+      impoLine.qty_available = (impoLine.qty_incoming ?? 0) - totalReserved;
+    }
+
     const res: StockReservation = {
       ...(r as StockReservation),
       requester_name: (r as unknown as Record<string, unknown>).requester

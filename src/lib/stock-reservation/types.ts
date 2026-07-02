@@ -55,6 +55,7 @@ export interface StockReservation {
   // joined
   impo_line?: ImpoLineWithAvailability;
   requester_name?: string | null;
+  reviewer_name?: string | null;
 }
 
 export interface ReservationGroup {

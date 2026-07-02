@@ -195,7 +195,15 @@ function ApprovalCard({ reservation: res, getToken, onDone }: ApprovalCardProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const line = res.impo_line as unknown as { item_code?: string; description?: string; qty_incoming?: number; impo?: { impo_number?: string; eta?: string } } | undefined;
+  const line = res.impo_line as unknown as { item_code?: string; description?: string; qty_incoming?: number; qty_reserved?: number; qty_available?: number; impo?: { impo_number?: string; eta?: string } } | undefined;
+
+  // Availability display: qty_reserved includes this reservation; others = total - this
+  const qtyIncoming = line?.qty_incoming ?? 0;
+  const qtyReservedAll = line?.qty_reserved ?? 0;
+  const qtyForOthers = Math.max(0, qtyReservedAll - res.qty_requested);
+  const qtyAvailableForThis = qtyIncoming - qtyForOthers;
+  const qtyRemainingAfter = qtyAvailableForThis - qty;
+  const isOversubscribed = qtyAvailableForThis < qty;
 
   async function act(action: "approve" | "reject") {
     setSaving(true); setError(null);
@@ -245,6 +253,23 @@ function ApprovalCard({ reservation: res, getToken, onDone }: ApprovalCardProps)
           {res.qty_requested} unit{res.qty_requested !== 1 ? "s" : ""} requested
         </span>
       </div>
+      {qtyIncoming > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-white/70 px-3 py-2 text-xs dark:bg-slate-800/40">
+          <span className="text-slate-400">IMPO stock: <span className="font-semibold text-slate-700 dark:text-slate-300">{qtyIncoming}</span></span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span className="text-slate-400">Others allocated: <span className="font-semibold text-slate-700 dark:text-slate-300">{qtyForOthers}</span></span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span className={`font-semibold ${isOversubscribed ? "text-red-600" : "text-emerald-700 dark:text-emerald-400"}`}>
+            {qtyAvailableForThis} available for this request{isOversubscribed ? " ⚠ insufficient" : ""}
+          </span>
+          {!isOversubscribed && (
+            <>
+              <span className="text-slate-300 dark:text-slate-600">·</span>
+              <span className="text-slate-400">{Math.max(0, qtyRemainingAfter)} remaining after approval</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-500">Approve qty</span>
@@ -376,15 +401,21 @@ function GroupApprovalCard({ groupId, group, reservations, getToken, onDone }: G
               <th className="px-4 py-2.5 text-left">IMPO · ETA</th>
               <th className="px-4 py-2.5 text-right">Qty Req</th>
               <th className="px-4 py-2.5 text-right">Disc%</th>
+              <th className="px-4 py-2.5 text-right">Available</th>
               <th className="px-4 py-2.5 text-center">Approve Qty</th>
               <th className="px-4 py-2.5 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {reservations.map((r) => {
-              const line = r.impo_line as unknown as { item_code?: string; brand?: string | null; description?: string | null; impo?: { impo_number?: string; eta?: string | null } } | undefined;
+              const line = r.impo_line as unknown as { item_code?: string; brand?: string | null; description?: string | null; qty_incoming?: number; qty_reserved?: number; impo?: { impo_number?: string; eta?: string | null } } | undefined;
               const d = decisions.get(r.id) ?? { action: "approve" as const, qty: r.qty_requested };
               const isApprove = d.action === "approve";
+              const lineQtyIncoming = line?.qty_incoming ?? 0;
+              const lineQtyReservedAll = line?.qty_reserved ?? 0;
+              const lineQtyForOthers = Math.max(0, lineQtyReservedAll - r.qty_requested);
+              const lineAvailableForThis = lineQtyIncoming > 0 ? lineQtyIncoming - lineQtyForOthers : null;
+              const lineIsOver = lineAvailableForThis !== null && lineAvailableForThis < r.qty_requested;
               return (
                 <tr key={r.id} className={`${isApprove ? "" : "opacity-60"} hover:bg-slate-50 dark:hover:bg-slate-800/20`}>
                   <td className="px-4 py-3">
@@ -401,6 +432,15 @@ function GroupApprovalCard({ groupId, group, reservations, getToken, onDone }: G
                     {(r.discount_offered ?? 0) > 0
                       ? <span className="font-semibold text-emerald-700 dark:text-emerald-400">{r.discount_offered}%</span>
                       : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {lineAvailableForThis !== null ? (
+                      <span className={`font-semibold text-xs ${lineIsOver ? "text-red-600" : "text-emerald-700 dark:text-emerald-400"}`}>
+                        {lineAvailableForThis}{lineIsOver ? " ⚠" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-600">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {isApprove ? (
@@ -798,6 +838,7 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
                         <th className="px-4 py-2 text-left">Quote / Ref</th>
                         <th className="px-4 py-2 text-left">Req. By</th>
                         <th className="px-4 py-2 text-left">Status</th>
+                        <th className="px-4 py-2 text-left">Reviewed By</th>
                         <th className="px-4 py-2 text-left">Notes</th>
                       </tr>
                     </thead>
@@ -837,6 +878,9 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
                                 {r.status}
                               </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-500">
+                              {r.reviewer_name ?? (r.reviewed_by ? "—" : "")}
                             </td>
                             <td className="max-w-[180px] px-4 py-2.5">
                               {r.notes && <p className="truncate text-xs text-slate-500">{r.notes}</p>}
