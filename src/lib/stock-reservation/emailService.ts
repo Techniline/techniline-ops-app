@@ -243,7 +243,7 @@ export async function sendStockEmail(
   to: string,
   subject: string,
   html: string,
-  opts?: { replyTo?: { address: string; name?: string }; fromName?: string }
+  opts?: { replyTo?: { address: string; name?: string }; fromName?: string; cc?: string }
 ): Promise<void> {
   const graphToken = await getGraphToken();
   const message: Record<string, unknown> = {
@@ -254,6 +254,13 @@ export async function sendStockEmail(
   };
   if (opts?.replyTo) {
     message.replyTo = [{ emailAddress: { address: opts.replyTo.address, name: opts.replyTo.name ?? opts.replyTo.address } }];
+  }
+  if (opts?.cc) {
+    message.ccRecipients = opts.cc
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean)
+      .map((a) => ({ emailAddress: { address: a } }));
   }
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(SENDER)}/sendMail`,

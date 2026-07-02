@@ -537,6 +537,9 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
   const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailCc, setEmailCc] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState("");
 
   // Unique salespersons from reservations
   const salespersons = useMemo(() => {
@@ -689,6 +692,131 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
 
   const mailtoLink = `mailto:${emailTo}?cc=${emailCc}&subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
+  const emailHtml = useMemo(() => {
+    const escH = (v: string | null | undefined): string => {
+      if (!v) return "—";
+      return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    };
+    const statusPill = (s: string): string => {
+      const map: Record<string, string> = {
+        approved: "background:#d1fae5;color:#065f46",
+        rejected: "background:#fee2e2;color:#991b1b",
+        pending: "background:#fef3c7;color:#92400e",
+        cancelled: "background:#f1f5f9;color:#475569",
+      };
+      return `<span style="${map[s] ?? map.pending};border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">${escH(s)}</span>`;
+    };
+    const impoSections = grouped.map((group) => {
+      const impoStatusBg = group.status === "arrived" ? "#d1fae5" : group.status === "in_transit" ? "#dbeafe" : "#fef3c7";
+      const impoStatusFg = group.status === "arrived" ? "#065f46" : group.status === "in_transit" ? "#1e40af" : "#92400e";
+      const gQty = group.rows.reduce((s, r) => s + r.qty_requested, 0);
+      const gApprv = group.rows.reduce((s, r) => s + (r.qty_approved ?? 0), 0);
+      const gDep = group.rows.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+      const rows = group.rows.map((r, i) => {
+        const line = r.impo_line as unknown as { item_code?: string; brand?: string | null } | undefined;
+        const bg = i % 2 === 0 ? "#f8fafc" : "#ffffff";
+        const qty = r.qty_approved != null && r.qty_approved !== r.qty_requested
+          ? `${r.qty_requested} <span style="color:#059669;font-weight:700">&rarr; ${r.qty_approved}</span>`
+          : r.qty_approved != null
+          ? `<strong style="color:#059669">${r.qty_approved}</strong>`
+          : `${r.qty_requested}`;
+        const dep = r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—";
+        return `<tr style="background:${bg}">
+          <td style="padding:8px 12px;font-family:'Courier New',monospace;font-size:11px;font-weight:600;color:#334155;border-bottom:1px solid #f1f5f9;white-space:nowrap">${escH(line?.item_code)}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#64748b;border-bottom:1px solid #f1f5f9">${escH(line?.brand as string | null)}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9">${escH(r.customer_ref)}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9">${escH(r.requester_name)}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;border-bottom:1px solid #f1f5f9">${qty}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#475569;border-bottom:1px solid #f1f5f9;white-space:nowrap">${dep}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;border-bottom:1px solid #f1f5f9">${statusPill(r.status)}</td>
+          <td style="padding:8px 12px;font-size:11px;color:#94a3b8;border-bottom:1px solid #f1f5f9">${escH(r.quote_ref)}</td>
+        </tr>`;
+      }).join("");
+      return `<div style="margin-bottom:20px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr style="background:#f1f5f9;border:1px solid #e2e8f0">
+            <td style="padding:9px 14px">
+              <span style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:#1e293b">${escH(group.impoNumber)}</span>
+              ${group.eta ? `<span style="font-size:12px;color:#64748b;margin-left:10px">ETA ${fmtDate(group.eta)}</span>` : ""}
+            </td>
+            <td style="padding:9px 14px;text-align:right">
+              <span style="font-size:11px;color:#64748b">${group.rows.length} line${group.rows.length !== 1 ? "s" : ""} &middot; ${gQty} req${gApprv > 0 ? ` / ${gApprv} approved` : ""}${gDep > 0 ? ` &middot; AED ${gDep.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : ""}</span>
+              <span style="margin-left:10px;font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:${impoStatusBg};color:${impoStatusFg}">${group.status.replace("_", " ")}</span>
+            </td>
+          </tr>
+        </table>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none">
+          <thead>
+            <tr style="background:#f8fafc">
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">SKU</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">Brand</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">Customer</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">Salesperson</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:center;border-bottom:1px solid #e2e8f0">Qty</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">Deposit</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:center;border-bottom:1px solid #e2e8f0">Status</th>
+              <th style="padding:7px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0">Quote Ref</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }).join("");
+
+    return `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:720px;margin:0 auto;color:#1e293b;background:#f8fafc">
+      <div style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);padding:28px 32px;border-radius:16px 16px 0 0">
+        <p style="margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.65)">Techniline Electronics</p>
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;letter-spacing:-.3px">Stock Allocation Report</h1>
+        <p style="margin:5px 0 0;font-size:13px;color:rgba(255,255,255,.75)">${reportDate}</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+        <tr>
+          <td style="padding:16px;text-align:center;border-right:1px solid #e2e8f0;width:25%">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8">Reservations</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#1e293b">${totals.count}</p>
+          </td>
+          <td style="padding:16px;text-align:center;border-right:1px solid #e2e8f0;width:25%">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8">Units Requested</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#4f46e5">${totals.qty}</p>
+          </td>
+          <td style="padding:16px;text-align:center;border-right:1px solid #e2e8f0;width:25%">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8">Units Approved</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#059669">${totals.approved}</p>
+          </td>
+          <td style="padding:16px;text-align:center;width:25%">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8">Deposits</p>
+            <p style="margin:4px 0 0;font-size:17px;font-weight:800;color:#1e293b">AED ${totals.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}</p>
+          </td>
+        </tr>
+      </table>
+      <div style="padding:20px 24px 4px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;background:#fff">${impoSections}</div>
+      <div style="background:#f1f5f9;padding:12px 24px;border-radius:0 0 16px 16px;border:1px solid #e2e8f0;border-top:none;text-align:center">
+        <p style="margin:0;font-size:11px;color:#94a3b8">Techniline Ops &middot; Stock Reservation System &middot; Generated ${reportDate}</p>
+      </div>
+    </div>`;
+  }, [grouped, totals, reportDate]);
+
+  async function sendReport() {
+    if (!emailTo) return;
+    setSendingEmail(true);
+    setEmailError("");
+    try {
+      const res = await fetch("/api/stock-reservation/report-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: emailTo, cc: emailCc || undefined, subject: emailSubject, html: emailHtml }),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Failed to send");
+      setEmailSent(true);
+      setTimeout(() => { setEmailSent(false); setShowEmailPanel(false); }, 2500);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : "Failed to send. Please try again.");
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
   return (
     <div>
       {/* Filters */}
@@ -811,71 +939,148 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
               </div>
             </div>
 
-            {/* Preview card */}
+            {/* Preview — full SKU-level table */}
             <div className="mb-5">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Preview</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Email Preview <span className="normal-case font-normal text-slate-300">— exactly what the recipient will see</span>
+              </label>
               <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                {/* Mini email header */}
-                <div className="bg-indigo-600 px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-200">Techniline Electronics</p>
+                {/* Header bar */}
+                <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-indigo-200">Techniline Electronics</p>
                   <p className="text-sm font-bold text-white">{emailSubject}</p>
                 </div>
-                {/* Summary chips */}
-                <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600">
-                    <span className="font-bold text-slate-900 dark:text-white">{totals.count}</span> reservations
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600">
-                    <span className="font-bold text-slate-900 dark:text-white">{totals.qty}</span> units
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600">
-                    <span className="font-bold text-green-700">{totals.approved}</span> approved
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600">
-                    <span className="font-bold text-slate-900 dark:text-white">AED {totals.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}</span> deposits
-                  </span>
+                {/* Summary row */}
+                <div className="grid grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-white dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-900">
+                  {[
+                    { label: "Reservations", value: totals.count, color: "text-slate-800 dark:text-slate-100" },
+                    { label: "Units Req.", value: totals.qty, color: "text-indigo-600" },
+                    { label: "Approved", value: totals.approved, color: "text-green-600" },
+                    { label: "Deposits", value: `AED ${totals.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}`, color: "text-slate-800 dark:text-slate-100" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="py-2.5 text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+                      <p className={`text-sm font-bold ${color}`}>{value}</p>
+                    </div>
+                  ))}
                 </div>
-                {/* IMPO rows */}
-                <div className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
-                  {grouped.slice(0, 5).map((group) => {
+                {/* Per-IMPO SKU tables */}
+                <div className="max-h-72 overflow-y-auto bg-white dark:bg-slate-900">
+                  {grouped.map((group) => {
                     const gQty = group.rows.reduce((s, r) => s + r.qty_requested, 0);
                     const gApprv = group.rows.reduce((s, r) => s + (r.qty_approved ?? 0), 0);
                     return (
-                      <div key={group.impoId} className="flex items-center justify-between px-4 py-2.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="shrink-0 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">{group.impoNumber}</span>
-                          {group.eta && <span className="text-xs text-slate-400">ETA {fmtDate(group.eta)}</span>}
+                      <div key={group.impoId}>
+                        {/* IMPO sub-header */}
+                        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2 dark:border-slate-700 dark:bg-slate-800">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200">{group.impoNumber}</span>
+                            {group.eta && <span className="text-[11px] text-slate-400">ETA {fmtDate(group.eta)}</span>}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                            <span>{gQty} req{gApprv > 0 ? ` / ${gApprv} appr` : ""}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                              group.status === "arrived" ? "bg-green-100 text-green-700" :
+                              group.status === "in_transit" ? "bg-blue-100 text-blue-700" :
+                              "bg-amber-100 text-amber-700"
+                            }`}>{group.status.replace("_", " ")}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
-                          <span>{group.rows.length} line{group.rows.length !== 1 ? "s" : ""}</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-300">{gQty} req{gApprv > 0 ? ` / ${gApprv} appr` : ""}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                            group.status === "arrived" ? "bg-green-100 text-green-700" :
-                            group.status === "in_transit" ? "bg-blue-100 text-blue-700" :
-                            "bg-amber-100 text-amber-700"
-                          }`}>{group.status.replace("_", " ")}</span>
-                        </div>
+                        {/* SKU rows */}
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+                              {["SKU", "Brand", "Customer", "Salesperson", "Qty", "Deposit", "Status"].map((h) => (
+                                <th key={h} className="px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.rows.map((r, i) => {
+                              const line = r.impo_line as unknown as { item_code?: string; brand?: string | null } | undefined;
+                              return (
+                                <tr key={r.id} className={i % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50/60 dark:bg-slate-800/40"}>
+                                  <td className="px-3 py-2 font-mono font-semibold text-slate-700 dark:text-slate-300">{line?.item_code ?? "—"}</td>
+                                  <td className="px-3 py-2 text-slate-500">{(line?.brand as string | null) ?? "—"}</td>
+                                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{r.customer_ref ?? "—"}</td>
+                                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{r.requester_name ?? "—"}</td>
+                                  <td className="px-3 py-2 text-center text-slate-700 dark:text-slate-300">
+                                    {r.qty_requested}
+                                    {r.qty_approved != null && r.qty_approved !== r.qty_requested && (
+                                      <span className="ml-1 text-green-600 font-semibold">→{r.qty_approved}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                                    {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                      r.status === "approved" ? "bg-green-100 text-green-700" :
+                                      r.status === "rejected" ? "bg-red-100 text-red-700" :
+                                      r.status === "cancelled" ? "bg-slate-100 text-slate-500" :
+                                      "bg-amber-100 text-amber-700"
+                                    }`}>{r.status}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     );
                   })}
-                  {grouped.length > 5 && (
-                    <div className="px-4 py-2.5 text-xs text-slate-400">+ {grouped.length - 5} more IMPO{grouped.length - 5 !== 1 ? "s" : ""} in full report</div>
-                  )}
                 </div>
               </div>
             </div>
 
+            {/* Error message */}
+            {emailError && (
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">{emailError}</p>
+            )}
+
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowEmailPanel(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
-                Cancel
-              </button>
-              <a href={mailtoLink} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800">
-                Open in Email Client
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
+            <div className="flex items-center justify-between gap-2">
+              <a href={mailtoLink} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline underline-offset-2">
+                Open in email client instead
               </a>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowEmailPanel(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
+                  Cancel
+                </button>
+                <button
+                  onClick={sendReport}
+                  disabled={!emailTo || sendingEmail || emailSent}
+                  className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all disabled:opacity-60 ${
+                    emailSent
+                      ? "bg-green-600 text-white"
+                      : "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800"
+                  }`}
+                >
+                  {emailSent ? (
+                    <>
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Sent!
+                    </>
+                  ) : sendingEmail ? (
+                    <>
+                      <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Send Report
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
