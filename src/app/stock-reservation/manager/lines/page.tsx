@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { fetchAllLinesWithAvailability, fetchImpos } from "@/lib/stock-reservation";
 import type { Impo, ImpoLineWithAvailability } from "@/lib/stock-reservation";
@@ -84,10 +86,10 @@ function ColourLegend({ groups, paletteByImpoId }: LegendProps) {
         <p className="mt-0.5 text-sm text-slate-600">
           Each shipment gets a unique colour based on its arrival date.{" "}
           <span className="font-semibold text-slate-800">Earliest ETA → latest ETA</span>{" "}
-          runs left to right below. Use the colour on a card to instantly know when that stock arrives.
+          runs left to right. The IMPO number and ETA are shown on each card.
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-3 px-5 py-4">
+      <div className="flex items-center gap-3 px-5 py-4">
         {/* Nearest label */}
         <div className="flex flex-col items-center gap-1 text-center">
           <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Nearest</span>
@@ -97,21 +99,14 @@ function ColourLegend({ groups, paletteByImpoId }: LegendProps) {
           </div>
         </div>
 
-        {/* Arrow + all shipment pills in order */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1">
+        {/* Colour dot scale — one dot per IMPO, no text */}
+        <div className="flex flex-1 items-center gap-2">
           <svg className="h-3.5 w-3.5 shrink-0 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
-          {groups.map((g) => {
-            const p = PALETTES[paletteByImpoId.get(g.impo.id) ?? 0];
-            return (
-              <div key={g.impo.id} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${p.impoChip}`}>
-                <span className={`h-2 w-2 shrink-0 rounded-full ${p.dot}`} />
-                {g.impo.impo_number}
-                <span className="opacity-70">· {fmtShort(g.impo.eta)}</span>
-              </div>
-            );
-          })}
+          {groups.map((g) => (
+            <span key={g.impo.id} className={`h-3.5 w-3.5 shrink-0 rounded-full ${PALETTES[paletteByImpoId.get(g.impo.id) ?? 0].dot}`} />
+          ))}
           <svg className="h-3.5 w-3.5 shrink-0 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
@@ -166,6 +161,17 @@ function StockCard({ line, palette, pendingMap }: { line: CombinedLine; palette:
             )}
           </div>
         </div>
+        {/* IMPO + ETA chips */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-slate-100/80 pt-2">
+          <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-bold ring-1 ${palette.impoChip}`}>
+            {line.impo.impo_number}
+          </span>
+          {line.impo.eta && (
+            <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-semibold ring-1 ${palette.impoChip}`}>
+              ETA {fmtShort(line.impo.eta)}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -216,7 +222,7 @@ function LinesPage() {
   const [pendingMap, setPendingMap] = useState<Map<string, number>>(new Map());
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
-  const [filterImpo, setFilterImpo] = useState(preselectedImpo);
+  const [filterImpo, setFilterImpo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -237,7 +243,19 @@ function LinesPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setFilterImpo(preselectedImpo); }, [preselectedImpo]);
+
+  // Live ETA / status updates — mirrors the subscription on the sales page
+  useEffect(() => {
+    const channel = supabase
+      .channel("browse-stock-impos-live")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "impos" }, (payload) => {
+        const u = payload.new as { id: string; eta: string | null; status: Impo["status"] };
+        setImpos((prev) => prev.map((i) => i.id === u.id ? { ...i, eta: u.eta, status: u.status } : i));
+        setLines((prev) => prev.map((l) => l.impo_id === u.id ? { ...l, impo: { ...l.impo, eta: u.eta, status: u.status } } : l));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const paletteByImpoId = useMemo(() => {
     const m = new Map<string, number>();
@@ -273,22 +291,22 @@ function LinesPage() {
   }, [allGroups, filterImpo, search]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4 md:p-6">
-
-      {/* Breadcrumb */}
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/dashboard" className="hover:text-slate-600">Dashboard</Link>
-        <span>/</span>
-        <Link href="/stock-reservation/manager" className="hover:text-slate-600">Manager</Link>
-        <span>/</span>
-        <span className="text-slate-600">Browse Stock</span>
-      </div>
-
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Browse Stock</h1>
-        <p className="mt-1 text-sm text-slate-500">All incoming SKUs across open IMPOs — availability and pending reservations.</p>
-      </div>
+    <AppShell fullWidth>
+      <PageHeader
+        title="Browse Stock"
+        subtitle="All incoming SKUs across open IMPOs — availability and pending reservations."
+        actions={
+          <Link
+            href="/stock-reservation/manager"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Manager
+          </Link>
+        }
+      />
 
       {/* Colour legend */}
       {!loading && <ColourLegend groups={allGroups} paletteByImpoId={paletteByImpoId} />}
@@ -355,7 +373,7 @@ function LinesPage() {
           })}
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }
 

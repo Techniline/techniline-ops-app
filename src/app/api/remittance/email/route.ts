@@ -1,14 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { getGraphToken } from "@/lib/amazon-ingest/graph";
-import { isManager } from "@/lib/permissions";
+import { canViewFinance, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
 async function authorized(request: Request): Promise<string | null> {
   const header = request.headers.get("authorization") ?? "";
@@ -22,9 +20,9 @@ async function authorized(request: Request): Promise<string | null> {
   const { data, error } = await auth.auth.getUser(token);
   if (error || !data.user) return null;
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
-  const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === MARICEL_ID ? data.user.email ?? data.user.id : null;
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", data.user.id).maybeSingle();
+  const profile = { id: data.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  return isManager(profile) || canViewFinance(profile) ? data.user.email ?? data.user.id : null;
 }
 
 const emails = (s: unknown): string[] =>

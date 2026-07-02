@@ -8,8 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
-
 async function authorized(request: Request): Promise<boolean> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -22,9 +20,9 @@ async function authorized(request: Request): Promise<boolean> {
   const { data, error } = await auth.auth.getUser(token);
   if (error || !data.user) return false;
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
-  const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === MARICEL_ID || hasCapability(profile, "finance");
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", data.user.id).maybeSingle();
+  const profile = { id: data.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  return isManager(profile) || hasCapability(profile, "finance");
 }
 
 /**

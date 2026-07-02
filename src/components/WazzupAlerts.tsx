@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
-import { isManager } from "@/lib/permissions";
+import { canViewSellerOrders, isManager } from "@/lib/permissions";
 import { supabase } from "@/lib/supabaseClient";
 import { fetchWazzupStats } from "@/lib/wazzup";
-
-const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 /**
  * App-wide WhatsApp/Wazzup alerter. Mounted in the shared shell so the toast +
@@ -20,7 +18,7 @@ const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
  */
 export function WazzupAlerts() {
   const { profile } = useAuth();
-  const enabled = !!profile && (isManager(profile) || profile.id === AARON_ID);
+  const enabled = !!profile && (isManager(profile) || canViewSellerOrders(profile));
 
   const [toast, setToast] = useState<string | null>(null);
   const prevNewestAt = useRef<string | null>(null);

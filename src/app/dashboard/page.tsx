@@ -54,6 +54,10 @@ import {
   canViewCocoblu,
   canViewFinance,
   canViewLpTracker,
+  canViewSellerOrders,
+  canViewSellerFinance,
+  canViewStockReservation,
+  canManageStockReservation,
   isManager,
 } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
@@ -111,6 +115,11 @@ const KPI_ACCENTS: Record<string, { bar: string; label: string; tile: string }> 
     label: "text-rose-700/90 dark:text-rose-400/90",
     tile: "border-rose-100 from-white to-rose-50/50 hover:ring-rose-200 dark:border-rose-900/50 dark:from-slate-900 dark:to-rose-950/20",
   },
+  stock_reservation: {
+    bar: "bg-teal-400/80 group-hover:bg-teal-500",
+    label: "text-teal-700/90 dark:text-teal-400/90",
+    tile: "border-teal-100 from-white to-teal-50/50 hover:ring-teal-200 dark:border-teal-900/50 dark:from-slate-900 dark:to-teal-950/20",
+  },
 };
 const KPI_ACCENT_DEFAULT = {
   bar: "bg-slate-300 group-hover:bg-slate-400",
@@ -141,8 +150,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 
   useEffect(() => {
     let active = true;
-    const order = ["checklist", "priorities", "reseller", "cocoblu", "lp", "amazon"];
-    const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
+    const order = ["checklist", "priorities", "reseller", "cocoblu", "lp", "amazon", "stock_reservation", "stock_reservation_mgr"];
 
     (async () => {
       const result: KpiGroup[] = [];
@@ -269,7 +277,7 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
         );
       }
 
-      if (isManager(profile) || profile.id === MARICEL_ID) {
+      if (isManager(profile) || canViewFinance(profile)) {
         jobs.push(
           (async () => {
             try {
@@ -364,6 +372,82 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
         );
       }
 
+      // Stock Reservations — manager view (Grace)
+      if (canManageStockReservation(profile)) {
+        jobs.push(
+          (async () => {
+            try {
+              const sb = supabase as any;
+              const today = new Date();
+              const todayStr = today.toISOString().slice(0, 10);
+              const in7 = new Date(today.getTime() + 7 * 86_400_000);
+              const in7Str = in7.toISOString().slice(0, 10);
+              const [pendingRes, reservedRes, depositsRes, arrivingRes, nextRes] = await Promise.all([
+                sb.from("stock_reservations").select("id").eq("status", "pending"),
+                sb.from("stock_reservations").select("qty_requested").in("status", ["pending", "approved"]),
+                sb.from("stock_reservations").select("amount_paid").neq("status", "cancelled"),
+                sb.from("impos").select("id").gte("eta", todayStr).lte("eta", in7Str).neq("status", "cancelled").neq("status", "arrived"),
+                sb.from("impos").select("impo_number, eta").neq("status", "cancelled").neq("status", "arrived").not("eta", "is", null).order("eta", { ascending: true }).limit(1),
+              ]);
+              const pendingCount = (pendingRes.data ?? []).length;
+              const reserved = (reservedRes.data ?? []).reduce((s: number, r: { qty_requested: number }) => s + r.qty_requested, 0);
+              const deposits = (depositsRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0);
+              const arrivingSoon = (arrivingRes.data ?? []).length;
+              const nextImpo = (nextRes.data ?? [])[0] as { impo_number: string; eta: string } | undefined;
+              const nextEta = nextImpo?.eta
+                ? new Date(nextImpo.eta + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : "—";
+              result.push({
+                key: "stock_reservation_mgr",
+                title: "Stock Reservations",
+                href: "/stock-reservation/manager",
+                kpis: [
+                  { label: "Pending Approvals", value: String(pendingCount), tone: pendingCount > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
+                  { label: "Arriving in 7d", value: String(arrivingSoon), tone: arrivingSoon > 0 ? "text-teal-600 dark:text-teal-400" : undefined },
+                  { label: "Reserved Units", value: reserved.toLocaleString() },
+                  { label: "Deposits In", value: deposits > 0 ? `AED ${deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—", sub: nextImpo ? `Next: ${nextEta} · ${nextImpo.impo_number}` : undefined },
+                ],
+              });
+            } catch {
+              /* skip module on error */
+            }
+          })()
+        );
+      // Stock Reservations — sales user view
+      } else if (canViewStockReservation(profile)) {
+        jobs.push(
+          (async () => {
+            try {
+              const sb = supabase as any;
+              const [myRes, nextImpoRes] = await Promise.all([
+                sb.from("stock_reservations").select("id, status, amount_paid").eq("requested_by", profile.id).in("status", ["pending", "approved"]),
+                sb.from("impos").select("impo_number, eta").neq("status", "cancelled").neq("status", "arrived").not("eta", "is", null).order("eta", { ascending: true }).limit(1),
+              ]);
+              const active = (myRes.data ?? []).length;
+              const pending = (myRes.data ?? []).filter((r: { status: string }) => r.status === "pending").length;
+              const deposits = (myRes.data ?? []).reduce((s: number, r: { amount_paid: number | null }) => s + (r.amount_paid ?? 0), 0);
+              const next = (nextImpoRes.data ?? [])[0] as { impo_number: string; eta: string } | undefined;
+              const nextEta = next?.eta
+                ? new Date(next.eta + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : "—";
+              result.push({
+                key: "stock_reservation",
+                title: "Incoming Stock",
+                href: "/stock-reservation",
+                kpis: [
+                  { label: "My Active", value: String(active) },
+                  { label: "Pending Approval", value: String(pending), tone: pending > 0 ? "text-amber-600 dark:text-amber-400" : undefined },
+                  { label: "My Deposits", value: deposits > 0 ? `AED ${deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—" },
+                  { label: "Next Shipment", value: nextEta, sub: next?.impo_number },
+                ],
+              });
+            } catch {
+              /* skip module on error */
+            }
+          })()
+        );
+      }
+
       await Promise.allSettled(jobs);
       result.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
       if (active) setGroups(result);
@@ -399,11 +483,14 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
     cocoblu: "inventory",
     lp: "inventory",
     amazon: "amazon",
+    stock_reservation: "incoming_stock",
+    stock_reservation_mgr: "incoming_stock",
   };
   const CAT_META = [
     { key: "team", title: "Team & tasks", href: "/checklist", accent: "checklist" },
     { key: "inventory", title: "Inventory & ageing", href: "/cocoblu", accent: "cocoblu" },
     { key: "amazon", title: "Amazon & finance", href: "/amazon-actions", accent: "amazon" },
+    { key: "incoming_stock", title: "Incoming stock", href: "/stock-reservation", accent: "stock_reservation" },
   ];
   const cats = CAT_META.map((c) => ({
     ...c,
@@ -456,8 +543,6 @@ function KpiDashboard({ profile }: { profile: UserProfile }) {
 }
 
 /* ----------------------- Music Majlis sales band ---------------------- */
-
-const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 function MmTile({ label, value, tone, big = false }: { label: string; value: string; tone?: string; big?: boolean }) {
   const valueTone = tone ?? "text-slate-900 dark:text-slate-100";
@@ -573,8 +658,8 @@ function MusicMajlisPanel({ profile }: { profile: UserProfile }) {
   const [logOrderRef, setLogOrderRef] = useState("");
   const [actionCounts, setActionCounts] = useState<MonthActionCounts>({ actioned: 0, deals: 0 });
   // Sales detail (supporting metrics, pace chart, abandoned-cart list) collapses
-  // by default for the manager glass view; stays open for Aaron (his daily tool).
-  const [showDetail, setShowDetail] = useState(profile.id === AARON_ID);
+  // by default for the manager glass view; stays open for the primary sales user (his daily tool).
+  const [showDetail, setShowDetail] = useState(canViewSellerOrders(profile));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -997,14 +1082,14 @@ function DashboardContent() {
       {/* Aaron live break status — managers only */}
       {managerView ? <AaronBreakStatus /> : null}
 
-      {/* Chats (WhatsApp / Wazzup) — Aaron + managers */}
-      {managerView || profile.id === AARON_ID ? <WazzupCard /> : null}
+      {/* Chats (WhatsApp / Wazzup) — seller orders user + managers */}
+      {managerView || canViewSellerOrders(profile) ? <WazzupCard /> : null}
 
       {/* Needs attention + categorized metrics */}
       <KpiDashboard profile={profile} />
 
       {/* Sales focus — headline always visible, detail on demand */}
-      {isManager(profile) || profile.id === AARON_ID ? <MusicMajlisPanel profile={profile} /> : null}
+      {isManager(profile) || canViewSellerOrders(profile) ? <MusicMajlisPanel profile={profile} /> : null}
 
       {/* Secondary detail — collapsible so the view stays calm */}
       {managerView ? (
@@ -1017,7 +1102,7 @@ function DashboardContent() {
           <ZohoPipelineBand />
         </Collapsible>
       ) : null}
-      {!managerView && profile.id === AARON_ID ? <AaronDealsBand /> : null}
+      {!managerView && canViewSellerOrders(profile) ? <AaronDealsBand /> : null}
       {canViewFinance(profile) ? (
         <Collapsible title="Remittance tasks" defaultOpen>
           <RemittanceTasksBand profile={profile} />

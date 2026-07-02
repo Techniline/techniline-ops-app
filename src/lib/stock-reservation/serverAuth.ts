@@ -39,10 +39,11 @@ export async function authorizeStockReservation(
   if (error || !data.user) return null;
 
   const svc = createClient(clients.url, clients.service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("id, role").eq("id", data.user.id).maybeSingle();
+  const { data: row } = await svc.from("users").select("id, role, portal_access").eq("id", data.user.id).maybeSingle();
   const profile = {
     id: data.user.id,
-    role: (row as { role?: string } | null)?.role ?? null,
+    role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null,
+    portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null,
   } as UserProfile;
 
   if (!canViewStockReservation(profile)) return null;

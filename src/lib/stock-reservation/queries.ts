@@ -4,6 +4,7 @@ import type {
   ImpoLine,
   ImpoLineWithAvailability,
   ImpoWithLines,
+  ReservationGroup,
   StockReservation,
 } from "./types";
 
@@ -28,10 +29,8 @@ export async function fetchImpoWithLines(impoId: string): Promise<ImpoWithLines 
   const [impoRes, linesRes, reservedRes] = await Promise.all([
     supabase.from("impos").select("*").eq("id", impoId).single(),
     supabase.from("impo_lines").select("*").eq("impo_id", impoId),
-    supabase
-      .from("stock_reservations")
-      .select("impo_line_id, qty_requested, status")
-      .in("status", ["pending", "approved"]),
+    // SECURITY DEFINER RPC bypasses RLS — returns aggregate reserved qty visible to all authenticated users
+    supabase.rpc("get_reserved_qty_by_line"),
   ]);
 
   if (impoRes.error || !impoRes.data) return null;
@@ -40,8 +39,8 @@ export async function fetchImpoWithLines(impoId: string): Promise<ImpoWithLines 
 
   // Aggregate reserved qty per line
   const reservedMap = new Map<string, number>();
-  for (const r of reservedRes.data ?? []) {
-    reservedMap.set(r.impo_line_id, (reservedMap.get(r.impo_line_id) ?? 0) + r.qty_requested);
+  for (const r of (reservedRes.data ?? []) as { impo_line_id: string; total_reserved: number }[]) {
+    reservedMap.set(r.impo_line_id, r.total_reserved);
   }
 
   const linesWithAvail: ImpoLineWithAvailability[] = lines.map((l) => {
@@ -57,10 +56,9 @@ export async function fetchAllLinesWithAvailability(): Promise<ImpoLineWithAvail
   const [linesRes, imposRes, reservedRes] = await Promise.all([
     supabase.from("impo_lines").select("*"),
     supabase.from("impos").select("*").order("eta", { ascending: true }),
-    supabase
-      .from("stock_reservations")
-      .select("impo_line_id, qty_requested, status")
-      .in("status", ["pending", "approved"]),
+    // SECURITY DEFINER RPC bypasses RLS so every authenticated user sees the
+    // correct aggregate (pending + approved) reserved qty — not just their own.
+    supabase.rpc("get_reserved_qty_by_line"),
   ]);
 
   if (linesRes.error) throw new Error(linesRes.error.message);
@@ -69,8 +67,8 @@ export async function fetchAllLinesWithAvailability(): Promise<ImpoLineWithAvail
     ((imposRes.data ?? []) as Impo[]).map((i) => [i.id, i])
   );
   const reservedMap = new Map<string, number>();
-  for (const r of reservedRes.data ?? []) {
-    reservedMap.set(r.impo_line_id, (reservedMap.get(r.impo_line_id) ?? 0) + r.qty_requested);
+  for (const r of (reservedRes.data ?? []) as { impo_line_id: string; total_reserved: number }[]) {
+    reservedMap.set(r.impo_line_id, r.total_reserved);
   }
 
   return ((linesRes.data ?? []) as ImpoLine[])
@@ -146,4 +144,56 @@ export async function fetchAllReservations(): Promise<StockReservation[]> {
     ...(r as StockReservation),
     requester_name: ((r as Record<string, unknown>).requester as { full_name?: string } | null)?.full_name ?? null,
   }));
+}
+
+/** Manager: pending reservations grouped by reservation_group — includes group metadata */
+export async function fetchPendingGrouped(): Promise<{
+  standalone: StockReservation[];
+  groups: Map<string, { group: ReservationGroup; lines: StockReservation[] }>;
+}> {
+  const { data, error } = await supabase
+    .from("stock_reservations")
+    .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name), group:reservation_groups(*)")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  const standalone: StockReservation[] = [];
+  const groupMap = new Map<string, { group: ReservationGroup; lines: StockReservation[] }>();
+
+  for (const row of (data ?? []) as unknown[]) {
+    const r = row as StockReservation & { group?: ReservationGroup | null };
+    const res: StockReservation = {
+      ...(r as StockReservation),
+      requester_name: (r as unknown as Record<string, unknown>).requester
+        ? ((r as unknown as Record<string, unknown>).requester as { full_name?: string }).full_name ?? null
+        : null,
+    };
+
+    if (res.group_id && r.group) {
+      const existing = groupMap.get(res.group_id);
+      if (existing) {
+        existing.lines.push(res);
+      } else {
+        groupMap.set(res.group_id, { group: r.group, lines: [res] });
+      }
+    } else {
+      standalone.push(res);
+    }
+  }
+
+  return { standalone, groups: groupMap };
+}
+
+/** Sales user: my reservations with group info attached */
+export async function fetchMyReservationsWithGroups(userId: string): Promise<StockReservation[]> {
+  const { data, error } = await supabase
+    .from("stock_reservations")
+    .select("*, impo_line:impo_lines(*, impo:impos(*)), group:reservation_groups(id, customer_ref, status)")
+    .eq("requested_by", userId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as StockReservation[];
 }

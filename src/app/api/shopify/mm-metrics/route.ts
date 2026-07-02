@@ -1,14 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { isManager } from "@/lib/permissions";
+import { canViewSellerOrders, isManager } from "@/lib/permissions";
 import { fetchMonthMetrics, shopifyConfigured } from "@/lib/shopify/client";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 async function authorized(request: Request): Promise<boolean> {
   const header = request.headers.get("authorization") ?? "";
@@ -22,9 +20,9 @@ async function authorized(request: Request): Promise<boolean> {
   const { data, error } = await auth.auth.getUser(token);
   if (error || !data.user) return false;
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
-  const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === AARON_ID;
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", data.user.id).maybeSingle();
+  const profile = { id: data.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  return isManager(profile) || canViewSellerOrders(profile);
 }
 
 /** Net sales + abandoned-cart count for the given month window (Shopify). */

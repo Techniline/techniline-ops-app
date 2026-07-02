@@ -1,12 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { isManager } from "@/lib/permissions";
+import { canViewSellerOrders, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const AARON_ID = "cbb81b27-8756-4f2d-bfe0-04211c27092c";
 
 async function authorizedId(request: Request): Promise<string | null> {
   const header = request.headers.get("authorization") ?? "";
@@ -20,9 +18,9 @@ async function authorizedId(request: Request): Promise<string | null> {
   const { data, error } = await auth.auth.getUser(token);
   if (error || !data.user) return null;
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
-  const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  return isManager(profile) || profile.id === AARON_ID ? profile.id : null;
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", data.user.id).maybeSingle();
+  const profile = { id: data.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  return isManager(profile) || canViewSellerOrders(profile) ? profile.id : null;
 }
 
 /** Mark an abandoned cart actioned / dismissed (upsert on checkout_id). */

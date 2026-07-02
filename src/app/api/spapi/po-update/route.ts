@@ -1,13 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { isManager } from "@/lib/permissions";
+import { canViewFinance, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Maricel — the vendor-ops user allowed to maintain internal PO fields. */
-const MARICEL_UID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
 /** Only these internal columns may be written from the UI — never PO/Amazon data. */
 type PoPatch = {
@@ -51,10 +49,9 @@ export async function POST(request: Request): Promise<Response> {
   if (authErr || !u.user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", u.user.id).maybeSingle();
-  const profile = { id: u.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  const allowed = isManager(profile) || u.user.id === MARICEL_UID;
-  if (!allowed) return Response.json({ ok: false, error: "Forbidden." }, { status: 403 });
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", u.user.id).maybeSingle();
+  const profile = { id: u.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  if (!isManager(profile) && !canViewFinance(profile)) return Response.json({ ok: false, error: "Forbidden." }, { status: 403 });
 
   const body = (await request.json().catch(() => ({}))) as { id?: string } & Record<string, unknown>;
   const id = typeof body.id === "string" ? body.id : "";

@@ -220,16 +220,11 @@ function regexExtract(text: string): { impo_number: string; vendor: string | nul
 
 const AI_MODEL = "claude-haiku-4-5-20251001";
 
-const AI_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF text.
+const AI_PROMPT = `You are extracting structured data from a Techniline Electronics PURCHASE ORDER PDF.
 
-The PDF text extractor produces a SINGLE flat string (no newlines). The document contains numbered product line items. Each item has:
-- A sequential Sr number (1, 2, 3…)
-- A quantity (may be integer or decimal like 14.00 or 2)
-- A model/item code (alphanumeric, e.g. PMP1680S, 1002SFX, iQ15, FBT60)
-- A description
-- A brand name at the end (e.g. Behringer, Turbosound, Midas, TC Electronics, TC Helicon, Klark Teknik, Wharfedale, Crown, QSC)
+Look at the line-item table in the document. The table has columns including Sr (row number), Brand, Model No (item code), Description, Qty (quantity ordered), Price (unit price), and Amount. Column positions vary by document.
 
-IMPORTANT: The Qty and ModelCode may be MERGED with no space between them (e.g. "14.00PMP1680S" means qty=14, model=PMP1680S). Or they may be separated by a space. Parse carefully regardless of format.
+CRITICAL: Extract the QTY (quantity ordered) column — NOT the Price, Disc Amt, or Amount columns. Qty is the number of units being ordered (e.g. 200, 10, 48). Price is the per-unit cost. Do not confuse them.
 
 Return ONLY a raw JSON object (no markdown, no explanation) with this exact shape:
 {
@@ -237,29 +232,21 @@ Return ONLY a raw JSON object (no markdown, no explanation) with this exact shap
   "vendor": "Supplier Company Name or null",
   "po_date": "YYYY-MM-DD or null",
   "items": [
-    { "brand": "Behringer", "item_code": "PMP1680S", "description": "Mixer Powered 10 CH...", "qty": 14 }
+    { "brand": "Tolaye", "item_code": "TWM482", "description": "Microphone Wireless Dual Channel UHF...", "qty": 200 }
   ]
 }
 
 Rules:
-- Include EVERY numbered product row (Sr 1, 2, 3… all the way to the last one). Do NOT skip any.
-- item_code: the Model No for the product (letters+digits, e.g. PMP1680S, 1002SFX, iQ15)
-- qty: integer quantity (round decimals like 14.00 → 14)
-- description: product description text only, no brand, no codes
-- brand: one of the known brands above, or null if unclear
-- Skip page headers, "Terms & Conditions", "Stamp & Signature", totals rows, and any non-product text.`;
+- Include EVERY numbered product row (Sr 1, 2, 3…). Do NOT skip any.
+- item_code: the Model No column value (alphanumeric code, e.g. TWM482, PMP1680S, iQ15).
+- qty: the QTY column value as an integer (round 200.00 → 200). This is the quantity ordered.
+- description: product description text only — no brand name, no codes.
+- brand: brand name from the Brand column, or null if not shown.
+- Skip page headers, totals rows, "Terms & Conditions", and non-product text.`;
 
 async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise<UploadPreview> {
-  const doc = await getDocumentProxy(pdf);
-  const { text } = await extractText(doc, { mergePages: true });
-  const docText = (text ?? "").trim();
-
-  if (docText.length < 20) {
-    throw new Error("Could not read text from this PDF. Make sure it is a text-based PDF (not a scanned image).");
-  }
-
-  // ── AI primary parser ─────────────────────────────────────────────────────
-  // Regex is brittle across PDF formats; AI handles any layout variation.
+  // ── AI primary parser — send raw PDF so Claude reads the actual table ─────
+  // Sending PDF bytes directly avoids column-order scrambling from text extraction.
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       const client = new Anthropic();
@@ -270,7 +257,18 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
         messages: [
           {
             role: "user",
-            content: `${AI_PROMPT}\n\n---DOCUMENT TEXT---\n${docText.slice(0, 40000)}`,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: Buffer.from(pdf).toString("base64"),
+                },
+              } as unknown as { type: "text"; text: string },
+              { type: "text", text: AI_PROMPT },
+            ],
           },
         ],
       });
@@ -300,8 +298,10 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
 
         if (lines.length > 0) {
           await logAiUsage("stock-reservation-upload", AI_MODEL, response.usage);
-          // Use regex only to fill in header fields if AI left them blank
-          const header = regexExtract(docText);
+          // Use regex for header fields (IMPO number, vendor, date) as a cross-check
+          const doc = await getDocumentProxy(pdf);
+          const { text } = await extractText(doc, { mergePages: true });
+          const header = regexExtract((text ?? "").trim());
           return {
             impo_number: raw.impo_number?.trim() || header.impo_number,
             vendor:      raw.vendor?.trim() || header.vendor,
@@ -313,11 +313,17 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
       }
     } catch (e) {
       console.error("[stock-reservation/upload] AI parse failed:", e instanceof Error ? e.message : e);
-      // Fall through to regex
+      // Fall through to text-based regex
     }
   }
 
   // ── Regex fallback (no API key, or AI failed) ─────────────────────────────
+  const doc = await getDocumentProxy(pdf);
+  const { text } = await extractText(doc, { mergePages: true });
+  const docText = (text ?? "").trim();
+  if (docText.length < 20) {
+    throw new Error("Could not read text from this PDF. Make sure it is a text-based PDF (not a scanned image).");
+  }
   const extracted = regexExtract(docText);
   return { ...extracted, file_name: fileName };
 }

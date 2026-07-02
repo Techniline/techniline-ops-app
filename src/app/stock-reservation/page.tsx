@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
+import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
 import {
   fetchAllLinesWithAvailability,
-  fetchMyReservations,
+  fetchMyReservationsWithGroups,
 } from "@/lib/stock-reservation";
 import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/stock-reservation";
 
@@ -51,6 +54,7 @@ function InlineReserveForm({ line, token, onClose, onSuccess }: InlineReserveFor
   const [requiredByDate, setRequiredByDate] = useState("");
   const [quoteRef, setQuoteRef] = useState("");
   const [notes, setNotes] = useState("");
+  const [discountOffered, setDiscountOffered] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +76,7 @@ function InlineReserveForm({ line, token, onClose, onSuccess }: InlineReserveFor
           required_by_date: requiredByDate || undefined,
           quote_ref: quoteRef.trim() || undefined,
           notes: notes.trim() || undefined,
+          discount_offered: discountOffered,
         }),
       });
       const data = await res.json() as { ok: boolean; error?: string };
@@ -176,6 +181,16 @@ function InlineReserveForm({ line, token, onClose, onSuccess }: InlineReserveFor
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
         </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Discount Given (%)</span>
+          <input
+            type="number" min={0} max={100} step="0.5" placeholder="0"
+            value={discountOffered || ""}
+            onChange={(e) => setDiscountOffered(Math.max(0, Math.min(100, Number(e.target.value))))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -261,6 +276,7 @@ function StockReservationPage() {
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
   const [resFilter, setResFilter] = useState<ResFilter>("active");
   const [historyDays, setHistoryDays] = useState<30 | 90 | 365 | 0>(30);
+  const [shipmentIdx, setShipmentIdx] = useState(0);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -268,7 +284,7 @@ function StockReservationPage() {
     try {
       const [l, r] = await Promise.all([
         fetchAllLinesWithAvailability(),
-        fetchMyReservations(profile.id),
+        fetchMyReservationsWithGroups(profile.id),
       ]);
       setLines(l);
       setMyReservations(r);
@@ -307,6 +323,28 @@ function StockReservationPage() {
     const deposits = myReservations.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
     return { pending, approvedThisMonth, deposits };
   }, [myReservations]);
+
+  // Distributor/vendor names that appear in the brand field but are not product brands
+  const EXCLUDED_BRANDS = new Set(["Quad Industrial"]);
+
+  // Upcoming shipments derived from lines — brand-level summary, no qty/SKU details exposed
+  const upcomingShipments = useMemo(() => {
+    const seen = new Map<string, { impo: Impo; totalAvail: number; brands: Set<string> }>();
+    for (const l of lines) {
+      const existing = seen.get(l.impo_id);
+      if (existing) {
+        existing.totalAvail += l.qty_available;
+        if (l.brand && !EXCLUDED_BRANDS.has(l.brand.trim())) existing.brands.add(l.brand.trim());
+      } else if (l.impo.status !== "cancelled" && l.impo.status !== "arrived" && l.impo.eta) {
+        const brands = new Set<string>();
+        if (l.brand && !EXCLUDED_BRANDS.has(l.brand.trim())) brands.add(l.brand.trim());
+        seen.set(l.impo_id, { impo: l.impo, totalAvail: l.qty_available, brands });
+      }
+    }
+    return Array.from(seen.values())
+      .sort((a, b) => (a.impo.eta ?? "").localeCompare(b.impo.eta ?? ""))
+      .map(s => ({ impo: s.impo, totalAvail: s.totalAvail, brands: Array.from(s.brands).sort() }));
+  }, [lines]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Search results: filter → combine same SKU within same IMPO → return CombinedLine[]
   const searchResults = useMemo((): CombinedLine[] => {
@@ -359,39 +397,32 @@ function StockReservationPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-400">
-        <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      </div>
+      <AppShell>
+        <div className="flex h-64 items-center justify-center text-slate-400">
+          <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <a
-          href="/"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Dashboard
-        </a>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Stock Reservation</h1>
-        <p className="mt-1 text-sm text-slate-500">Reserve incoming stock from open shipments for your customers.</p>
-      </div>
+    <AppShell>
+      <PageHeader
+        title="Stock Reservation"
+        subtitle="Reserve incoming stock from open shipments for your customers."
+      />
 
       {/* Stats cards */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className={`rounded-2xl border p-4 shadow-sm ${stats.pending > 0 ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending Approval</p>
           <p className={`mt-1 text-2xl font-bold ${stats.pending > 0 ? "text-amber-700 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>
             {stats.pending}
           </p>
+          {stats.pending > 0 && <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-500">Awaiting Grace</p>}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Approved This Month</p>
@@ -403,18 +434,115 @@ function StockReservationPage() {
             {stats.deposits > 0 ? `AED ${stats.deposits.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
           </p>
         </div>
+        <div className={`rounded-2xl border p-4 shadow-sm ${upcomingShipments.length > 0 ? "border-teal-200 bg-teal-50 dark:border-teal-900/40 dark:bg-teal-900/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Next Shipment</p>
+          <p className={`mt-1 text-2xl font-bold ${upcomingShipments.length > 0 ? "text-teal-700 dark:text-teal-400" : "text-slate-400"}`}>
+            {upcomingShipments[0] ? fmtDate(upcomingShipments[0].impo.eta) : "—"}
+          </p>
+          {upcomingShipments[0] && (
+            <p className="mt-0.5 text-xs text-teal-600 dark:text-teal-500">{upcomingShipments[0].impo.impo_number}</p>
+          )}
+        </div>
       </div>
+
+      {/* What's Coming — single card with prev/next navigation, brand-level only */}
+      {upcomingShipments.length > 0 && (() => {
+        const idx = Math.min(shipmentIdx, upcomingShipments.length - 1);
+        const { impo, brands } = upcomingShipments[idx];
+        return (
+          <div className="mb-6">
+            <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">What&apos;s Coming</h2>
+            <div className="flex items-stretch gap-2">
+              {/* Prev */}
+              <button
+                onClick={() => setShipmentIdx((i) => Math.max(0, i - 1))}
+                disabled={idx === 0}
+                className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-30 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+                aria-label="Previous shipment"
+              >
+                <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Card */}
+              <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{impo.impo_number}</p>
+                    <p className="mt-0.5 text-xl font-bold text-teal-600 dark:text-teal-400">{fmtDate(impo.eta)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                      impo.status === "in_transit"
+                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                    }`}>
+                      {impo.status === "in_transit" ? "In transit" : "Expected"}
+                    </span>
+                    {upcomingShipments.length > 1 && (
+                      <span className="text-xs text-slate-400">{idx + 1} / {upcomingShipments.length}</span>
+                    )}
+                  </div>
+                </div>
+                {brands.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {brands.map((b) => (
+                      <button
+                        key={b}
+                        onClick={() => setSearch(b)}
+                        className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-teal-100 hover:text-teal-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-teal-900/40 dark:hover:text-teal-300"
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">Brands not listed</p>
+                )}
+              </div>
+
+              {/* Next */}
+              <button
+                onClick={() => setShipmentIdx((i) => Math.min(upcomingShipments.length - 1, i + 1))}
+                disabled={idx === upcomingShipments.length - 1}
+                className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-30 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+                aria-label="Next shipment"
+              >
+                <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Quick Reserve */}
       <div className="mb-2">
         <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">Quick Reserve</h2>
-        <input
-          type="text"
-          placeholder="Search by SKU, brand or description to find available stock…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setExpandedLineId(null); }}
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        />
+        <div className="relative">
+          <svg className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by SKU, brand or description…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setExpandedLineId(null); }}
+            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(""); setExpandedLineId(null); }}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search results */}
@@ -474,15 +602,26 @@ function StockReservationPage() {
           )}
         </div>
       ) : (
-        <div className="mb-8 rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400 dark:border-slate-800">
-          Enter a SKU, brand or description above to find available stock
+        <div className="mb-8 rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-800">
+          Search by SKU, brand or description above — or click a brand in &ldquo;What&apos;s Coming&rdquo; to get started
         </div>
       )}
 
       {/* My Reservations */}
       <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">My Reservations</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">My Reservations</h2>
+            <Link
+              href="/stock-reservation/new-order"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              New Order
+            </Link>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Date scope — only visible on History tab */}
             {resFilter === "history" && (
@@ -544,6 +683,7 @@ function StockReservationPage() {
                     <th className="px-4 py-3 text-right">Qty</th>
                     <th className="px-4 py-3 text-right">Paid</th>
                     <th className="px-4 py-3 text-left">Method</th>
+                    <th className="px-4 py-3 text-right">Disc%</th>
                     <th className="px-4 py-3 text-left">Req. By</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3" />
@@ -556,6 +696,14 @@ function StockReservationPage() {
                       <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                         <td className="px-4 py-3">
                           <p className="font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
+                          {r.group_id && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
+                              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                              Order
+                            </span>
+                          )}
                           {r.quote_ref && <p className="text-xs text-slate-400">{r.quote_ref}</p>}
                         </td>
                         <td className="px-4 py-3">
@@ -581,6 +729,11 @@ function StockReservationPage() {
                         </td>
                         <td className="px-4 py-3 capitalize text-slate-500">
                           {r.payment_method?.replace("_", " ") ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {r.discount_offered && r.discount_offered > 0
+                            ? <span className="font-medium text-emerald-700 dark:text-emerald-400">{r.discount_offered}%</span>
+                            : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-slate-500">
                           {r.required_by_date ? fmtDate(r.required_by_date) : "—"}
@@ -612,7 +765,7 @@ function StockReservationPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }
 

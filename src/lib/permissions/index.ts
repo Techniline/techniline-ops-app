@@ -10,6 +10,14 @@ type ProfileArg = UserProfile | null | undefined;
 /** The role value that grants cross-user (manager override) access. */
 const MANAGER_ROLE = "manager";
 
+/** Superuser UID — always gets all capabilities, regardless of DB state. */
+const SUPERUSER_UID = "c4abda49-13e9-41fd-acae-88acd4aa7fcb";
+
+/** Type guard: checks whether a string is a known Capability. */
+export function isCapability(s: string): s is Capability {
+  return ALL_CAPABILITIES.includes(s as Capability);
+}
+
 /**
  * Manager override is driven by the profile's `role`, NOT by the capability
  * map. The capability map governs only which feature *modules* a user can see.
@@ -19,12 +27,26 @@ export function isManager(profile: ProfileArg): boolean {
 }
 
 /**
- * Resolve the concrete list of *module* capabilities a profile holds, looked
- * up from the capability map by user id. An "all" grant expands into every
- * known capability. Unknown users hold nothing.
+ * Resolve the concrete list of *module* capabilities a profile holds.
+ *
+ * Priority order:
+ * 1. Superuser hardcoded bypass → all capabilities (cannot be revoked via UI).
+ * 2. Non-empty `portal_access` array on the profile → filtered to valid Capability values.
+ * 3. Fall back to `CAPABILITY_MAP[profile.id]` (static per-user grants).
  */
 export function getCapabilities(profile: ProfileArg): Capability[] {
   if (!profile) return [];
+
+  // 1. Superuser bypass — always returns all capabilities.
+  if (profile.id === SUPERUSER_UID) return [...ALL_CAPABILITIES];
+
+  // 2. DB-driven portal_access (set by RBAC role assignments).
+  const portalAccess = profile.portal_access;
+  if (Array.isArray(portalAccess) && portalAccess.length > 0) {
+    return portalAccess.filter(isCapability);
+  }
+
+  // 3. Static capability map fallback.
   const grant = CAPABILITY_MAP[profile.id];
   if (!grant) return [];
   if (grant === "all") return [...ALL_CAPABILITIES];
@@ -130,19 +152,27 @@ export function canViewLogisticsPage(profile: ProfileArg, page: LogisticsPage): 
   return pages === "all" || pages.includes(page);
 }
 
-/** A dedicated logistics user who must ONLY see the Logistics portal (not a manager). */
+/**
+ * A dedicated logistics user who must ONLY see the Logistics portal (not a manager).
+ * Covers both the legacy `role = "logistics"` column and RBAC-assigned users whose
+ * portal_access contains only the "logistics" capability.
+ */
 export function isLogisticsOnly(profile: ProfileArg): boolean {
-  return profile?.role === "logistics" && !isManager(profile);
+  if (!profile || isManager(profile)) return false;
+  if (profile.role === "logistics") return true;
+  const caps = getCapabilities(profile);
+  return caps.length > 0 && caps.every((c) => c === "logistics");
 }
 
-/** Users confined to the LP Tracker only (single-module access), by user id. */
-const LP_ONLY_UIDS = new Set<string>([
-  "648993fe-d2e7-446a-ad71-c7b3ff81fae7", // Pavithran
-]);
-
-/** A user who must ONLY see the LP Tracker page (`/lp`), nothing else. */
+/**
+ * A user confined to LP Tracker only — holds lp_tracker and nothing else.
+ * Capability-driven so assigning any additional role via the admin UI
+ * automatically removes this confinement.
+ */
 export function isLpOnly(profile: ProfileArg): boolean {
-  return !!profile && !isManager(profile) && LP_ONLY_UIDS.has(profile.id);
+  if (!profile || isManager(profile)) return false;
+  const caps = getCapabilities(profile);
+  return caps.length > 0 && caps.every((c) => c === "lp_tracker");
 }
 
 /**

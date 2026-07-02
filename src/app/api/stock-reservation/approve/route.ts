@@ -1,4 +1,12 @@
+import { after } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
+import {
+  getUserEmailById,
+  buildSalespersonDecisionHtml,
+  sendStockEmail,
+  type ReservationEmailData,
+} from "@/lib/stock-reservation/emailService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,6 +101,8 @@ export async function POST(request: Request): Promise<Response> {
       .eq("id", reservation_id);
 
     if (updErr) return Response.json({ ok: false, error: updErr.message }, { status: 500 });
+
+    after(() => scheduleSalespersonNotification(svc, reservation_id, "approve", approvedQty, grace_notes ?? null));
     return Response.json({ ok: true, qty_approved: approvedQty });
   }
 
@@ -108,7 +118,79 @@ export async function POST(request: Request): Promise<Response> {
     .eq("id", reservation_id);
 
   if (updErr) return Response.json({ ok: false, error: updErr.message }, { status: 500 });
+
+  after(() => scheduleSalespersonNotification(svc, reservation_id, "reject", null, grace_notes ?? null));
   return Response.json({ ok: true });
+}
+
+async function scheduleSalespersonNotification(
+  svc: SupabaseClient,
+  reservationId: string,
+  outcome: "approve" | "reject",
+  qtyApproved: number | null,
+  graceNotes: string | null
+): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svcAny = svc as any;
+
+    const { data: res } = await svcAny
+      .from("stock_reservations")
+      .select("*, impo_line:impo_lines(*, impo:impos(*)), requester:users!requested_by(full_name)")
+      .eq("id", reservationId)
+      .single();
+
+    if (!res) return;
+
+    const reservation = res as Record<string, unknown>;
+    const requesterEmail = await getUserEmailById(svc, reservation.requested_by as string);
+    if (!requesterEmail) return;
+
+    const impoLine = (reservation.impo_line as Record<string, unknown> | null) ?? {};
+    const impo = (impoLine.impo as Record<string, unknown> | null) ?? {};
+    const requester = reservation.requester as { full_name?: string } | null;
+    const qtyRequested = reservation.qty_requested as number;
+
+    const emailData: ReservationEmailData = {
+      id: reservationId,
+      requesterName: requester?.full_name ?? "Salesperson",
+      brand: (impoLine.brand as string | null) ?? null,
+      itemCode: (impoLine.item_code as string) ?? "",
+      description: (impoLine.description as string | null) ?? null,
+      qtyRequested,
+      qtyApproved: outcome === "approve" ? (qtyApproved ?? qtyRequested) : null,
+      customerRef: (reservation.customer_ref as string | null) ?? null,
+      customerPhone: (reservation.customer_phone as string | null) ?? null,
+      amountPaid: (reservation.amount_paid as number | null) ?? null,
+      paymentMethod: (reservation.payment_method as string | null) ?? null,
+      requiredByDate: (reservation.required_by_date as string | null) ?? null,
+      quoteRef: (reservation.quote_ref as string | null) ?? null,
+      notes: (reservation.notes as string | null) ?? null,
+      graceNotes,
+      impoNumber: (impo.impo_number as string) ?? "",
+      impoEta: (impo.eta as string | null) ?? null,
+      createdAt: reservation.created_at as string,
+    };
+
+    const finalOutcome: "approved" | "rejected" = outcome === "approve" ? "approved" : "rejected";
+    const effectiveQty = emailData.qtyApproved ?? qtyRequested;
+    const subject =
+      finalOutcome === "approved"
+        ? `✅ Reservation Approved — ${emailData.itemCode} × ${effectiveQty}`
+        : `❌ Reservation Rejected — ${emailData.itemCode} × ${qtyRequested}`;
+
+    const html = buildSalespersonDecisionHtml(emailData, finalOutcome);
+    await sendStockEmail(requesterEmail, subject, html);
+
+    // Mark any pending email tokens as used (Grace acted via dashboard)
+    await svcAny
+      .from("stock_reservation_email_tokens")
+      .update({ used_at: new Date().toISOString() })
+      .eq("reservation_id", reservationId)
+      .is("used_at", null);
+  } catch (e) {
+    console.error("[approve] salesperson notification failed:", e);
+  }
 }
 
 // ── PATCH /api/stock-reservation/approve — update IMPO ETA or status (manager only) ──

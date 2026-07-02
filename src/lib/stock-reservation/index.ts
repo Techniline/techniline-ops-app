@@ -6,6 +6,8 @@ export type {
   ImpoStatus,
   StockReservation,
   ReservationStatus,
+  GroupStatus,
+  ReservationGroup,
   UploadPreviewLine,
   UploadPreview,
   UploadConfirmPayload,
@@ -17,7 +19,9 @@ export {
   fetchAllLinesWithAvailability,
   updateImpoEta,
   fetchMyReservations,
+  fetchMyReservationsWithGroups,
   fetchPendingReservations,
+  fetchPendingGrouped,
   fetchAllReservations,
   fetchManagerStats,
 } from "./queries";

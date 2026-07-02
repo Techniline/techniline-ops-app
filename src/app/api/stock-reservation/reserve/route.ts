@@ -1,4 +1,15 @@
+import { after } from "next/server";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
+import {
+  GRACE_UID,
+  getUserEmailById,
+  createApproveRejectTokens,
+  buildGraceNotificationHtml,
+  sendStockEmail,
+  type ReservationEmailData,
+} from "@/lib/stock-reservation/emailService";
+
+const APP_URL = "https://techniline-ops-app.vercel.app";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +24,7 @@ interface ReserveBody {
   required_by_date?: string;
   quote_ref?: string;
   notes?: string;
+  discount_offered?: number;
 }
 
 interface CancelBody {
@@ -33,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { impo_line_id, qty_requested, customer_ref, customer_phone, amount_paid, payment_method, required_by_date, quote_ref, notes } = body;
+  const { impo_line_id, qty_requested, customer_ref, customer_phone, amount_paid, payment_method, required_by_date, quote_ref, notes, discount_offered } = body;
   if (!impo_line_id) return Response.json({ ok: false, error: "impo_line_id required." }, { status: 400 });
   if (!qty_requested || qty_requested < 1) return Response.json({ ok: false, error: "qty_requested must be >= 1." }, { status: 400 });
 
@@ -52,6 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     p_required_by_date: required_by_date ?? null,
     p_quote_ref:       quote_ref       ?? null,
     p_notes:           notes           ?? null,
+    p_discount_offered: typeof discount_offered === "number" ? discount_offered : 0,
   });
 
   if (rpcErr) {
@@ -70,7 +83,64 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: msg }, { status: 500 });
   }
 
-  return Response.json({ ok: true, id: data as string });
+  const reservationId = data as string;
+
+  after(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svcAny = svc as any;
+      const [resRes, profileData, graceEmail] = await Promise.all([
+        svcAny
+          .from("stock_reservations")
+          .select("*, impo_line:impo_lines(*, impo:impos(*))")
+          .eq("id", reservationId)
+          .single(),
+        svcAny.from("users").select("full_name").eq("id", auth.uid).maybeSingle(),
+        getUserEmailById(svc, GRACE_UID),
+      ]);
+
+      if (!resRes.data || !graceEmail) return;
+
+      const reservation = resRes.data as Record<string, unknown>;
+      const requesterName =
+        ((profileData as { data?: { full_name?: string } | null }).data)?.full_name ?? auth.email ?? "Salesperson";
+      const impoLine = (reservation.impo_line as Record<string, unknown> | null) ?? {};
+      const impo = (impoLine.impo as Record<string, unknown> | null) ?? {};
+
+      const emailData: ReservationEmailData = {
+        id: reservationId,
+        requesterName,
+        brand: (impoLine.brand as string | null) ?? null,
+        itemCode: (impoLine.item_code as string) ?? "",
+        description: (impoLine.description as string | null) ?? null,
+        qtyRequested: reservation.qty_requested as number,
+        customerRef: (reservation.customer_ref as string | null) ?? null,
+        customerPhone: (reservation.customer_phone as string | null) ?? null,
+        amountPaid: (reservation.amount_paid as number | null) ?? null,
+        paymentMethod: (reservation.payment_method as string | null) ?? null,
+        requiredByDate: (reservation.required_by_date as string | null) ?? null,
+        quoteRef: (reservation.quote_ref as string | null) ?? null,
+        notes: (reservation.notes as string | null) ?? null,
+        discountOffered: (reservation.discount_offered as number | null) ?? null,
+        impoNumber: (impo.impo_number as string) ?? "",
+        impoEta: (impo.eta as string | null) ?? null,
+        createdAt: reservation.created_at as string,
+      };
+
+      const { approveToken, rejectToken } = await createApproveRejectTokens(svc, reservationId);
+      const base = `${APP_URL}/api/stock-reservation/email-action`;
+      const html = buildGraceNotificationHtml(emailData, `${base}?token=${approveToken}`, `${base}?token=${rejectToken}`);
+      const subject = `📦 New Reservation Request — ${emailData.itemCode} × ${emailData.qtyRequested} from ${requesterName}`;
+      await sendStockEmail(graceEmail, subject, html, {
+        fromName: `${requesterName} (via Techniline Ops)`,
+        replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
+      });
+    } catch (e) {
+      console.error("[reserve] Grace notification failed:", e);
+    }
+  });
+
+  return Response.json({ ok: true, id: reservationId });
 }
 
 // ── DELETE /api/stock-reservation/reserve — cancel own reservation ────────────

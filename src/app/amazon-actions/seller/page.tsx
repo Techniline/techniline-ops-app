@@ -35,10 +35,16 @@ function money(n: number | null, ccy: string | null): string {
   return `${ccy ? ccy + " " : ""}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const SYNC_ALLOWED_UIDS = new Set([
+  "cbb81b27-8756-4f2d-bfe0-04211c27092c", // Aaron
+  "4f0eaff3-3ce3-44de-8ed9-aa84246fc538", // Kesh
+]);
+
 function Content() {
   const { profile } = useAuth();
   const showOrders = canViewSellerOrders(profile);
   const showFinance = canViewSellerFinance(profile);
+  const canSync = isManager(profile) || SYNC_ALLOWED_UIDS.has(profile?.id ?? "");
   const [tab, setTab] = useState<Tab>(showFinance && !showOrders ? "finance" : "orders");
   const [finance, setFinance] = useState<SellerFinanceRow[]>([]);
   const [orders, setOrders] = useState<SellerOrderRow[]>([]);
@@ -102,9 +108,11 @@ function Content() {
         actions={
           <div className="flex items-center gap-2">
             {lastSync ? <span className="text-xs text-slate-500">Last sync: {fmt(lastSync)}</span> : null}
-            <button type="button" onClick={sync} disabled={syncing} className={btnPrimary}>
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
+            {canSync ? (
+              <button type="button" onClick={sync} disabled={syncing} className={btnPrimary}>
+                {syncing ? "Syncing…" : "Sync now"}
+              </button>
+            ) : null}
           </div>
         }
       />

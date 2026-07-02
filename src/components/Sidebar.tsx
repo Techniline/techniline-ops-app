@@ -15,6 +15,8 @@ import {
   canViewLogisticsPage,
   canViewLpTracker,
   canViewSellerCentral,
+  canViewSellerOrders,
+  canViewSellerFinance,
   canViewStockReservation,
   canManageStockReservation,
   isLogisticsOnly,
@@ -43,6 +45,8 @@ import {
 } from "./icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+const SUPERUSER_UID = "c4abda49-13e9-41fd-acae-88acd4aa7fcb";
 
 interface NavItem {
   href: string;
@@ -101,7 +105,7 @@ export function Sidebar({
       items: [
         { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, show: true },
         { href: "/analytics", label: "Analytics", icon: AnalyticsIcon, show: isManager(profile) },
-        { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) || profile?.id === "cbb81b27-8756-4f2d-bfe0-04211c27092c" || profile?.id === "227fdb27-80b5-4040-ab14-4bb945068af7" },
+        { href: "/scorecard", label: "KPI Scorecard", icon: AnalyticsIcon, show: isManager(profile) || canViewSellerOrders(profile) || canViewSellerFinance(profile) },
         { href: "/ai-usage", label: "AI Usage", icon: AiIcon, show: true },
       ],
     },
@@ -137,6 +141,17 @@ export function Sidebar({
           label: "Stock Reservation",
           icon: CargoIcon,
           show: canViewStockReservation(profile),
+        },
+      ],
+    },
+    {
+      heading: "Admin",
+      items: [
+        {
+          href: "/settings/users",
+          label: "User Permissions",
+          icon: ResellerIcon,
+          show: isManager(profile) || profile?.id === SUPERUSER_UID,
         },
       ],
     },

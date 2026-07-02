@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { isManager } from "@/lib/permissions";
+import { canViewFinance, isManager } from "@/lib/permissions";
 import { buildDealUrl, extractDealId } from "@/lib/zoho/dealId";
 import { validateDeal, zohoConfigured } from "@/lib/zoho/client";
 import type { UserProfile } from "@/lib/types";
@@ -9,9 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
-
-/** Authenticated user id iff they may use the reseller logger (manager or Maricel). */
+/** Authenticated user id iff they may use the reseller logger (manager or finance user). */
 async function authorizedId(request: Request): Promise<string | null> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -27,10 +25,9 @@ async function authorizedId(request: Request): Promise<string | null> {
   if (error || !data.user) return null;
 
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data: row } = await svc.from("users").select("role").eq("id", data.user.id).maybeSingle();
-  const profile = { id: data.user.id, role: (row as { role?: string } | null)?.role ?? null } as UserProfile;
-  const ok = isManager(profile) || profile.id === MARICEL_ID;
-  return ok ? profile.id : null;
+  const { data: row } = await svc.from("users").select("role, portal_access").eq("id", data.user.id).maybeSingle();
+  const profile = { id: data.user.id, role: (row as { role?: string; portal_access?: string[] | null } | null)?.role ?? null, portal_access: (row as { role?: string; portal_access?: string[] | null } | null)?.portal_access ?? null } as UserProfile;
+  return isManager(profile) || canViewFinance(profile) ? profile.id : null;
 }
 
 /**

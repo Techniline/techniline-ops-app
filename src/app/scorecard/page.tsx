@@ -11,7 +11,7 @@ import { inputClass, surface } from "@/components/ui";
 import { buildCycle, currentYearQuarter, cycleMonth, fetchStoredCycle, friThuWeek, saveCycle } from "@/lib/kpiCycle";
 import { quarterMonths } from "@/lib/musicmajlis";
 import { AARON_ID, fetchBreakHistory, type UserBreak } from "@/lib/breaks";
-import { isManager } from "@/lib/permissions";
+import { canViewSellerOrders, canViewSellerFinance, isManager } from "@/lib/permissions";
 import { fetchScorecard, type Kpi, type Scorecard } from "@/lib/scorecard";
 import { fetchWeeklyScorecard, type WeeklyRow, type WeeklyScorecard } from "@/lib/scorecardWeekly";
 
@@ -88,8 +88,6 @@ function Person({ name, role, accent, kpis }: { name: string; role: string; acce
     </section>
   );
 }
-
-const MARICEL_ID = "227fdb27-80b5-4040-ab14-4bb945068af7";
 
 // ── Break analysis (manager-only) ────────────────────────────────────────────
 
@@ -234,7 +232,7 @@ function WeeklyGrid({ grid, showAaron, showMaricel }: { grid: WeeklyScorecard; s
 function ScorecardContent() {
   const { profile } = useAuth();
   const manager = isManager(profile);
-  const canView = manager || profile?.id === AARON_ID || profile?.id === MARICEL_ID;
+  const canView = manager || canViewSellerOrders(profile) || canViewSellerFinance(profile);
 
   const [data, setData] = useState<Scorecard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -346,8 +344,8 @@ function ScorecardContent() {
     );
   }
 
-  const showAaron = manager || profile?.id === AARON_ID;
-  const showMaricel = manager || profile?.id === MARICEL_ID;
+  const showAaron = manager || canViewSellerOrders(profile);
+  const showMaricel = manager || canViewSellerFinance(profile);
 
   return (
     <div>

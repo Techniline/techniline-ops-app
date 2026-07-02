@@ -5,15 +5,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/app/providers/AuthProvider";
+import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
 import { supabase } from "@/lib/supabaseClient";
 import {
   fetchImpos,
   fetchAllReservations,
   fetchPendingReservations,
+  fetchPendingGrouped,
   fetchManagerStats,
 } from "@/lib/stock-reservation";
-import type { Impo, StockReservation, UploadPreviewLine, UploadConfirmPayload } from "@/lib/stock-reservation";
+import type { Impo, StockReservation, UploadPreviewLine, UploadConfirmPayload, ReservationGroup } from "@/lib/stock-reservation";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +47,7 @@ interface ParsedPreview {
   lines: UploadPreviewLine[]; file_name: string;
 }
 
-function UploadPanel({ token, onDone }: UploadPanelProps) {
+function UploadPanel({ onDone }: Omit<UploadPanelProps, "token">) {
   const [step, setStep] = useState<"select" | "preview" | "saving">("select");
   const [preview, setPreview] = useState<ParsedPreview | null>(null);
   const [editedImpo, setEditedImpo] = useState("");
@@ -52,13 +55,19 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  async function freshToken(): Promise<string> {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? "";
+  }
+
   async function handleFile(file: File) {
     setUploading(true); setError(null);
     try {
+      const tok = await freshToken();
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/stock-reservation/upload?action=preview", {
-        method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+        method: "POST", headers: { Authorization: `Bearer ${tok}` }, body: form,
       });
       const data = await res.json() as ParsedPreview & { ok: boolean; error?: string };
       if (!data.ok) { setError(data.error ?? "Upload failed."); return; }
@@ -72,8 +81,9 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
     setStep("saving"); setError(null);
     const payload: UploadConfirmPayload = { impo_number: editedImpo.trim(), lines: preview.lines, source_file_name: preview.file_name };
     try {
+      const tok = await freshToken();
       const res = await fetch("/api/stock-reservation/upload?action=confirm", {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
         body: JSON.stringify(payload),
       });
       const data = await res.json() as { ok: boolean; error?: string };
@@ -177,9 +187,9 @@ function UploadPanel({ token, onDone }: UploadPanelProps) {
 
 // ── Approval Card ─────────────────────────────────────────────────────────────
 
-interface ApprovalCardProps { reservation: StockReservation; token: string; onDone: () => void; }
+interface ApprovalCardProps { reservation: StockReservation; getToken: () => Promise<string>; onDone: () => void; }
 
-function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
+function ApprovalCard({ reservation: res, getToken, onDone }: ApprovalCardProps) {
   const [qty, setQty] = useState(res.qty_requested);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -190,9 +200,10 @@ function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
   async function act(action: "approve" | "reject") {
     setSaving(true); setError(null);
     try {
+      const tok = await getToken();
       const r = await fetch("/api/stock-reservation/approve", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
         body: JSON.stringify({ reservation_id: res.id, action, qty_approved: action === "approve" ? qty : undefined, grace_notes: notes.trim() || undefined }),
       });
       const data = await r.json() as { ok: boolean; error?: string };
@@ -222,6 +233,11 @@ function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
             )}
             {res.required_by_date && <span>Required by: {fmtDate(res.required_by_date)}</span>}
             {res.quote_ref && <span>Ref: {res.quote_ref}</span>}
+            {(res.discount_offered ?? 0) > 0 && (
+              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                {res.discount_offered}% discount given
+              </span>
+            )}
           </div>
           {res.notes && <p className="mt-1 text-xs italic text-slate-400">{res.notes}</p>}
         </div>
@@ -252,6 +268,217 @@ function ApprovalCard({ reservation: res, token, onDone }: ApprovalCardProps) {
         </div>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+// ── Group Approval Card ────────────────────────────────────────────────────────
+
+interface GroupApprovalCardProps {
+  groupId: string;
+  group: ReservationGroup;
+  reservations: StockReservation[];
+  getToken: () => Promise<string>;
+  onDone: () => void;
+}
+
+function GroupApprovalCard({ groupId, group, reservations, getToken, onDone }: GroupApprovalCardProps) {
+  const [decisions, setDecisions] = useState<Map<string, { action: "approve" | "reject"; qty: number }>>(
+    () => new Map(reservations.map((r) => [r.id, { action: "approve" as const, qty: r.qty_requested }]))
+  );
+  const [graceNote, setGraceNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const requesterName = reservations[0]?.requester_name ?? "User";
+
+  function setLineAction(id: string, action: "approve" | "reject") {
+    setDecisions((prev) => { const m = new Map(prev); m.set(id, { ...m.get(id)!, action }); return m; });
+  }
+
+  function setLineQty(id: string, qty: number) {
+    setDecisions((prev) => { const m = new Map(prev); m.set(id, { ...m.get(id)!, qty }); return m; });
+  }
+
+  function approveAll() {
+    setDecisions(new Map(reservations.map((r) => [r.id, { action: "approve" as const, qty: r.qty_requested }])));
+  }
+
+  function rejectAll() {
+    setDecisions(new Map(reservations.map((r) => [r.id, { action: "reject" as const, qty: r.qty_requested }])));
+  }
+
+  async function submit() {
+    setSaving(true); setError(null);
+    try {
+      const decisionsList = Array.from(decisions.entries()).map(([id, d]) => ({
+        reservation_id: id,
+        action: d.action,
+        ...(d.action === "approve" ? { qty_approved: d.qty } : {}),
+      }));
+      const tok = await getToken();
+      const r = await fetch("/api/stock-reservation/group-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ group_id: groupId, decisions: decisionsList, grace_notes: graceNote.trim() || undefined }),
+      });
+      const data = await r.json() as { ok: boolean; error?: string; warnings?: string[] };
+      if (!data.ok) { setError(data.error ?? "Failed."); return; }
+      onDone();
+    } catch { setError("Network error."); }
+    finally { setSaving(false); }
+  }
+
+  const approvedCount = Array.from(decisions.values()).filter((d) => d.action === "approve").length;
+  const totalUnits = reservations.reduce((s, r) => s + r.qty_requested, 0);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-sm dark:border-indigo-800/60 dark:bg-slate-900">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-indigo-100 bg-indigo-50/60 px-5 py-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-bold text-white">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Multi-SKU Order · {reservations.length} lines
+            </span>
+            <p className="font-semibold text-slate-900 dark:text-slate-100">{requesterName}</p>
+          </div>
+          <p className="mt-1 text-sm text-indigo-700 dark:text-indigo-400">
+            <span className="font-semibold">{group.customer_ref}</span>
+            {group.customer_phone && <> · {group.customer_phone}</>}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-400">
+            {group.amount_paid != null && group.amount_paid > 0 && (
+              <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                AED {group.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })} paid ({group.payment_method?.replace("_", " ")})
+              </span>
+            )}
+            {group.required_by_date && <span>Required by: {fmtDate(group.required_by_date)}</span>}
+            {group.quote_ref && <span>Ref: {group.quote_ref}</span>}
+          </div>
+          {group.notes && <p className="mt-1 text-xs italic text-slate-400">{group.notes}</p>}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-bold text-indigo-700 dark:text-indigo-400">{totalUnits} units total</p>
+          <p className="text-xs text-slate-400">{reservations.length} SKU{reservations.length !== 1 ? "s" : ""}</p>
+        </div>
+      </div>
+
+      {/* Line items table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
+            <tr>
+              <th className="px-4 py-2.5 text-left">SKU / Item</th>
+              <th className="px-4 py-2.5 text-left">IMPO · ETA</th>
+              <th className="px-4 py-2.5 text-right">Qty Req</th>
+              <th className="px-4 py-2.5 text-right">Disc%</th>
+              <th className="px-4 py-2.5 text-center">Approve Qty</th>
+              <th className="px-4 py-2.5 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {reservations.map((r) => {
+              const line = r.impo_line as unknown as { item_code?: string; brand?: string | null; description?: string | null; impo?: { impo_number?: string; eta?: string | null } } | undefined;
+              const d = decisions.get(r.id) ?? { action: "approve" as const, qty: r.qty_requested };
+              const isApprove = d.action === "approve";
+              return (
+                <tr key={r.id} className={`${isApprove ? "" : "opacity-60"} hover:bg-slate-50 dark:hover:bg-slate-800/20`}>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
+                    {line?.brand && <p className="text-xs text-slate-400">{line.brand}</p>}
+                    {line?.description && <p className="max-w-[200px] truncate text-xs text-slate-400">{line.description}</p>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-slate-600 dark:text-slate-400">{line?.impo?.impo_number ?? "—"}</p>
+                    <p className="text-xs text-slate-400">{fmtDate(line?.impo?.eta ?? null)}</p>
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">{r.qty_requested}</td>
+                  <td className="px-4 py-3 text-right">
+                    {(r.discount_offered ?? 0) > 0
+                      ? <span className="font-semibold text-emerald-700 dark:text-emerald-400">{r.discount_offered}%</span>
+                      : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {isApprove ? (
+                      <input
+                        type="number" min={1} max={r.qty_requested} value={d.qty}
+                        onChange={(e) => setLineQty(r.id, Math.max(1, Math.min(r.qty_requested, Number(e.target.value))))}
+                        className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-center text-sm dark:border-slate-700 dark:bg-slate-800"
+                      />
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-600">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700">
+                      <button
+                        onClick={() => setLineAction(r.id, "approve")}
+                        className={`rounded-l-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                          isApprove
+                            ? "bg-green-600 text-white"
+                            : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => setLineAction(r.id, "reject")}
+                        className={`rounded-r-lg border-l border-slate-200 px-3 py-1 text-xs font-semibold transition-colors dark:border-slate-700 ${
+                          !isApprove
+                            ? "bg-red-600 text-white"
+                            : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        ✗
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer actions */}
+      <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex gap-2">
+            <button
+              onClick={approveAll}
+              className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-400"
+            >
+              ✓ Approve All
+            </button>
+            <button
+              onClick={rejectAll}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400"
+            >
+              ✗ Reject All
+            </button>
+          </div>
+          <label className="flex min-w-[200px] flex-1 flex-col gap-1">
+            <span className="text-xs font-medium text-slate-500">Note for salesperson (optional)</span>
+            <input
+              type="text" placeholder="Reason or notes for all lines…" value={graceNote}
+              onChange={(e) => setGraceNote(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+          </label>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="self-end rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : `Submit (${approvedCount} approve · ${reservations.length - approvedCount} reject)`}
+          </button>
+        </div>
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      </div>
     </div>
   );
 }
@@ -636,16 +863,16 @@ type ImpoView = "active" | "history";
 
 function ManagerPage() {
   useAuth();
-  const [token, setToken] = useState("");
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setToken(session?.access_token ?? "");
-    });
-  }, []);
+  const freshToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? "";
+  };
 
   const [impos, setImpos] = useState<Impo[]>([]);
   const [pending, setPending] = useState<StockReservation[]>([]);
+  const [pendingStandalone, setPendingStandalone] = useState<StockReservation[]>([]);
+  const [pendingGroups, setPendingGroups] = useState<Map<string, { group: ReservationGroup; lines: StockReservation[] }>>(new Map());
   const [all, setAll] = useState<StockReservation[]>([]);
   const [managerStats, setManagerStats] = useState<{ reservedUnits: number; depositsCollected: number; availableUnits: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -660,8 +887,10 @@ function ManagerPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [i, p, a, s] = await Promise.all([fetchImpos(), fetchPendingReservations(), fetchAllReservations(), fetchManagerStats()]);
+      const [i, p, a, s, pg] = await Promise.all([fetchImpos(), fetchPendingReservations(), fetchAllReservations(), fetchManagerStats(), fetchPendingGrouped()]);
       setImpos(i); setPending(p); setAll(a); setManagerStats(s);
+      setPendingStandalone(pg.standalone);
+      setPendingGroups(pg.groups);
     } finally { setLoading(false); }
   }, []);
 
@@ -702,9 +931,10 @@ function ManagerPage() {
     if (!editingEta) return;
     setSavingEta(true);
     try {
+      const tok = await freshToken();
       await fetch("/api/stock-reservation/approve", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
         body: JSON.stringify({ impo_id: editingEta.impoId, eta: editingEta.eta }),
       });
       setEditingEta(null); load();
@@ -715,9 +945,10 @@ function ManagerPage() {
     if (!confirm("Mark this shipment as Received? It will move to the History view.")) return;
     setMarkingReceived(impoId);
     try {
+      const tok = await freshToken();
       await fetch("/api/stock-reservation/approve", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
         body: JSON.stringify({ impo_id: impoId, status: "arrived" }),
       });
       load();
@@ -744,34 +975,26 @@ function ManagerPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 md:p-6">
-      {/* Breadcrumb */}
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/dashboard" className="hover:text-slate-600 dark:hover:text-slate-200">Dashboard</Link>
-        <span>/</span>
-        <span className="text-slate-600 dark:text-slate-300">Stock Reservation — Manager</span>
-      </div>
-
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Stock Reservation — Manager</h1>
-          <p className="mt-1 text-sm text-slate-500">Upload shipment sheets, set ETAs, approve requests, and run allocation reports.</p>
-        </div>
-        <button
-          onClick={() => setShowUpload(!showUpload)}
-          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Upload Sheet
-        </button>
-      </div>
+    <AppShell fullWidth>
+      <PageHeader
+        title="Stock Reservation — Manager"
+        subtitle="Upload shipment sheets, set ETAs, approve requests, and run allocation reports."
+        actions={
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Sheet
+          </button>
+        }
+      />
 
       {showUpload && (
         <div className="mb-6">
-          <UploadPanel token={token} onDone={() => { setShowUpload(false); load(); }} />
+          <UploadPanel onDone={() => { setShowUpload(false); load(); }} />
         </div>
       )}
 
@@ -806,15 +1029,40 @@ function ManagerPage() {
 
       {/* Tab: Approvals */}
       {activeTab === "approvals" && (
-        <div>
+        <div className="space-y-4">
           {pending.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-900">
               No pending approvals. All caught up!
             </div>
           ) : (
-            <div className="space-y-3">
-              {pending.map((r) => <ApprovalCard key={r.id} reservation={r} token={token} onDone={load} />)}
-            </div>
+            <>
+              {/* Multi-SKU group orders */}
+              {pendingGroups.size > 0 && (
+                <div className="space-y-3">
+                  {Array.from(pendingGroups.entries()).map(([gId, { group, lines }]) => (
+                    <GroupApprovalCard
+                      key={gId}
+                      groupId={gId}
+                      group={group}
+                      reservations={lines}
+                      getToken={freshToken}
+                      onDone={load}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* Standalone (single-SKU) reservations */}
+              {pendingStandalone.length > 0 && (
+                <div className="space-y-3">
+                  {pendingGroups.size > 0 && (
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Individual Requests
+                    </h3>
+                  )}
+                  {pendingStandalone.map((r) => <ApprovalCard key={r.id} reservation={r} getToken={freshToken} onDone={load} />)}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -981,7 +1229,7 @@ function ManagerPage() {
 
       {/* Tab: Allocation Report */}
       {activeTab === "report" && <ReportTab reservations={all} impos={impos} />}
-    </div>
+    </AppShell>
   );
 }
 

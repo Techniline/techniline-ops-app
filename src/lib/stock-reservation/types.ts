@@ -1,5 +1,6 @@
 export type ImpoStatus = "pending" | "in_transit" | "arrived" | "cancelled";
 export type ReservationStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type GroupStatus = "pending" | "partial" | "approved" | "rejected" | "cancelled";
 
 export interface Impo {
   id: string;
@@ -49,8 +50,29 @@ export interface StockReservation {
   customer_phone: string | null;
   required_by_date: string | null;
   quote_ref: string | null;
+  group_id?: string | null;
+  discount_offered?: number | null;
   // joined
   impo_line?: ImpoLineWithAvailability;
+  requester_name?: string | null;
+}
+
+export interface ReservationGroup {
+  id: string;
+  requested_by: string;
+  customer_ref: string;
+  customer_phone: string | null;
+  amount_paid: number | null;
+  payment_method: string | null;
+  required_by_date: string | null;
+  quote_ref: string | null;
+  notes: string | null;
+  status: GroupStatus;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  // joined
+  reservations?: StockReservation[];
   requester_name?: string | null;
 }
 
