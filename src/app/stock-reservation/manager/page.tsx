@@ -523,6 +523,280 @@ function GroupApprovalCard({ groupId, group, reservations, getToken, onDone }: G
   );
 }
 
+// ── Receive IMPO Modal ────────────────────────────────────────────────────────
+
+interface ReceiveLineData {
+  id: string;
+  item_code: string;
+  brand: string | null;
+  description: string | null;
+  qty_incoming: number;
+  qty_received: number | null;
+  approved_qty_total: number;
+  approved: { id: string; salesperson_name: string; uid: string; qty: number; customer_ref: string | null }[];
+  pending: { id: string; salesperson_name: string; uid: string; qty: number; customer_ref: string | null }[];
+}
+
+interface ReceiveImpoData {
+  impo: Impo;
+  lines: ReceiveLineData[];
+}
+
+interface ReceiveImpoModalProps {
+  impoId: string;
+  getToken: () => Promise<string>;
+  onClose: () => void;
+  onDone: () => void;
+}
+
+function ReceiveImpoModal({ impoId, getToken, onClose, onDone }: ReceiveImpoModalProps) {
+  const [data, setData] = useState<ReceiveImpoData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [qtyReceived, setQtyReceived] = useState<Map<string, number>>(new Map());
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const tok = await getToken();
+        const res = await fetch(`/api/stock-reservation/receive-impo?impo_id=${impoId}`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        });
+        const json = await res.json() as { ok: boolean; error?: string } & Partial<ReceiveImpoData>;
+        if (cancelled) return;
+        if (!json.ok) { setLoadError(json.error ?? "Failed to load."); return; }
+        setData({ impo: json.impo!, lines: json.lines! });
+        const defaults = new Map<string, number>();
+        for (const l of json.lines!) defaults.set(l.id, l.qty_incoming);
+        setQtyReceived(defaults);
+      } catch {
+        if (!cancelled) setLoadError("Network error.");
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [impoId, getToken]);
+
+  async function confirm() {
+    if (!data) return;
+    setSubmitting(true); setSubmitError(null);
+    try {
+      const tok = await getToken();
+      const res = await fetch("/api/stock-reservation/receive-impo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({
+          impo_id: impoId,
+          line_quantities: data.lines.map((l) => ({ line_id: l.id, qty_received: qtyReceived.get(l.id) ?? l.qty_incoming })),
+        }),
+      });
+      const json = await res.json() as { ok: boolean; error?: string; rejected?: number; notified?: number };
+      if (!json.ok) { setSubmitError(json.error ?? "Failed."); return; }
+      onDone();
+    } catch {
+      setSubmitError("Network error.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const totalApproved = data?.lines.reduce((s, l) => s + l.approved.length, 0) ?? 0;
+  const totalPending = data?.lines.reduce((s, l) => s + l.pending.length, 0) ?? 0;
+  const shortLines = data?.lines.filter((l) => (qtyReceived.get(l.id) ?? l.qty_incoming) < l.approved_qty_total) ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Mark Shipment as Received</h2>
+            {data && (
+              <p className="text-sm text-slate-500">
+                {data.impo.impo_number}
+                {data.impo.eta && <> · ETA {fmtDate(data.impo.eta)}</>}
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {loadError ? (
+            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30">{loadError}</p>
+          ) : !data ? (
+            <div className="flex items-center justify-center py-12 text-slate-400">
+              <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            </div>
+          ) : (
+            <>
+              {/* Line qty table */}
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Enter actual quantities received
+              </p>
+              <div className="mb-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left">SKU</th>
+                      <th className="px-4 py-2.5 text-right">Ordered</th>
+                      <th className="px-4 py-2.5 text-right">Approved</th>
+                      <th className="px-4 py-2.5 text-right">Actual Received</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {data.lines.map((l) => {
+                      const received = qtyReceived.get(l.id) ?? l.qty_incoming;
+                      const isShort = received < l.approved_qty_total;
+                      return (
+                        <tr key={l.id} className={isShort ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
+                          <td className="px-4 py-2.5">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100">{l.item_code}</p>
+                            {l.brand && <p className="text-xs text-slate-400">{l.brand}</p>}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-400">{l.qty_incoming}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            {l.approved_qty_total > 0
+                              ? <span className="font-semibold text-green-700 dark:text-green-400">{l.approved_qty_total}</span>
+                              : <span className="text-slate-400">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {isShort && <span className="text-xs text-red-600 font-semibold">⚠ short by {l.approved_qty_total - received}</span>}
+                              <input
+                                type="number"
+                                min={0}
+                                max={l.qty_incoming}
+                                value={received}
+                                onChange={(e) => {
+                                  const v = Math.max(0, Math.min(l.qty_incoming, Number(e.target.value)));
+                                  setQtyReceived((prev) => new Map(prev).set(l.id, v));
+                                }}
+                                className={`w-20 rounded-lg border px-2 py-1 text-center text-sm dark:bg-slate-800 ${isShort ? "border-red-300 dark:border-red-700" : "border-slate-300 dark:border-slate-700"}`}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Short shipment warning */}
+              {shortLines.length > 0 && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/50 dark:bg-red-950/20">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                    ⚠ Short shipment detected on {shortLines.length} SKU{shortLines.length !== 1 ? "s" : ""}
+                  </p>
+                  <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">
+                    Actual received qty is less than what was approved. You may need to contact affected salespersons manually.
+                  </p>
+                </div>
+              )}
+
+              {/* What will happen summary */}
+              <div className="space-y-2">
+                {totalApproved > 0 && (
+                  <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800/40 dark:bg-green-950/20">
+                    <span className="text-lg leading-none">✅</span>
+                    <div>
+                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+                        {totalApproved} approved reservation{totalApproved !== 1 ? "s" : ""} will be notified
+                      </p>
+                      <p className="text-xs text-green-700 dark:text-green-400">
+                        Each salesperson will receive a "Stock Arrived" email from your mailbox.
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {data.lines.flatMap((l) => l.approved).map((a) => (
+                          <span key={a.id} className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                            {a.salesperson_name}{a.customer_ref ? ` · ${a.customer_ref}` : ""} × {a.qty}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {totalPending > 0 && (
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/20">
+                    <span className="text-lg leading-none">❌</span>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        {totalPending} pending reservation{totalPending !== 1 ? "s" : ""} will be auto-rejected
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        These were never approved. Each salesperson will receive a rejection email explaining the IMPO has arrived.
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {data.lines.flatMap((l) => l.pending).map((p) => (
+                          <span key={p.id} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            {p.salesperson_name}{p.customer_ref ? ` · ${p.customer_ref}` : ""} × {p.qty}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {totalApproved === 0 && totalPending === 0 && (
+                  <p className="text-sm text-slate-400">No open reservations on this IMPO.</p>
+                )}
+              </div>
+
+              {submitError && (
+                <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {data && !loadError && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+            <p className="text-xs text-slate-400">This action cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
+                Cancel
+              </button>
+              <button
+                onClick={confirm}
+                disabled={submitting}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Processing…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Confirm Receipt
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Report Tab ────────────────────────────────────────────────────────────────
 
 interface ReportTabProps { reservations: StockReservation[]; impos: Impo[]; }
@@ -604,7 +878,20 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
     setFilterBrand(""); setFilterDateFrom(""); setFilterDateTo("");
   }
 
-  function printReport() { window.print(); }
+  function printReport() {
+    const win = window.open("", "_blank", "width=960,height=700");
+    if (!win) return;
+    win.document.write(
+      `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">` +
+      `<title>Stock Allocation Report — ${reportDate}</title>` +
+      `<style>*{box-sizing:border-box;margin:0;padding:0}` +
+      `body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#fff;padding:24px}` +
+      `@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0}}</style>` +
+      `</head><body>${emailHtml}</body></html>`
+    );
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }
 
   function exportCsv() {
     const rows: (string | number)[][] = [
@@ -1218,7 +1505,7 @@ function ManagerPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [editingEta, setEditingEta] = useState<{ impoId: string; eta: string } | null>(null);
   const [savingEta, setSavingEta] = useState(false);
-  const [markingReceived, setMarkingReceived] = useState<string | null>(null);
+  const [receiveModalImpoId, setReceiveModalImpoId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"approvals" | "impos" | "activity" | "report">("approvals");
   const [impoView, setImpoView] = useState<ImpoView>("active");
   const [impoHistoryDays, setImpoHistoryDays] = useState<90 | 365 | 0>(90);
@@ -1280,18 +1567,8 @@ function ManagerPage() {
     } finally { setSavingEta(false); }
   }
 
-  async function markReceived(impoId: string) {
-    if (!confirm("Mark this shipment as Received? It will move to the History view.")) return;
-    setMarkingReceived(impoId);
-    try {
-      const tok = await freshToken();
-      await fetch("/api/stock-reservation/approve", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-        body: JSON.stringify({ impo_id: impoId, status: "arrived" }),
-      });
-      load();
-    } finally { setMarkingReceived(null); }
+  function markReceived(impoId: string) {
+    setReceiveModalImpoId(impoId);
   }
 
   if (loading) {
@@ -1492,13 +1769,12 @@ function ManagerPage() {
                           {impoView === "active" && (
                             <button
                               onClick={() => markReceived(impo.id)}
-                              disabled={markingReceived === impo.id}
-                              className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                              className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
                             >
                               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                               </svg>
-                              {markingReceived === impo.id ? "…" : "Mark Received"}
+                              Mark Received
                             </button>
                           )}
                         </div>
@@ -1568,6 +1844,16 @@ function ManagerPage() {
 
       {/* Tab: Allocation Report */}
       {activeTab === "report" && <ReportTab reservations={all} impos={impos} />}
+
+      {/* Receive IMPO modal */}
+      {receiveModalImpoId && (
+        <ReceiveImpoModal
+          impoId={receiveModalImpoId}
+          getToken={freshToken}
+          onClose={() => setReceiveModalImpoId(null)}
+          onDone={() => { setReceiveModalImpoId(null); load(); }}
+        />
+      )}
     </AppShell>
   );
 }

@@ -55,7 +55,8 @@ export async function fetchImpoWithLines(impoId: string): Promise<ImpoWithLines 
 export async function fetchAllLinesWithAvailability(): Promise<ImpoLineWithAvailability[]> {
   const [linesRes, imposRes, reservedRes] = await Promise.all([
     supabase.from("impo_lines").select("*"),
-    supabase.from("impos").select("*").order("eta", { ascending: true }),
+    // Only show lines from active IMPOs — arrived/cancelled are closed for new bookings
+    supabase.from("impos").select("*").in("status", ["pending", "in_transit"]).order("eta", { ascending: true }),
     // SECURITY DEFINER RPC bypasses RLS so every authenticated user sees the
     // correct aggregate (pending + approved) reserved qty — not just their own.
     supabase.rpc("get_reserved_qty_by_line"),

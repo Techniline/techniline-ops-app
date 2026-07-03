@@ -22,6 +22,7 @@ export interface ImpoLine {
   description: string | null;
   category: string | null;
   qty_incoming: number;
+  qty_received: number | null;
   created_at: string;
 }
 

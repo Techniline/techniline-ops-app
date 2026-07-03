@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
   getManagerProfiles,
@@ -48,6 +47,19 @@ export async function POST(request: Request): Promise<Response> {
   if (!impo_line_id) return Response.json({ ok: false, error: "impo_line_id required." }, { status: 400 });
   if (!qty_requested || qty_requested < 1) return Response.json({ ok: false, error: "qty_requested must be >= 1." }, { status: 400 });
 
+  // Block bookings on received IMPOs
+  const { data: lineCheck } = await svc
+    .from("impo_lines")
+    .select("id, impo:impos(status)")
+    .eq("id", impo_line_id)
+    .single();
+  if ((lineCheck as { impo?: { status?: string } } | null)?.impo?.status === "arrived") {
+    return Response.json(
+      { ok: false, error: "This IMPO has been received. Bookings are closed." },
+      { status: 409 }
+    );
+  }
+
   // Atomic check-and-insert via Postgres function.
   // The function locks the impo_line row (FOR UPDATE) before reading reservation
   // counts, so concurrent calls for the same line queue up — eliminating the
@@ -84,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const reservationId = data as string;
 
-  after(async () => {
+  await (async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const svcAny = svc as any;
@@ -136,6 +148,7 @@ export async function POST(request: Request): Promise<Response> {
           const html = buildGraceNotificationHtml(emailData, `${base}?token=${approveToken}`, `${base}?token=${rejectToken}`);
           await sendStockEmail(mgr.email, subject, html, {
             fromName: `${requesterName} (via Techniline Ops)`,
+            fromEmail: auth.email ?? undefined,
             replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
           });
         } catch (err) {
@@ -145,7 +158,7 @@ export async function POST(request: Request): Promise<Response> {
     } catch (e) {
       console.error("[reserve] Grace notification failed:", e);
     }
-  });
+  })();
 
   return Response.json({ ok: true, id: reservationId });
 }

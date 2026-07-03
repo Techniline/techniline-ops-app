@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
   getManagerProfiles,
@@ -70,9 +69,26 @@ export async function POST(request: Request): Promise<Response> {
   const reservationIds: string[] = [];
   const failedLines: { index: number; error: string }[] = [];
 
+  // Pre-check: fetch IMPO statuses for all requested lines in one query
+  const { data: lineImpoRows } = await svc
+    .from("impo_lines")
+    .select("id, impo:impos(status)")
+    .in("id", lines.map((l) => l.impo_line_id));
+
+  const arrivedLineIds = new Set(
+    ((lineImpoRows ?? []) as { id: string; impo: { status: string } | null }[])
+      .filter((l) => l.impo?.status === "arrived")
+      .map((l) => l.id)
+  );
+
   // Create each reservation line atomically
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (arrivedLineIds.has(line.impo_line_id)) {
+      failedLines.push({ index: i, error: "This IMPO has been received. Bookings are closed." });
+      continue;
+    }
+
     const { data: resId, error: rpcErr } = await svc.rpc("create_reservation", {
       p_impo_line_id:    line.impo_line_id,
       p_requested_by:    auth.uid,
@@ -111,7 +127,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // If SOME lines failed, partial success is still ok — report which failed
-  after(async () => {
+  await (async () => {
     try {
       const [profileData, managers] = await Promise.all([
         svc.from("users").select("full_name").eq("id", auth.uid).maybeSingle(),
@@ -237,6 +253,7 @@ export async function POST(request: Request): Promise<Response> {
           const html = bodyHtml.replace("__ACTION_SECTION__", actionSection);
           await sendStockEmail(mgr.email, subject, html, {
             fromName: `${requesterName} (via Techniline Ops)`,
+            fromEmail: auth.email ?? undefined,
             replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
           });
         } catch (err) {
@@ -246,7 +263,7 @@ export async function POST(request: Request): Promise<Response> {
     } catch (e) {
       console.error("[group] Grace notification failed:", e);
     }
-  });
+  })();
 
   return Response.json({
     ok: true,
