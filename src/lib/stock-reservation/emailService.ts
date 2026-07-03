@@ -243,7 +243,7 @@ export async function sendStockEmail(
   to: string,
   subject: string,
   html: string,
-  opts?: { replyTo?: { address: string; name?: string }; fromName?: string; cc?: string }
+  opts?: { replyTo?: { address: string; name?: string }; fromName?: string; cc?: string; bcc?: string }
 ): Promise<void> {
   const graphToken = await getGraphToken();
   const message: Record<string, unknown> = {
@@ -257,6 +257,13 @@ export async function sendStockEmail(
   }
   if (opts?.cc) {
     message.ccRecipients = opts.cc
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean)
+      .map((a) => ({ emailAddress: { address: a } }));
+  }
+  if (opts?.bcc) {
+    message.bccRecipients = opts.bcc
       .split(",")
       .map((a) => a.trim())
       .filter(Boolean)

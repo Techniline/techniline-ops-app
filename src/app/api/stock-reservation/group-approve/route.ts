@@ -257,6 +257,7 @@ async function notifyGroupSalesperson(
     await sendStockEmail(requesterEmail, subject, html, {
       fromName: approverName,
       replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
+      bcc: approverEmail ?? undefined,
     });
   } catch (e) {
     console.error("[group-approve] salesperson notification failed:", e);
