@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
@@ -102,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
 
     if (updErr) return Response.json({ ok: false, error: updErr.message }, { status: 500 });
 
-    after(() => scheduleSalespersonNotification(svc, reservation_id, "approve", approvedQty, grace_notes ?? null));
+    await scheduleSalespersonNotification(svc, reservation_id, "approve", approvedQty, grace_notes ?? null);
     return Response.json({ ok: true, qty_approved: approvedQty });
   }
 
@@ -119,7 +118,7 @@ export async function POST(request: Request): Promise<Response> {
 
   if (updErr) return Response.json({ ok: false, error: updErr.message }, { status: 500 });
 
-  after(() => scheduleSalespersonNotification(svc, reservation_id, "reject", null, grace_notes ?? null));
+  await scheduleSalespersonNotification(svc, reservation_id, "reject", null, grace_notes ?? null);
   return Response.json({ ok: true });
 }
 

@@ -36,7 +36,7 @@ const LP_SCHEMA = {
           qty: { type: ["number", "null"] },
           unit_price: { type: ["number", "null"], description: "Per-unit Price (NOT the line Amount)" },
           amount: { type: ["number", "null"], description: "Line total Amount" },
-          disc_amount: { type: ["number", "null"] },
+          disc_amount: { type: "number", description: "Discount amount; 0 if none" },
         },
         required: ["line_number", "brand", "model_no", "description", "qty", "unit_price", "amount", "disc_amount"],
       },

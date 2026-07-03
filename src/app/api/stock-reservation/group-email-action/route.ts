@@ -172,8 +172,8 @@ export async function GET(request: Request): Promise<Response> {
     .in("reservation_id", lineIds)
     .is("used_at", null);
 
-  // Notify salesperson (fire and forget)
-  void notifyGroupSalesperson(svc, anchor.group_id, action, reviewerUid);
+  // Notify salesperson
+  await notifyGroupSalesperson(svc, anchor.group_id, action, reviewerUid);
 
   const isApproved = action === "approve";
   return new Response(

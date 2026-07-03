@@ -137,8 +137,8 @@ export async function GET(request: Request): Promise<Response> {
     .eq("reservation_id", t.reservation_id)
     .is("used_at", null);
 
-  // Notify the salesperson (fire and forget)
-  void (async () => {
+  // Notify the salesperson
+  await (async () => {
     try {
       const impoLine = (reservation.impo_line as Record<string, unknown> | null) ?? {};
       const impo = (impoLine.impo as Record<string, unknown> | null) ?? {};

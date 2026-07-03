@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorizeStockReservation } from "@/lib/stock-reservation/serverAuth";
 import {
@@ -123,7 +122,7 @@ export async function POST(request: Request): Promise<Response> {
     .is("used_at", null);
 
   // Notify salesperson
-  after(() => notifyGroupSalesperson(auth.serviceClient, group_id, grace_notes ?? null, auth.uid));
+  await notifyGroupSalesperson(auth.serviceClient, group_id, grace_notes ?? null, auth.uid);
 
   return Response.json({
     ok: true,
