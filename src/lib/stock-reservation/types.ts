@@ -1,5 +1,5 @@
 export type ImpoStatus = "pending" | "in_transit" | "arrived" | "cancelled";
-export type ReservationStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type ReservationStatus = "pending" | "approved" | "rejected" | "cancelled" | "fulfilled";
 export type GroupStatus = "pending" | "partial" | "approved" | "rejected" | "cancelled";
 
 export interface Impo {
@@ -44,6 +44,7 @@ export interface StockReservation {
   grace_notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  fulfilled_at: string | null;
   created_at: string;
   // new fields added 2026-06-30
   amount_paid: number | null;

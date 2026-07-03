@@ -277,6 +277,44 @@ export function buildStockArrivedHtml(data: ReservationEmailData): string {
 </div>`;
 }
 
+export function buildFulfillmentHtml(data: ReservationEmailData): string {
+  const effectiveQty = data.qtyApproved ?? data.qtyRequested;
+  const fields: [string, string][] = [
+    ["SKU / Item Code", `<span style="font-family:'Courier New',monospace;background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:12px;letter-spacing:.03em">${esc(data.itemCode)}</span>`],
+    ["Brand", esc(data.brand)],
+    ["Description", esc(data.description)],
+    ["Qty Collected", `<strong style="color:#0891b2;font-size:14px">${effectiveQty}&nbsp;unit${effectiveQty !== 1 ? "s" : ""}</strong>`],
+    ["IMPO Number", esc(data.impoNumber)],
+    ["Customer", data.customerRef ? esc(data.customerRef) + (data.customerPhone ? ` &middot; ${esc(data.customerPhone)}` : "") : "—"],
+  ];
+  if (data.quoteRef) fields.push(["Quote / SO Ref", esc(data.quoteRef)]);
+  if (data.graceNotes) fields.push(["Manager Note", `<em style="color:#475569">${esc(data.graceNotes)}</em>`]);
+  const tableRows = fields.map(([l, v], i) => trow(l, v, i % 2 === 0)).join("\n");
+
+  return `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:640px;margin:0 auto;color:#1e293b;background:#f8fafc">
+  <div style="background:linear-gradient(135deg,#0891b2 0%,#06b6d4 100%);padding:40px 36px;border-radius:16px 16px 0 0;text-align:center">
+    <div style="font-size:52px;line-height:1;margin-bottom:14px">&#127873;</div>
+    <h1 style="margin:0;color:#fff;font-size:24px;font-weight:800;letter-spacing:-.4px">Stock Collected!</h1>
+    <p style="margin:10px auto 0;color:rgba(255,255,255,.82);font-size:13px;max-width:400px;line-height:1.5">
+      Your reservation for <strong>${esc(data.itemCode)}</strong> &times; ${effectiveQty} unit${effectiveQty !== 1 ? "s" : ""} has been handed over. This is your collection confirmation.
+    </p>
+  </div>
+  <div style="background:#fff;padding:28px 36px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+    <p style="margin:0 0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8">Collection Summary</p>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
+      <tbody>${tableRows}</tbody>
+    </table>
+  </div>
+  <div style="background:#f8fafc;padding:24px 36px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+    <p style="margin:0 0 16px;font-size:13px;color:#374151">Keep this email as your record of collection. For any discrepancies, contact your manager.</p>
+    <a href="${APP_URL}/stock-reservation" style="display:inline-block;padding:13px 30px;background:#0891b2;color:#fff;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">View My Reservations &rarr;</a>
+  </div>
+  <div style="background:#f1f5f9;padding:14px 36px;border-radius:0 0 16px 16px;border:1px solid #e2e8f0;border-top:none;text-align:center">
+    <p style="margin:0;font-size:11px;color:#94a3b8">Techniline Ops &middot; Stock Reservation System</p>
+  </div>
+</div>`;
+}
+
 export async function sendStockEmail(
   to: string,
   subject: string,

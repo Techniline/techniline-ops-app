@@ -35,6 +35,7 @@ function statusBadge(status: string) {
     cancelled:  "bg-slate-100 text-slate-500",
     approved:   "bg-green-100 text-green-700",
     rejected:   "bg-red-100 text-red-700",
+    fulfilled:  "bg-cyan-100 text-cyan-700",
   };
   return map[status] ?? "bg-slate-100 text-slate-500";
 }
@@ -987,6 +988,7 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
     const statusPill = (s: string): string => {
       const map: Record<string, string> = {
         approved: "background:#d1fae5;color:#065f46",
+        fulfilled: "background:#cffafe;color:#155e75",
         rejected: "background:#fee2e2;color:#991b1b",
         pending: "background:#fef3c7;color:#92400e",
         cancelled: "background:#f1f5f9;color:#475569",
@@ -1131,6 +1133,7 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
+            <option value="fulfilled">Fulfilled</option>
             <option value="rejected">Rejected</option>
             <option value="cancelled">Cancelled</option>
           </select>
@@ -1305,6 +1308,7 @@ function ReportTab({ reservations, impos }: ReportTabProps) {
                                   <td className="px-3 py-2">
                                     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                                       r.status === "approved" ? "bg-green-100 text-green-700" :
+                                      r.status === "fulfilled" ? "bg-cyan-100 text-cyan-700" :
                                       r.status === "rejected" ? "bg-red-100 text-red-700" :
                                       r.status === "cancelled" ? "bg-slate-100 text-slate-500" :
                                       "bg-amber-100 text-amber-700"
@@ -1506,6 +1510,7 @@ function ManagerPage() {
   const [editingEta, setEditingEta] = useState<{ impoId: string; eta: string } | null>(null);
   const [savingEta, setSavingEta] = useState(false);
   const [receiveModalImpoId, setReceiveModalImpoId] = useState<string | null>(null);
+  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"approvals" | "impos" | "activity" | "report">("approvals");
   const [impoView, setImpoView] = useState<ImpoView>("active");
   const [impoHistoryDays, setImpoHistoryDays] = useState<90 | 365 | 0>(90);
@@ -1569,6 +1574,22 @@ function ManagerPage() {
 
   function markReceived(impoId: string) {
     setReceiveModalImpoId(impoId);
+  }
+
+  async function fulfillReservation(reservationId: string) {
+    setFulfillingId(reservationId);
+    try {
+      const tok = await freshToken();
+      const res = await fetch("/api/stock-reservation/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ reservation_id: reservationId }),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (data.ok) load();
+    } finally {
+      setFulfillingId(null);
+    }
   }
 
   if (loading) {
@@ -1807,6 +1828,7 @@ function ManagerPage() {
                     <th className="px-4 py-3 text-right">Approved</th>
                     <th className="px-4 py-3 text-right">Paid</th>
                     <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1831,6 +1853,30 @@ function ManagerPage() {
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
                             {r.status}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.status === "approved" && (
+                            <button
+                              onClick={() => fulfillReservation(r.id)}
+                              disabled={fulfillingId === r.id}
+                              className="flex items-center gap-1 rounded-lg bg-cyan-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-cyan-700 disabled:opacity-50"
+                            >
+                              {fulfillingId === r.id ? (
+                                <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                </svg>
+                              ) : (
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                              Mark Collected
+                            </button>
+                          )}
+                          {r.status === "fulfilled" && r.fulfilled_at && (
+                            <span className="text-xs text-slate-400">{fmtDate(r.fulfilled_at.slice(0, 10))}</span>
+                          )}
                         </td>
                       </tr>
                     );
