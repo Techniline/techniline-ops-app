@@ -243,14 +243,23 @@ export async function sendStockEmail(
   to: string,
   subject: string,
   html: string,
-  opts?: { replyTo?: { address: string; name?: string }; fromName?: string; cc?: string; bcc?: string }
+  opts?: {
+    replyTo?: { address: string; name?: string };
+    fromName?: string;
+    /** Send from this mailbox instead of the system default. Must be a @techniline.org account
+     *  that the Graph app has Mail.Send permission on. */
+    fromEmail?: string;
+    cc?: string;
+    bcc?: string;
+  }
 ): Promise<void> {
   const graphToken = await getGraphToken();
+  const senderMailbox = opts?.fromEmail ?? SENDER;
   const message: Record<string, unknown> = {
     subject,
     body: { contentType: "HTML", content: html },
     toRecipients: [{ emailAddress: { address: to } }],
-    from: { emailAddress: { address: SENDER, name: opts?.fromName ?? "Techniline Ops" } },
+    from: { emailAddress: { address: senderMailbox, name: opts?.fromName ?? "Techniline Ops" } },
   };
   if (opts?.replyTo) {
     message.replyTo = [{ emailAddress: { address: opts.replyTo.address, name: opts.replyTo.name ?? opts.replyTo.address } }];
@@ -270,7 +279,7 @@ export async function sendStockEmail(
       .map((a) => ({ emailAddress: { address: a } }));
   }
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(SENDER)}/sendMail`,
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderMailbox)}/sendMail`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${graphToken}`, "Content-Type": "application/json" },

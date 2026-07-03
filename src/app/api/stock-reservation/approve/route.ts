@@ -187,8 +187,8 @@ async function scheduleSalespersonNotification(
     const html = buildSalespersonDecisionHtml(emailData, finalOutcome);
     await sendStockEmail(requesterEmail, subject, html, {
       fromName: approverName,
+      fromEmail: approverEmail ?? undefined,
       replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
-      bcc: approverEmail ?? undefined,
     });
 
     // Mark any pending email tokens as used (Grace acted via dashboard)

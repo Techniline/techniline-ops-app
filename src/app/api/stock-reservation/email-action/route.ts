@@ -186,8 +186,8 @@ export async function GET(request: Request): Promise<Response> {
       const html = buildSalespersonDecisionHtml(emailData, outcome);
       await sendStockEmail(requesterEmail, subject, html, {
         fromName: approverName,
+        fromEmail: approverEmail ?? undefined,
         replyTo: approverEmail ? { address: approverEmail, name: approverName } : undefined,
-        bcc: approverEmail ?? undefined,
       });
     } catch (e) {
       console.error("[email-action] salesperson notification failed:", e);

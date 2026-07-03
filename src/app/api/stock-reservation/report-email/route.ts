@@ -32,6 +32,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     await sendStockEmail(to, subject, html, {
       fromName: senderName,
+      fromEmail: auth.email ?? undefined,
       replyTo: auth.email ? { address: auth.email, name: senderName } : undefined,
       cc: cc || undefined,
     });
