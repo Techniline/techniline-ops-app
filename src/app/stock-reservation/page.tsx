@@ -17,7 +17,7 @@ import type { Impo, ImpoLineWithAvailability, StockReservation } from "@/lib/sto
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "card";
-type ResFilter = "active" | "pending" | "approved" | "rejected" | "history";
+type ResFilter = "active" | "pending" | "approved" | "fulfilled" | "rejected" | "history";
 
 function fmtDate(d: string | null) {
   if (!d) return "—";
@@ -30,10 +30,127 @@ function statusBadge(status: string) {
   const map: Record<string, string> = {
     pending:   "bg-amber-100 text-amber-700",
     approved:  "bg-green-100 text-green-700",
+    fulfilled: "bg-cyan-100 text-cyan-700",
     rejected:  "bg-red-100 text-red-700",
     cancelled: "bg-slate-100 text-slate-500",
   };
   return map[status] ?? "bg-slate-100 text-slate-500";
+}
+
+// ── Reservation Timeline ──────────────────────────────────────────────────────
+
+interface TimelineStep {
+  label: string;
+  sublabel?: string;
+  state: "done" | "active" | "skipped" | "future";
+  color: string;
+}
+
+function ReservationTimeline({ reservation }: { reservation: StockReservation }) {
+  const line = reservation.impo_line as unknown as ImpoLineWithAvailability | undefined;
+  const impo = line?.impo;
+  const isRejected  = reservation.status === "rejected" || reservation.status === "cancelled";
+  const isApproved  = reservation.status === "approved" || reservation.status === "fulfilled";
+  const isFulfilled = reservation.status === "fulfilled";
+  const stockArrived = impo?.status === "arrived";
+
+  function fmtShort(d: string | null | undefined): string {
+    if (!d) return "";
+    return new Date(d + (d.length === 10 ? "T00:00:00" : "")).toLocaleDateString("en-GB", {
+      day: "numeric", month: "short",
+    });
+  }
+
+  const steps: TimelineStep[] = [
+    {
+      label: "Submitted",
+      sublabel: fmtShort(reservation.created_at),
+      state: "done",
+      color: "#4f46e5",
+    },
+    {
+      label: isRejected ? (reservation.status === "cancelled" ? "Cancelled" : "Rejected") : "Approved",
+      sublabel: reservation.reviewed_at ? fmtShort(reservation.reviewed_at) : (isRejected ? "" : "Awaiting"),
+      state: isRejected ? "skipped" : isApproved ? "done" : "active",
+      color: isRejected ? "#dc2626" : "#059669",
+    },
+    {
+      label: "Stock Arrived",
+      sublabel: stockArrived ? "Received" : (impo?.eta ? `ETA ${fmtShort(impo.eta)}` : ""),
+      state: isRejected ? "future" : stockArrived ? "done" : isApproved ? "active" : "future",
+      color: "#0891b2",
+    },
+    {
+      label: "Collected",
+      sublabel: reservation.fulfilled_at ? fmtShort(reservation.fulfilled_at) : "",
+      state: isRejected ? "future" : isFulfilled ? "done" : stockArrived && isApproved ? "active" : "future",
+      color: "#059669",
+    },
+  ];
+
+  const lastDoneIdx = steps.reduce((max, s, i) => s.state === "done" ? i : max, -1);
+
+  return (
+    <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Reservation Progress</p>
+      <div className="relative flex items-start">
+        {/* Progress line */}
+        <div className="absolute left-4 right-4 top-4 h-0.5 bg-slate-200 dark:bg-slate-700" />
+        <div
+          className="absolute left-4 top-4 h-0.5 bg-indigo-400 transition-all duration-500"
+          style={{ width: lastDoneIdx < 0 ? "0%" : `${(lastDoneIdx / (steps.length - 1)) * (100 - (8 / steps.length))}%` }}
+        />
+
+        {steps.map((step, i) => {
+          const isDone   = step.state === "done";
+          const isActive = step.state === "active";
+          const isSkip   = step.state === "skipped";
+
+          let dotBg = "bg-slate-200 dark:bg-slate-700";
+          let dotBorder = "border-slate-300 dark:border-slate-600";
+          let labelColor = "text-slate-400";
+
+          if (isDone)   { dotBg = ""; dotBorder = ""; labelColor = "text-slate-700 dark:text-slate-200"; }
+          if (isActive) { dotBg = "bg-white dark:bg-slate-900"; dotBorder = "border-indigo-500"; labelColor = "text-indigo-700 dark:text-indigo-400"; }
+          if (isSkip)   { dotBg = ""; dotBorder = ""; labelColor = "text-red-500"; }
+
+          return (
+            <div key={i} className="relative flex flex-1 flex-col items-center gap-1.5">
+              {/* Dot */}
+              <div
+                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 ${dotBg} ${dotBorder} transition-all`}
+                style={isDone || isSkip ? { background: step.color, borderColor: step.color } : undefined}
+              >
+                {isDone && (
+                  <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {isSkip && (
+                  <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                {isActive && (
+                  <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                )}
+              </div>
+              {/* Label */}
+              <p className={`text-center text-[11px] font-semibold leading-tight ${labelColor}`}>{step.label}</p>
+              {step.sublabel && (
+                <p className="text-center text-[10px] text-slate-400 leading-tight">{step.sublabel}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {reservation.grace_notes && (
+        <p className="mt-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs italic text-slate-500">
+          Manager note: {reservation.grace_notes}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ── Inline reservation form ───────────────────────────────────────────────────
@@ -274,6 +391,7 @@ function StockReservationPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
+  const [expandedResId, setExpandedResId] = useState<string | null>(null);
   const [resFilter, setResFilter] = useState<ResFilter>("active");
   const [historyDays, setHistoryDays] = useState<30 | 90 | 365 | 0>(30);
   const [shipmentIdx, setShipmentIdx] = useState(0);
@@ -371,10 +489,11 @@ function StockReservationPage() {
 
   const filteredReservations = useMemo(() => {
     switch (resFilter) {
-      case "active":   return myReservations.filter((r) => r.status === "pending" || r.status === "approved");
-      case "pending":  return myReservations.filter((r) => r.status === "pending");
-      case "approved": return myReservations.filter((r) => r.status === "approved");
-      case "rejected": return myReservations.filter((r) => r.status === "rejected");
+      case "active":    return myReservations.filter((r) => r.status === "pending" || r.status === "approved");
+      case "pending":   return myReservations.filter((r) => r.status === "pending");
+      case "approved":  return myReservations.filter((r) => r.status === "approved");
+      case "fulfilled": return myReservations.filter((r) => r.status === "fulfilled");
+      case "rejected":  return myReservations.filter((r) => r.status === "rejected");
       case "history": {
         if (historyDays === 0) return myReservations;
         const cutoff = new Date();
@@ -386,11 +505,12 @@ function StockReservationPage() {
   }, [myReservations, resFilter, historyDays]);
 
   const resCounts = useMemo(() => ({
-    active:   myReservations.filter((r) => r.status === "pending" || r.status === "approved").length,
-    pending:  myReservations.filter((r) => r.status === "pending").length,
-    approved: myReservations.filter((r) => r.status === "approved").length,
-    rejected: myReservations.filter((r) => r.status === "rejected").length,
-    history:  myReservations.length,
+    active:    myReservations.filter((r) => r.status === "pending" || r.status === "approved").length,
+    pending:   myReservations.filter((r) => r.status === "pending").length,
+    approved:  myReservations.filter((r) => r.status === "approved").length,
+    fulfilled: myReservations.filter((r) => r.status === "fulfilled").length,
+    rejected:  myReservations.filter((r) => r.status === "rejected").length,
+    history:   myReservations.length,
   }), [myReservations]);
 
   async function cancelReservation(resId: string) {
@@ -646,11 +766,12 @@ function StockReservationPage() {
             )}
             <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
               {([
-                { key: "active",   label: "Active" },
-                { key: "pending",  label: "Pending" },
-                { key: "approved", label: "Approved" },
-                { key: "rejected", label: "Rejected" },
-                { key: "history",  label: "History" },
+                { key: "active",    label: "Active" },
+                { key: "pending",   label: "Pending" },
+                { key: "approved",  label: "Approved" },
+                { key: "fulfilled", label: "Collected" },
+                { key: "rejected",  label: "Rejected" },
+                { key: "history",   label: "History" },
               ] as { key: ResFilter; label: string }[]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -697,74 +818,94 @@ function StockReservationPage() {
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody>
                   {filteredReservations.map((r) => {
                     const line = r.impo_line as unknown as ImpoLineWithAvailability | undefined;
+                    const isExpanded = expandedResId === r.id;
                     return (
-                      <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
-                          {r.group_id && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
-                              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      <>
+                        <tr
+                          key={r.id}
+                          onClick={() => setExpandedResId(isExpanded ? null : r.id)}
+                          className={`cursor-pointer border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 ${isExpanded ? "bg-slate-50 dark:bg-slate-800/30" : ""}`}
+                        >
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{line?.item_code ?? "—"}</p>
+                            {r.group_id && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
+                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                                Order
+                              </span>
+                            )}
+                            {r.quote_ref && <p className="text-xs text-slate-400">{r.quote_ref}</p>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-slate-600 dark:text-slate-400">{line?.impo?.impo_number ?? "—"}</p>
+                            <p className="text-xs text-slate-400">{fmtDate(line?.impo?.eta ?? null)}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-slate-700 dark:text-slate-300">{r.customer_ref ?? "—"}</p>
+                            {r.customer_phone && <p className="text-xs text-slate-400">{r.customer_phone}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {r.qty_approved != null ? (
+                              <span>
+                                <span className="font-bold text-green-600">{r.qty_approved}</span>
+                                <span className="text-xs text-slate-400"> / {r.qty_requested}</span>
+                              </span>
+                            ) : (
+                              r.qty_requested
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">
+                            {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
+                          </td>
+                          <td className="px-4 py-3 capitalize text-slate-500">
+                            {r.payment_method?.replace("_", " ") ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {r.discount_offered && r.discount_offered > 0
+                              ? <span className="font-medium text-emerald-700 dark:text-emerald-400">{r.discount_offered}%</span>
+                              : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500">
+                            {r.required_by_date ? fmtDate(r.required_by_date) : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
+                              {r.status === "fulfilled" ? "collected" : r.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {r.status === "pending" && (
+                                <button
+                                  onClick={() => cancelReservation(r.id)}
+                                  className="text-xs text-red-500 hover:underline"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                              <svg
+                                className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                onClick={() => setExpandedResId(isExpanded ? null : r.id)}
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              Order
-                            </span>
-                          )}
-                          {r.quote_ref && <p className="text-xs text-slate-400">{r.quote_ref}</p>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-slate-600 dark:text-slate-400">{line?.impo?.impo_number ?? "—"}</p>
-                          <p className="text-xs text-slate-400">{fmtDate(line?.impo?.eta ?? null)}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-slate-700 dark:text-slate-300">{r.customer_ref ?? "—"}</p>
-                          {r.customer_phone && <p className="text-xs text-slate-400">{r.customer_phone}</p>}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {r.qty_approved != null ? (
-                            <span>
-                              <span className="font-bold text-green-600">{r.qty_approved}</span>
-                              <span className="text-xs text-slate-400"> / {r.qty_requested}</span>
-                            </span>
-                          ) : (
-                            r.qty_requested
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">
-                          {r.amount_paid ? `AED ${r.amount_paid.toLocaleString("en-AE", { maximumFractionDigits: 0 })}` : "—"}
-                        </td>
-                        <td className="px-4 py-3 capitalize text-slate-500">
-                          {r.payment_method?.replace("_", " ") ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {r.discount_offered && r.discount_offered > 0
-                            ? <span className="font-medium text-emerald-700 dark:text-emerald-400">{r.discount_offered}%</span>
-                            : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          {r.required_by_date ? fmtDate(r.required_by_date) : "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusBadge(r.status)}`}>
-                            {r.status}
-                          </span>
-                          {r.grace_notes && (
-                            <p className="mt-0.5 text-xs italic text-slate-400">{r.grace_notes}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {r.status === "pending" && (
-                            <button
-                              onClick={() => cancelReservation(r.id)}
-                              className="text-xs text-red-500 hover:underline"
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${r.id}-timeline`} className="border-b border-slate-100 dark:border-slate-800">
+                            <td colSpan={10} className="p-0">
+                              <ReservationTimeline reservation={r} />
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
                 </tbody>

@@ -15,6 +15,14 @@
     {
       "path": "/api/lp/weekly-report",
       "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/eta-reminder",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/expire-reservations",
+      "schedule": "0 3 * * *"
     }
   ]
 }
