@@ -990,6 +990,34 @@ function LpTable({
                 {isExpanded && row.id ? (
                   <tr className="border-b border-slate-100 bg-slate-50/60 dark:border-slate-800/60 dark:bg-slate-800/20">
                     <td colSpan={17}>
+                      {(() => {
+                        const ageD = row.ageing_days ?? 0;
+                        const soldQty = row.qty_sold ?? 0;
+                        const remQty = row.qty_remaining ?? 0;
+                        const vel = ageD > 0 && soldQty > 0 ? soldQty / ageD : null;
+                        const dtc = vel != null && vel > 0 ? Math.ceil(remQty / vel) : null;
+                        const dead = ageD >= 7 && soldQty === 0;
+                        if (vel == null && !dead) return null;
+                        return (
+                          <div className="flex flex-wrap gap-2 px-3 pt-2">
+                            {vel != null ? (
+                              <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                                {vel.toFixed(2)} units/day
+                              </span>
+                            ) : null}
+                            {dtc != null ? (
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                Clears in ~{dtc}d
+                              </span>
+                            ) : null}
+                            {dead ? (
+                              <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">
+                                ⚠ Zero movement
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                       {row.qty_adjust_comment ? (
                         <p className="px-3 pt-2 text-xs text-amber-700 dark:text-amber-300">⚑ Qty note: {row.qty_adjust_comment}</p>
                       ) : null}
@@ -1056,6 +1084,7 @@ function ReportsModal({
   const [vendor, setVendor] = useState("All");
   const [vFrom, setVFrom] = useState("");
   const [vTo, setVTo] = useState("");
+  const [vDateField, setVDateField] = useState<"lp_date" | "goods_received_date">("goods_received_date");
   const [vendorBusy, setVendorBusy] = useState(false);
 
   const [entity, setEntity] = useState("All");
@@ -1088,8 +1117,7 @@ function ReportsModal({
     setVendorBusy(true);
     onError("");
     try {
-      // Fetch the full matching slice server-side (not just the loaded page).
-      const rows = await fetchLpItemsWindow({ status: "all", vendor, fromIso: vFrom, toIso: vTo, limit: 5000 });
+      const rows = await fetchLpItemsWindow({ status: "all", vendor, fromIso: vFrom, toIso: vTo, dateField: vDateField, limit: 5000 });
       exportReport(vendorReport(rows, vendor, vFrom, vTo, now()), `lp-vendor-${vendor === "All" ? "all" : vendor}-${today}`, format);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not build the vendor report.");
@@ -1150,67 +1178,100 @@ function ReportsModal({
 
   return (
     <ModalShell title="Reports & export" onClose={onClose} wide>
-      <div className="flex flex-col gap-4">
-        <Section title="Current view" hint={`Export the ${currentRows.length} line${currentRows.length === 1 ? "" : "s"} currently shown (your search + column filters apply).`}>
-          <ExportButtons onExport={exportCurrent} />
-        </Section>
+      <div className="flex flex-col gap-5">
 
-        <Section title="Vendor & date range" hint="Lines filtered by vendor and LP (purchase) date — full purchased / sold / remaining / value / ageing status.">
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <FormRow label="Vendor">
-              <select className={inputClass} value={vendor} onChange={(e) => setVendor(e.target.value)}>
-                <option value="All">All vendors</option>
-                {vendors.map((v) => (<option key={v} value={v}>{v}</option>))}
-              </select>
-            </FormRow>
-            <FormRow label="LP date from">
-              <input type="date" className={inputClass} value={vFrom} onChange={(e) => setVFrom(e.target.value)} />
-            </FormRow>
-            <FormRow label="LP date to">
-              <input type="date" className={inputClass} value={vTo} onChange={(e) => setVTo(e.target.value)} />
-            </FormRow>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("csv")} className={btnSmall}>CSV</button>
-            <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("pdf")} className={btnSmall}>PDF</button>
-            {vendorBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
-          </div>
-        </Section>
+        {/* ── Download & Export ── */}
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Download & Export</p>
+          <div className="flex flex-col gap-3">
 
-        <Section title="Entity-wise sold" hint="Sales filtered by entity and sale date — detail rows plus totals per entity.">
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <FormRow label="Entity">
-              <select className={inputClass} value={entity} onChange={(e) => setEntity(e.target.value)}>
-                {entityOptions.map((o) => (<option key={o} value={o}>{o === "All" ? "All entities" : o}</option>))}
-              </select>
-            </FormRow>
-            <FormRow label="Sale date from">
-              <input type="date" className={inputClass} value={eFrom} onChange={(e) => setEFrom(e.target.value)} />
-            </FormRow>
-            <FormRow label="Sale date to">
-              <input type="date" className={inputClass} value={eTo} onChange={(e) => setETo(e.target.value)} />
-            </FormRow>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" disabled={entityBusy} onClick={() => void exportEntity("csv")} className={btnSmall}>CSV</button>
-            <button type="button" disabled={entityBusy} onClick={() => void exportEntity("pdf")} className={btnSmall}>PDF</button>
-            {entityBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
-          </div>
-        </Section>
+            <Section title="Current view" hint={`Exports the ${currentRows.length} line${currentRows.length === 1 ? "" : "s"} currently shown on screen — your active search and column filters apply.`}>
+              <ExportButtons onExport={exportCurrent} />
+            </Section>
 
-        <Section title="Email stock-in-hand" hint="Send the current stock-in-hand snapshot. Pavithran also receives this automatically every Monday.">
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org"], "Pavithran (impex@)")} className={btnPrimary}>
-              {sending ? "Sending…" : "Send to Pavithran"}
-            </button>
-            <button type="button" disabled={sending} onClick={() => void sendStockReport(["vihan@techniline.org"], "the manager (vihan@)")} className={btnSecondary}>
-              Send to manager
-            </button>
-            <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org", "vihan@techniline.org"], "Pavithran + manager")} className={btnSecondary}>
-              Send to both
-            </button>
+            <Section title="Vendor & date range" hint={`All lines filtered by vendor and ${vDateField === "lp_date" ? "LP (purchase) date" : "Goods Received date"} — purchased / sold / remaining / value / ageing.`}>
+              <div className="mb-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500">Filter date by:</span>
+                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setVDateField("goods_received_date")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${vDateField === "goods_received_date" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                    >
+                      GR Date
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVDateField("lp_date")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${vDateField === "lp_date" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                    >
+                      LP Date
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <FormRow label="Vendor">
+                    <select className={inputClass} value={vendor} onChange={(e) => setVendor(e.target.value)}>
+                      <option value="All">All vendors</option>
+                      {vendors.map((v) => (<option key={v} value={v}>{v}</option>))}
+                    </select>
+                  </FormRow>
+                  <FormRow label="From">
+                    <input type="date" className={inputClass} value={vFrom} onChange={(e) => setVFrom(e.target.value)} />
+                  </FormRow>
+                  <FormRow label="To">
+                    <input type="date" className={inputClass} value={vTo} onChange={(e) => setVTo(e.target.value)} />
+                  </FormRow>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("csv")} className={btnSmall}>CSV</button>
+                <button type="button" disabled={vendorBusy} onClick={() => void exportVendor("pdf")} className={btnSmall}>PDF</button>
+                {vendorBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
+              </div>
+            </Section>
+
+            <Section title="Entity-wise sold" hint="Sales filtered by entity and sale date — detail rows plus totals per entity.">
+              <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <FormRow label="Entity">
+                  <select className={inputClass} value={entity} onChange={(e) => setEntity(e.target.value)}>
+                    {entityOptions.map((o) => (<option key={o} value={o}>{o === "All" ? "All entities" : o}</option>))}
+                  </select>
+                </FormRow>
+                <FormRow label="Sale date from">
+                  <input type="date" className={inputClass} value={eFrom} onChange={(e) => setEFrom(e.target.value)} />
+                </FormRow>
+                <FormRow label="Sale date to">
+                  <input type="date" className={inputClass} value={eTo} onChange={(e) => setETo(e.target.value)} />
+                </FormRow>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={entityBusy} onClick={() => void exportEntity("csv")} className={btnSmall}>CSV</button>
+                <button type="button" disabled={entityBusy} onClick={() => void exportEntity("pdf")} className={btnSmall}>PDF</button>
+                {entityBusy ? <span className="text-xs text-slate-400">Building…</span> : null}
+              </div>
+            </Section>
           </div>
-        </Section>
+        </div>
+
+        {/* ── Email ── */}
+        <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Email</p>
+          <Section title="Stock in hand snapshot" hint="Always sends all open stock — no date filter applied. Pavithran also receives this automatically every Monday.">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org"], "Pavithran (impex@)")} className={btnPrimary}>
+                {sending ? "Sending…" : "Send to Pavithran"}
+              </button>
+              <button type="button" disabled={sending} onClick={() => void sendStockReport(["vihan@techniline.org"], "the manager (vihan@)")} className={btnSecondary}>
+                Send to manager
+              </button>
+              <button type="button" disabled={sending} onClick={() => void sendStockReport(["impex@techniline.org", "vihan@techniline.org"], "Pavithran + manager")} className={btnSecondary}>
+                Send to both
+              </button>
+            </div>
+          </Section>
+        </div>
       </div>
 
       <div className="mt-4 flex justify-end">
@@ -1270,7 +1331,7 @@ function SetGrnModal({
 
 /* ---------------------- Overview (always-on rollup) -------------------- */
 
-function OverviewKpiCards({ rows, globalMarginPct }: { rows: LpOverviewRow[]; globalMarginPct: number }) {
+function OverviewKpiCards({ rows, globalMarginPct, onAgeingFilter }: { rows: LpOverviewRow[]; globalMarginPct: number; onAgeingFilter?: (status: string) => void }) {
   const k = useMemo(() => overviewKpis(rows), [rows]);
   const estAtRrp = k.totalRemainingValue != null
     ? Math.round(k.totalRemainingValue * (1 + globalMarginPct / 100))
@@ -1307,16 +1368,23 @@ function OverviewKpiCards({ rows, globalMarginPct }: { rows: LpOverviewRow[]; gl
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "0 – 30 days", count: aging.d30.count, value: aging.d30.value, tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900" },
-          { label: "31 – 60 days", count: aging.d60.count, value: aging.d60.value, tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900" },
-          { label: "61 – 90 days", count: aging.d90.count, value: aging.d90.value, tone: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-100 dark:border-orange-900" },
-          { label: "90+ days", count: aging.d90p.count, value: aging.d90p.value, tone: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/30 border-red-100 dark:border-red-900" },
+          { label: "0 – 30 days", status: "safe", count: aging.d30.count, value: aging.d30.value, tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900" },
+          { label: "31 – 60 days", status: "monitor", count: aging.d60.count, value: aging.d60.value, tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900" },
+          { label: "61 – 90 days", status: "warning", count: aging.d90.count, value: aging.d90.value, tone: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-100 dark:border-orange-900" },
+          { label: "90+ days", status: "action_required", count: aging.d90p.count, value: aging.d90p.value, tone: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/30 border-red-100 dark:border-red-900" },
         ].map((b) => (
-          <div key={b.label} className={`rounded-xl border p-4 ${b.bg}`}>
+          <button
+            key={b.label}
+            type="button"
+            onClick={() => onAgeingFilter?.(b.status)}
+            className={`rounded-xl border p-4 text-left transition-opacity ${b.bg} ${onAgeingFilter ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
+            title={onAgeingFilter ? `Browse ${b.label} lines` : undefined}
+          >
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{b.label}</p>
             <p className={`mt-1 text-xl font-semibold ${b.tone}`}>{b.count} LP{b.count !== 1 ? "s" : ""}</p>
             <p className="mt-0.5 text-xs text-slate-500">AED {fmtCost(b.value)}</p>
-          </div>
+            {onAgeingFilter ? <p className="mt-1 text-xs text-slate-400">Browse lines →</p> : null}
+          </button>
         ))}
       </div>
     </div>
@@ -1431,6 +1499,7 @@ function OverviewSection({
   onSetGrn,
   onSale,
   onEdit,
+  onAgeingFilter,
 }: {
   rows: LpOverviewRow[];
   globalMarginPct: number;
@@ -1438,6 +1507,7 @@ function OverviewSection({
   onSetGrn: (lp: LpOverviewRow) => void;
   onSale: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
+  onAgeingFilter?: (status: string) => void;
 }) {
   const [byVendor, setByVendor] = useState(false);
   const [openVendor, setOpenVendor] = useState<string | null>(null);
@@ -1445,7 +1515,7 @@ function OverviewSection({
 
   return (
     <div>
-      <OverviewKpiCards rows={rows} globalMarginPct={globalMarginPct} />
+      <OverviewKpiCards rows={rows} globalMarginPct={globalMarginPct} onAgeingFilter={onAgeingFilter} />
       <div className="mb-3 inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
         <button type="button" onClick={() => setByVendor(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By LPO</button>
         <button type="button" onClick={() => setByVendor(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${byVendor ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>By Vendor</button>
@@ -1839,6 +1909,8 @@ function LpContent() {
   const [statusTab, setStatusTab] = useState<LpStatusFilter>("open");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dateField, setDateField] = useState<"lp_date" | "goods_received_date">("lp_date");
+  const [ageingFilter, setAgeingFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ColFilters>({ vendor: "", brand: "", model: "" });
 
@@ -1897,7 +1969,7 @@ function LpContent() {
     setLinesLoading(true);
     setUploadError(null);
     try {
-      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, limit: PAGE, offset: 0 });
+      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, dateField, limit: PAGE, offset: 0 });
       setAllRows(data);
       setHasMore(data.length === PAGE);
       setLinesLoaded(true);
@@ -1914,12 +1986,13 @@ function LpContent() {
     setHasMore(false);
     setSearch("");
     setFilters({ vendor: "", brand: "", model: "" });
+    setAgeingFilter("all");
   }
 
   async function loadMore(): Promise<void> {
     setLoadingMore(true);
     try {
-      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, limit: PAGE, offset: allRows.length });
+      const data = await fetchLpItemsWindow({ status: statusTab, fromIso: dateFrom, toIso: dateTo, dateField, limit: PAGE, offset: allRows.length });
       setAllRows((prev) => [...prev, ...data]);
       setHasMore(data.length === PAGE);
     } catch (err) {
@@ -1938,6 +2011,7 @@ function LpContent() {
     const fm = filters.model.trim().toLowerCase();
     const has = (hay: string | null, needle: string) => (hay ?? "").toLowerCase().includes(needle);
     return allRows.filter((r) => {
+      if (ageingFilter !== "all" && r.ageing_status !== ageingFilter) return false;
       if (q) {
         const blob = [r.lp_number, r.vendor_name, r.brand, r.lp_date, r.model_no, r.sku].map((x) => (x ?? "").toLowerCase()).join(" ");
         if (!blob.includes(q)) return false;
@@ -1947,7 +2021,7 @@ function LpContent() {
       if (fm && !(has(r.model_no, fm) || has(r.sku, fm))) return false;
       return true;
     });
-  }, [allRows, search, filters]);
+  }, [allRows, search, filters, ageingFilter]);
 
   function setFilter(key: keyof ColFilters, value: string): void {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -1990,7 +2064,27 @@ function LpContent() {
     void loadMargins();
   }
 
-  const filtersActive = search.trim() !== "" || filters.vendor !== "" || filters.brand !== "" || filters.model !== "";
+  const filtersActive = search.trim() !== "" || filters.vendor !== "" || filters.brand !== "" || filters.model !== "" || ageingFilter !== "all";
+
+  async function handleAgeingFilter(status: string): Promise<void> {
+    setAgeingFilter(status);
+    setSection("browse");
+    setStatusTab("open");
+    if (!linesLoaded && !linesLoading) {
+      setLinesLoading(true);
+      setUploadError(null);
+      try {
+        const data = await fetchLpItemsWindow({ status: "open", fromIso: dateFrom, toIso: dateTo, dateField, limit: PAGE, offset: 0 });
+        setAllRows(data);
+        setHasMore(data.length === PAGE);
+        setLinesLoaded(true);
+      } catch (err) {
+        setUploadError(errorMessage(err));
+      } finally {
+        setLinesLoading(false);
+      }
+    }
+  }
 
   const navItem = (key: LpSection, label: string) => (
     <button
@@ -2057,6 +2151,7 @@ function LpContent() {
                 onSetGrn={(lp) => setGrnLp(lp)}
                 onSale={(row) => setSaleRow(row)}
                 onEdit={(row) => setEditRow(row)}
+                onAgeingFilter={(status) => void handleAgeingFilter(status)}
               />
             )
           ) : section === "sales" ? (
@@ -2074,25 +2169,55 @@ function LpContent() {
           ) : (
             <div>
               {/* Browse controls */}
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
-                  {(["open", "cleared", "all"] as LpStatusFilter[]).map((s) => (
-                    <button key={s} type="button" onClick={() => setStatusTab(s)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${statusTab === s ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}>
-                      {s === "open" ? "In stock" : s === "cleared" ? "Cleared" : "All"}
+              <div className="mb-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+                    {(["open", "cleared", "all"] as LpStatusFilter[]).map((s) => (
+                      <button key={s} type="button" onClick={() => setStatusTab(s)} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${statusTab === s ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}>
+                        {s === "open" ? "In stock" : s === "cleared" ? "Cleared" : "All"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setDateField(dateField === "lp_date" ? "goods_received_date" : "lp_date")}
+                      title={dateField === "lp_date" ? "Filtering by LP purchase date — click to switch to Goods Received date" : "Filtering by Goods Received date — click to switch to LP purchase date"}
+                      className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+                    >
+                      {dateField === "lp_date" ? "LP date" : "GR date"}
                     </button>
-                  ))}
+                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                    <span className="text-slate-400">→</span>
+                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                  </div>
+                  <button type="button" onClick={() => void loadLines()} disabled={linesLoading} className={btnPrimary}>
+                    {linesLoading ? "Loading…" : linesLoaded ? "Refresh" : "Load data"}
+                  </button>
+                  {linesLoaded ? (
+                    <button type="button" onClick={clearLines} className={btnSecondary}>Clear</button>
+                  ) : null}
                 </div>
-                <div className="flex items-center gap-1.5 text-sm text-slate-500">
-                  <span className="text-xs font-medium uppercase tracking-wide">LP date</span>
-                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-                  <span>→</span>
-                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-                </div>
-                <button type="button" onClick={() => void loadLines()} disabled={linesLoading} className={btnPrimary}>
-                  {linesLoading ? "Loading…" : linesLoaded ? "Refresh" : "Load data"}
-                </button>
                 {linesLoaded ? (
-                  <button type="button" onClick={clearLines} className={btnSecondary}>Clear</button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-slate-400">Ageing:</span>
+                    {([
+                      { key: "all", label: "All", active: "bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900", inactive: "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" },
+                      { key: "safe", label: "Safe ≤30d", active: "bg-emerald-600 text-white", inactive: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300" },
+                      { key: "monitor", label: "Monitor 31–60d", active: "bg-amber-500 text-white", inactive: "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300" },
+                      { key: "warning", label: "Warning 61–90d", active: "bg-orange-600 text-white", inactive: "bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/50 dark:text-orange-300" },
+                      { key: "action_required", label: "Action required 90+d", active: "bg-red-600 text-white", inactive: "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/50 dark:text-red-300" },
+                    ] as const).map(({ key, label, active, inactive }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setAgeingFilter(key)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${ageingFilter === key ? active : inactive}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 ) : null}
               </div>
 

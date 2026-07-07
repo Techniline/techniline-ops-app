@@ -10,8 +10,9 @@ export type LpStatusFilter = "open" | "cleared" | "all";
 export interface LpWindowOpts {
   status?: LpStatusFilter; // default 'open' (stock still in hand)
   vendor?: string; // exact vendor_name; "All"/undefined = no filter
-  fromIso?: string; // lp_date >=
-  toIso?: string; // lp_date <=
+  fromIso?: string; // date range start (which column depends on dateField)
+  toIso?: string; // date range end
+  dateField?: "lp_date" | "goods_received_date"; // which date column to filter on (default lp_date)
   limit?: number; // page size (default 100)
   offset?: number; // page offset (default 0)
 }
@@ -23,13 +24,13 @@ export interface LpWindowOpts {
  * stock surfaces at the top of the working list.
  */
 export async function fetchLpItemsWindow(opts: LpWindowOpts = {}): Promise<LpItemRow[]> {
-  const { status = "open", vendor, fromIso, toIso, limit = 100, offset = 0 } = opts;
+  const { status = "open", vendor, fromIso, toIso, dateField = "lp_date", limit = 100, offset = 0 } = opts;
   let q = supabase.from("lp_items_view").select("*");
   if (status === "open") q = q.gt("qty_remaining", 0);
   else if (status === "cleared") q = q.lte("qty_remaining", 0);
   if (vendor && vendor !== "All") q = q.eq("vendor_name", vendor);
-  if (fromIso) q = q.gte("lp_date", fromIso);
-  if (toIso) q = q.lte("lp_date", toIso);
+  if (fromIso) q = q.gte(dateField, fromIso);
+  if (toIso) q = q.lte(dateField, toIso);
   const { data, error } = await q
     .order("lp_date", { ascending: true })
     .range(offset, offset + limit - 1);
