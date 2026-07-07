@@ -147,6 +147,14 @@ interface VariantNode {
     metafield: { id: string; value: string } | null;
 }
 
+interface VariantBySkuPage {
+      productVariants: { nodes: VariantNode[] };
+}
+
+interface VariantsPageConnection {
+      productVariants: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: VariantNode[] };
+}
+
 const VARIANT_BY_SKU_QUERY = `
   query VariantBySku($query: String!) {
       productVariants(first: 5, query: $query) {
@@ -162,7 +170,7 @@ const VARIANT_BY_SKU_QUERY = `
                                                                 `;
 
 async function findVariantBySku(token: string, sku: string): Promise<VariantNode | null> {
-    const data = await shopifyGraphQL<{ productVariants: { nodes: VariantNode[] } }>(
+    const data: VariantBySkuPage = await shopifyGraphQL<VariantBySkuPage>(
           token,
           VARIANT_BY_SKU_QUERY,
       { query: `sku:${sku}` }
@@ -224,9 +232,7 @@ async function fetchVariantsWithRestockEta(token: string): Promise<VariantNode[]
     const results: VariantNode[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < 50; page++) {
-          const data = await shopifyGraphQL<{
-                  productVariants: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: VariantNode[] };
-          }>(token, VARIANTS_WITH_RESTOCK_ETA_QUERY, { cursor });
+          const data: VariantsPageConnection = await shopifyGraphQL<VariantsPageConnection>(token, VARIANTS_WITH_RESTOCK_ETA_QUERY, { cursor });
           results.push(...(data.productVariants?.nodes ?? []));
           if (!data.productVariants?.pageInfo?.hasNextPage) break;
           cursor = data.productVariants.pageInfo.endCursor;
