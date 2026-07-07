@@ -66,6 +66,19 @@ async function shopifyGraphQL<T>(token: string, query: string, variables?: Recor
       throw new Error("Shopify GraphQL request was rate-limited twice in a row.");
 }
 
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+      const results: R[] = new Array(items.length);
+      let next = 0;
+      async function run() {
+            while (next < items.length) {
+                  const i = next++;
+                  results[i] = await worker(items[i], i);
+            }
+      }
+      await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+      return results;
+}
+
 // ── Supabase: outstanding pending shipments, grouped by SKU ────────────────────
 
 interface ImpoRow {
@@ -163,25 +176,27 @@ const VARIANT_BY_SKU_QUERY = `
 async function findVariantsBySkus(token: string, skus: string[], errors: SyncErrorEntry[]): Promise<Map<string, VariantNode>> {
       const found = new Map<string, VariantNode>();
       const CHUNK_SIZE = 50;
-      for (let i = 0; i < skus.length; i += CHUNK_SIZE) {
-              const chunk = skus.slice(i, i + CHUNK_SIZE);
-              const query = chunk.map((sku) => `sku:${JSON.stringify(sku)}`).join(" OR ");
-              try {
-                        const data: VariantBySkuPage = await shopifyGraphQL<VariantBySkuPage>(token, VARIANT_BY_SKU_QUERY, {
-                                    query,
-                                    first: chunk.length * 2,
-                        });
-                        const nodes = data.productVariants?.nodes ?? [];
-                        const chunkSet = new Set(chunk);
-                        for (const node of nodes) {
-                                    // Shopify's `sku:` search can return near-matches; require an exact
-                          // match against one of the SKUs we actually asked for in this chunk.
-                          if (chunkSet.has(node.sku) && !found.has(node.sku)) found.set(node.sku, node);
-                        }
-              } catch (e) {
-                        errors.push({ scope: `lookup:chunk:${i / CHUNK_SIZE}`, message: e instanceof Error ? e.message : String(e) });
-              }
-      }
+      const chunks: string[][] = [];
+      for (let i = 0; i < skus.length; i += CHUNK_SIZE) chunks.push(skus.slice(i, i + CHUNK_SIZE));
+
+      await mapWithConcurrency(chunks, 5, async (chunk, i) => {
+            const query = chunk.map((sku) => `sku:${JSON.stringify(sku)}`).join(" OR ");
+            try {
+                  const data: VariantBySkuPage = await shopifyGraphQL<VariantBySkuPage>(token, VARIANT_BY_SKU_QUERY, {
+                        query,
+                        first: chunk.length * 2,
+                  });
+                  const nodes = data.productVariants?.nodes ?? [];
+                  const chunkSet = new Set(chunk);
+                  for (const node of nodes) {
+                        // Shopify's `sku:` search can return near-matches; require an exact
+                        // match against one of the SKUs we actually asked for in this chunk.
+                        if (chunkSet.has(node.sku) && !found.has(node.sku)) found.set(node.sku, node);
+                  }
+            } catch (e) {
+                  errors.push({ scope: `lookup:chunk:${i}`, message: e instanceof Error ? e.message : String(e) });
+            }
+      });
       return found;
 }
 
@@ -373,15 +388,15 @@ export async function POST(request: Request): Promise<Response> {
               errors.push({ scope: "stale_lookup", message: e instanceof Error ? e.message : String(e) });
       }
 
-  for (const [productId, variants] of updatesByProduct) {
-          try {
-                    const result = await bulkUpdateVariants(token, productId, variants);
-                    const userErrors = result.productVariantsBulkUpdate?.userErrors ?? [];
-                    for (const ue of userErrors) errors.push({ scope: `update:${productId}`, message: ue.message });
-          } catch (e) {
-                    errors.push({ scope: `update:${productId}`, message: e instanceof Error ? e.message : String(e) });
-          }
-  }
+      await mapWithConcurrency([...updatesByProduct.entries()], 5, async ([productId, variants]) => {
+      try {
+            const result = await bulkUpdateVariants(token, productId, variants);
+            const userErrors = result.productVariantsBulkUpdate?.userErrors ?? [];
+            for (const ue of userErrors) errors.push({ scope: `update:${productId}`, message: ue.message });
+      } catch (e) {
+            errors.push({ scope: `update:${productId}`, message: e instanceof Error ? e.message : String(e) });
+      }
+      });
 
   if (staleVariantIds.length) {
           try {
