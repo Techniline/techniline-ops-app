@@ -105,6 +105,10 @@ export function canManageStockReservation(profile: ProfileArg): boolean {
   return hasCapability(profile, "stock_reservation_manager");
 }
 
+export function canViewConsults(profile: ProfileArg): boolean {
+  return hasCapability(profile, "consults") || isManager(profile);
+}
+
 /**
  * Logistics page keys. Full-access users (logistics role / manager / logistics
  * capability) see every page; specific staff can be granted individual pages by

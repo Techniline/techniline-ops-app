@@ -12,6 +12,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   "seller_finance",
   "stock_reservation",
   "stock_reservation_manager",
+  "consults",
 ] as const;
 
 /**
@@ -29,8 +30,8 @@ export type CapabilityGrant = readonly Capability[] | "all";
 export const CAPABILITY_MAP: Readonly<Record<string, CapabilityGrant>> = {
   // Maricel — Amazon Seller Central: payment/finance only
   "227fdb27-80b5-4040-ab14-4bb945068af7": ["checklist", "finance", "lp_tracker", "seller_central", "seller_finance"],
-  // Aaron — Amazon Seller Central: orders + buyer messages
-  "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu", "seller_central", "seller_orders"],
+  // Aaron — Amazon Seller Central: orders + buyer messages; Consult Bookings
+  "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["checklist", "cocoblu", "seller_central", "seller_orders", "consults"],
   // Pavithran — LP Tracker only (confined to /lp; see LP_ONLY_UIDS)
   "648993fe-d2e7-446a-ad71-c7b3ff81fae7": ["lp_tracker"],
   // Vihan

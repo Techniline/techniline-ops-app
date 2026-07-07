@@ -128,3 +128,33 @@ export function workingResponseMinutes(
   if (respondedAt <= slaStart) return 0; // replied before shift even started
   return workingMinutesBetween(slaStart, respondedAt);
 }
+
+/**
+ * Advance `from` by exactly `minutes` of working time, skipping non-working
+ * periods. The clock starts at `nextWorkingMoment(from)`, then walks forward
+ * shift by shift until the remaining budget is exhausted.
+ */
+export function addWorkingMinutes(from: Date, minutes: number): Date {
+  let cursor = nextWorkingMoment(from);
+  let remaining = minutes;
+  for (let guard = 0; guard < 1000 && remaining > 0; guard++) {
+    const local = toDubai(cursor);
+    const dow = local.getUTCDay();
+    const wE = dayEnd(dow);
+    if (wE == null) {
+      cursor = nextWorkingMoment(new Date(cursor.getTime() + 60_000));
+      continue;
+    }
+    const shiftEndUtc = new Date(
+      Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) -
+      DUBAI_OFFSET_MS + wE * 60_000
+    );
+    const minutesInShift = Math.round((shiftEndUtc.getTime() - cursor.getTime()) / 60_000);
+    if (remaining <= minutesInShift) {
+      return new Date(cursor.getTime() + remaining * 60_000);
+    }
+    remaining -= minutesInShift;
+    cursor = nextWorkingMoment(new Date(shiftEndUtc.getTime() + 60_000));
+  }
+  return cursor;
+}

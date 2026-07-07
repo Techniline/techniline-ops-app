@@ -18,7 +18,8 @@ export type Capability =
   | "seller_orders"
   | "seller_finance"
   | "stock_reservation"
-  | "stock_reservation_manager";
+  | "stock_reservation_manager"
+  | "consults";
 
 /** A row in `public.users`, derived from the generated types. */
 export type UserProfile = Tables<"users">;

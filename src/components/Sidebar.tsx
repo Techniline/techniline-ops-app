@@ -10,6 +10,7 @@ import { useAuth } from "@/app/providers/AuthProvider";
 import {
   canViewChecklist,
   canViewCocoblu,
+  canViewConsults,
   canViewFinance,
   canViewLogistics,
   canViewLogisticsPage,
@@ -113,6 +114,7 @@ export function Sidebar({
       heading: "Daily",
       items: [
         { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
+        { href: "/consults", label: "Consult Bookings", icon: ActionsIcon, show: canViewConsults(profile) },
         { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
         { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },
       ],
