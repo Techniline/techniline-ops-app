@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 
 import Link from "next/link";
@@ -48,6 +48,7 @@ import {
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 const SUPERUSER_UID = "c4abda49-13e9-41fd-acae-88acd4aa7fcb";
+const LS_KEY = "sidebar-collapsed-sections";
 
 interface NavItem {
   href: string;
@@ -58,7 +59,6 @@ interface NavItem {
 }
 
 interface NavSection {
-  /** Optional heading shown above the group (uppercase eyebrow). */
   heading?: string;
   items: NavItem[];
 }
@@ -85,6 +85,27 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  // Load persisted collapsed sections from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_KEY);
+      if (stored) setCollapsedSections(new Set(JSON.parse(stored) as string[]));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function toggleSection(heading: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(heading)) next.delete(heading);
+      else next.add(heading);
+      try { localStorage.setItem(LS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   if (!profile) return null;
 
@@ -95,11 +116,9 @@ export function Sidebar({
   // mobile drawer always shows full labels.
   const labelHidden = collapsed ? "lg:hidden" : "";
 
-  // A dedicated logistics user sees ONLY the Logistics portal — nothing else.
   const logisticsOnly = isLogisticsOnly(profile);
   const lpOnly = isLpOnly(profile);
 
-  // General (non-logistics) items, grouped into categories and gated by capability.
   const generalSectionsRaw: NavSection[] = [
     {
       heading: "Overview",
@@ -114,7 +133,7 @@ export function Sidebar({
       heading: "Daily",
       items: [
         { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
-        { href: "/consults", label: "Consult Bookings", icon: ActionsIcon, show: canViewConsults(profile) },
+        { href: "/consults", label: "Musicmajlis Consult Bookings", icon: ActionsIcon, show: canViewConsults(profile) },
         { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
         { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },
       ],
@@ -162,10 +181,6 @@ export function Sidebar({
     .map((s) => ({ ...s, items: s.items.filter((i) => i.show !== false) }))
     .filter((s) => s.items.length > 0);
 
-  // Logistics portal — categorized into channels / deliveries / operations /
-  // marketplace. Each item is filtered by the user's per-page grant so partial-
-  // access staff (e.g. Maricel: reseller/PRT/reports, Aaron: orders) see only
-  // their pages.
   const can = (page: LogisticsPage) => canViewLogisticsPage(profile, page);
   const logisticsSectionsRaw: NavSection[] = [
     { heading: "Logistics", items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon, show: can("dashboard") }] },
@@ -195,12 +210,10 @@ export function Sidebar({
     },
   ];
 
-  // Drop items the user can't access, then drop sections left empty.
   const logisticsSections: NavSection[] = logisticsSectionsRaw
     .map((s) => ({ ...s, items: s.items.filter((i) => i.show !== false) }))
     .filter((s) => s.items.length > 0);
 
-  // Assemble the sections to render.
   const sections: NavSection[] = lpOnly
     ? [{ heading: "Inventory", items: generalSections.flatMap((s) => s.items).filter((i) => i.href === "/lp") }]
     : logisticsOnly
@@ -235,7 +248,6 @@ export function Sidebar({
               <p className="truncate text-xs text-slate-500">Operations</p>
             </div>
           </div>
-          {/* Inline collapse toggle — desktop, expanded state only */}
           <button
             type="button"
             onClick={onToggleCollapse}
@@ -247,7 +259,6 @@ export function Sidebar({
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
         </div>
-        {/* Expand toggle — desktop, collapsed state only (own row, no overlap) */}
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -262,54 +273,80 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-        {sections.map((section, si) => (
-          <div key={section.heading ?? `section-${si}`} className={si > 0 ? "mt-2" : ""}>
-            {section.heading ? (
-              <p
-                className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 ${labelHidden}`}
-              >
-                {section.heading}
-              </p>
-            ) : null}
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              const active =
-                item.href === "/logistics"
-                  ? pathname === "/logistics"
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {sections.map((section, si) => {
+          const isSectionCollapsed = !collapsed && !!section.heading && collapsedSections.has(section.heading);
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  aria-current={active ? "page" : undefined}
-                  title={collapsed ? item.label : undefined}
-                  className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-                    collapsed ? "lg:justify-center" : ""
-                  } ${
-                    active
-                      ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  }`}
-                >
-                  {active ? (
-                    <span className="absolute left-0 top-1/2 h-6 -translate-y-1/2 rounded-r-full bg-indigo-600 lg:w-1" />
-                  ) : null}
-                  <Icon className="h-5 w-5 shrink-0" />
-                  <span className={`flex-1 ${labelHidden}`}>{item.label}</span>
-                  {item.comingSoon ? (
-                    <span
-                      className={`rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ${labelHidden}`}
-                    >
-                      Soon
+          return (
+            <div key={section.heading ?? `section-${si}`} className={si > 0 ? "mt-2" : ""}>
+              {section.heading ? (
+                collapsed ? (
+                  // Rail mode: just a thin divider, no heading text
+                  si > 0 ? <hr className="mx-3 my-1 border-slate-100 dark:border-slate-800" /> : null
+                ) : (
+                  // Expanded mode: clickable heading with chevron
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.heading!)}
+                    className="group flex w-full items-center justify-between px-3 pb-1 pt-2"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 group-hover:text-slate-500 transition-colors">
+                      {section.heading}
                     </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+                    <svg
+                      className={`h-3 w-3 text-slate-300 transition-transform duration-200 group-hover:text-slate-400 ${
+                        isSectionCollapsed ? "-rotate-90" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )
+              ) : null}
+
+              {!isSectionCollapsed && section.items.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  item.href === "/logistics"
+                    ? pathname === "/logistics"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    title={collapsed ? item.label : undefined}
+                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                      collapsed ? "lg:justify-center" : ""
+                    } ${
+                      active
+                        ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    }`}
+                  >
+                    {active ? (
+                      <span className="absolute left-0 top-1/2 h-6 -translate-y-1/2 rounded-r-full bg-indigo-600 lg:w-1" />
+                    ) : null}
+                    <Icon className="h-5 w-5 shrink-0" />
+                    <span className={`flex-1 ${labelHidden}`}>{item.label}</span>
+                    {item.comingSoon ? (
+                      <span
+                        className={`rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ${labelHidden}`}
+                      >
+                        Soon
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        })}
       </nav>
 
       {/* User card + sign out */}
