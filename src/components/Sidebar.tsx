@@ -50,6 +50,19 @@ type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 const SUPERUSER_UID = "c4abda49-13e9-41fd-acae-88acd4aa7fcb";
 const LS_KEY = "sidebar-expanded-sections";
 
+const SECTION_COLORS: Record<string, string> = {
+  "Overview":         "text-blue-400",
+  "Daily":            "text-emerald-400",
+  "Amazon & Finance": "text-amber-400",
+  "Inventory":        "text-violet-400",
+  "Procurement":      "text-teal-400",
+  "Admin":            "text-rose-400",
+  "Logistics":        "text-indigo-400",
+  "Channels":         "text-sky-400",
+  "Deliveries":       "text-cyan-400",
+  "Operations":       "text-fuchsia-400",
+};
+
 interface NavItem {
   href: string;
   label: string;
@@ -291,13 +304,13 @@ export function Sidebar({
                   <button
                     type="button"
                     onClick={() => toggleSection(section.heading!)}
-                    className="group flex w-full items-center justify-between px-3 pb-1 pt-2"
+                    className="group flex w-full items-center justify-between px-3 pb-1.5 pt-3"
                   >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 group-hover:text-slate-500 transition-colors">
+                    <span className={`text-sm font-bold transition-opacity ${SECTION_COLORS[section.heading] ?? "text-slate-400"} group-hover:opacity-80`}>
                       {section.heading}
                     </span>
                     <svg
-                      className={`h-3 w-3 text-slate-300 transition-transform duration-200 group-hover:text-slate-400 ${
+                      className={`h-3.5 w-3.5 transition-transform duration-200 ${SECTION_COLORS[section.heading] ?? "text-slate-400"} opacity-60 ${
                         isSectionCollapsed ? "rotate-90" : ""
                       }`}
                       fill="none"
