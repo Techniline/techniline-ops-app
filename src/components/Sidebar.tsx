@@ -48,7 +48,7 @@ import {
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 const SUPERUSER_UID = "c4abda49-13e9-41fd-acae-88acd4aa7fcb";
-const LS_KEY = "sidebar-collapsed-sections";
+const LS_KEY = "sidebar-expanded-sections";
 
 interface NavItem {
   href: string;
@@ -85,20 +85,24 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  // Stores which sections are EXPANDED. Default = empty (all collapsed).
+  // The active page's section is always auto-expanded on first load.
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
-  // Load persisted collapsed sections from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LS_KEY);
-      if (stored) setCollapsedSections(new Set(JSON.parse(stored) as string[]));
+      if (stored) {
+        setExpandedSections(new Set(JSON.parse(stored) as string[]));
+      }
+      // else: leave all collapsed — default behaviour
     } catch {
       // ignore
     }
   }, []);
 
   function toggleSection(heading: string) {
-    setCollapsedSections((prev) => {
+    setExpandedSections((prev) => {
       const next = new Set(prev);
       if (next.has(heading)) next.delete(heading);
       else next.add(heading);
@@ -274,7 +278,7 @@ export function Sidebar({
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
         {sections.map((section, si) => {
-          const isSectionCollapsed = !collapsed && !!section.heading && collapsedSections.has(section.heading);
+          const isSectionCollapsed = !collapsed && !!section.heading && !expandedSections.has(section.heading);
 
           return (
             <div key={section.heading ?? `section-${si}`} className={si > 0 ? "mt-2" : ""}>
@@ -294,7 +298,7 @@ export function Sidebar({
                     </span>
                     <svg
                       className={`h-3 w-3 text-slate-300 transition-transform duration-200 group-hover:text-slate-400 ${
-                        isSectionCollapsed ? "-rotate-90" : ""
+                        isSectionCollapsed ? "rotate-90" : ""
                       }`}
                       fill="none"
                       viewBox="0 0 24 24"
