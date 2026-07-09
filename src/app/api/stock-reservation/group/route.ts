@@ -253,7 +253,6 @@ export async function POST(request: Request): Promise<Response> {
           const html = bodyHtml.replace("__ACTION_SECTION__", actionSection);
           await sendStockEmail(mgr.email, subject, html, {
             fromName: `${requesterName} (via Techniline Ops)`,
-            fromEmail: auth.email ?? undefined,
             replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
           });
         } catch (err) {

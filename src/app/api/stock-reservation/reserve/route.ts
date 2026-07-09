@@ -148,7 +148,6 @@ export async function POST(request: Request): Promise<Response> {
           const html = buildGraceNotificationHtml(emailData, `${base}?token=${approveToken}`, `${base}?token=${rejectToken}`);
           await sendStockEmail(mgr.email, subject, html, {
             fromName: `${requesterName} (via Techniline Ops)`,
-            fromEmail: auth.email ?? undefined,
             replyTo: auth.email ? { address: auth.email, name: requesterName } : undefined,
           });
         } catch (err) {
