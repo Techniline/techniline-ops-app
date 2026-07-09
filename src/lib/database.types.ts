@@ -2034,6 +2034,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          job_title: string | null
           portal_access: string[] | null
           role: string
         }
@@ -2044,6 +2045,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          job_title?: string | null
           portal_access?: string[] | null
           role: string
         }
@@ -2054,6 +2056,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          job_title?: string | null
           portal_access?: string[] | null
           role?: string
         }

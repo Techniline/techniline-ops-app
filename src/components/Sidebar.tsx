@@ -88,7 +88,7 @@ export function Sidebar({
 
   if (!profile) return null;
 
-  const role = isManager(profile) ? "Manager" : "Staff";
+  const role = profile.job_title ?? (isManager(profile) ? "Manager" : "Staff");
   const displayName = profile.full_name ?? profile.email ?? "User";
 
   // `collapsed` is a desktop-only rail — express it with `lg:` utilities so the
