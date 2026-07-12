@@ -51,8 +51,9 @@ export async function POST(request: Request): Promise<Response> {
     const mailbox = "vihan@techniline.org";
     const sinceIso = new Date(Date.now() - 720 * 3_600_000).toISOString(); // 30 days
 
-    // Fetch up to 200 message headers from the last 30 days using $filter (no $search).
-    const headers = await fetchMessages(mailbox, sinceIso, 200);
+    // Fetch message headers from the last 30 days using $filter (no $search).
+    // Default cap of 1000 headers covers even high-traffic inboxes over 30 days.
+    const headers = await fetchMessages(mailbox, sinceIso);
 
     // Client-side: keep only emails whose subject mentions "remittance".
     const remittanceHeaders = headers.filter((m) =>
