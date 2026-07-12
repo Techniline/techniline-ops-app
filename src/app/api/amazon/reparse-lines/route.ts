@@ -46,7 +46,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const summary = await runPoll({
       dryRun: false,
-      lookbackHours: 2160, // 90 days — covers all recent remittances
+      lookbackHours: 720, // 30 days — covers recent unreviewed remittances within timeout
       force: true,         // re-process even already-ingested emails
       subjectIncludes: "remittance",
     });
