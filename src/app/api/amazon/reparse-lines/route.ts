@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { runPoll } from "@/lib/amazon-ingest/poll";
+import { fetchBody, fetchMessages } from "@/lib/amazon-ingest/graph";
+import { parseEmail } from "@/lib/amazon-ingest/parseEmail";
+import { executePlan } from "@/lib/amazon-ingest/upsert";
 import { hasCapability, isManager } from "@/lib/permissions";
 import type { UserProfile } from "@/lib/types";
 
@@ -34,34 +36,62 @@ async function authorized(request: Request): Promise<boolean> {
 }
 
 /**
- * Re-fetch remittance emails from Outlook for the past 90 days and re-ingest
- * them with the current 9-column parser.  This populates vendor_code,
- * transaction_type, invoice_amount_aed, and terms_discount_taken_aed for all
- * lines that were previously parsed with the old 6-column parser.
+ * Re-fetch remittance emails from Outlook (vihan mailbox only, last 30 days)
+ * and re-parse them with the current 9-column HTML parser. Populates
+ * vendor_code, transaction_type, invoice_amount_aed, terms_discount_taken_aed.
+ *
+ * Bypasses runPoll to avoid iterating the secondary mailbox and to cap header
+ * pagination — keeps the function well within the 60-second limit.
  */
 export async function POST(request: Request): Promise<Response> {
   if (!(await authorized(request))) {
     return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
   try {
-    const summary = await runPoll({
-      dryRun: false,
-      lookbackHours: 720, // 30 days — covers recent unreviewed remittances within timeout
-      force: true,         // re-process even already-ingested emails
-      subjectFilter: "remittance", // client-side filter: only fetch bodies for remittance emails
-    });
-    const lineOps = summary.items
-      .filter((i) => i.type === "remittance")
-      .reduce((s, i) => s + (i.lineOps ?? 0), 0);
-    const writeErrors = summary.items
-      .filter((i) => i.type === "remittance")
-      .reduce((s, i) => s + (i.opErrors ?? 0), 0);
+    const mailbox = "vihan@techniline.org";
+    const sinceIso = new Date(Date.now() - 720 * 3_600_000).toISOString(); // 30 days
+
+    // Fetch up to 200 message headers from the last 30 days using $filter (no $search).
+    const headers = await fetchMessages(mailbox, sinceIso, 200);
+
+    // Client-side: keep only emails whose subject mentions "remittance".
+    const remittanceHeaders = headers.filter((m) =>
+      (m.subject ?? "").toLowerCase().includes("remittance")
+    );
+
+    // Fetch HTML bodies in parallel (at most ~15 emails).
+    const withBodies = await Promise.all(
+      remittanceHeaders.map(async (msg) => {
+        const bodyText = (await fetchBody(mailbox, msg.id)) ?? undefined;
+        return { msg, bodyText };
+      })
+    );
+
+    // Parse and upsert each one.
+    let linesReparsed = 0;
+    let remittancesWritten = 0;
+    let writeErrors = 0;
+    for (const { msg, bodyText } of withBodies) {
+      const result = parseEmail({
+        messageId: msg.internetMessageId ?? msg.id,
+        from: msg.fromAddress ?? undefined,
+        subject: msg.subject ?? undefined,
+        receivedAt: msg.receivedDateTime ?? undefined,
+        bodyText,
+      });
+      if (result.type !== "remittance") continue;
+      const executed = await executePlan(result.operations);
+      const errs = executed.filter((o) => o.result === "error").length;
+      linesReparsed += result.operations.filter((o) => o.table === "remittance_lines").length;
+      writeErrors += errs;
+      remittancesWritten += 1;
+    }
+
     return Response.json({
       ok: true,
-      remittances: summary.written,
-      linesReparsed: lineOps,
+      remittances: remittancesWritten,
+      linesReparsed,
       writeErrors,
-      errors: summary.errors,
     });
   } catch (e) {
     return Response.json(
