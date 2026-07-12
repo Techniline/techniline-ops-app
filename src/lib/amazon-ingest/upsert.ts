@@ -82,6 +82,34 @@ async function upsertRow<K extends keyof Database["public"]["Tables"]>(
   };
 }
 
+/**
+ * After a dispute is upserted, link it back to any remittance_deductions row
+ * whose amazon_case_id matches the DSPT number, refreshing claim/approved amounts
+ * and dispute_status so the Recovery tab shows real data instead of "—".
+ * Fails silently — no match is expected when the dispute email arrives before
+ * the remittance containing that deduction has been ingested.
+ */
+async function linkDisputeToDeduction(
+  disputeId: string,
+  disputeNumber: string,
+  claimAmountAed: number | null,
+  approvedAmountAed: number | null,
+  disputeStatus: string | null
+): Promise<void> {
+  const sb = getServiceClient();
+  const update: Record<string, unknown> = { dispute_id: disputeId };
+  if (claimAmountAed != null) update.claim_amount_aed = claimAmountAed;
+  if (approvedAmountAed != null) update.approved_amount_aed = approvedAmountAed;
+  if (disputeStatus) update.dispute_status = disputeStatus;
+  const { error } = await sb
+    .from("remittance_deductions")
+    .update(update as never)
+    .eq("amazon_case_id", disputeNumber);
+  if (error) {
+    console.error(`[linkDisputeToDeduction] ${disputeNumber}:`, error.message);
+  }
+}
+
 /** Execute a parse plan against the DB (service role). Skips are recorded. */
 export async function executePlan(
   operations: UpsertOperation[]
@@ -113,9 +141,20 @@ export async function executePlan(
           ["status", "assigned_to"]
         );
         break;
-      case "disputes":
-        r = await upsertRow("disputes", keyColumn, op.values as TablesInsert<"disputes">);
+      case "disputes": {
+        const dVals = op.values as TablesInsert<"disputes">;
+        r = await upsertRow("disputes", keyColumn, dVals);
+        if (r.id && op.naturalKey?.value) {
+          await linkDisputeToDeduction(
+            r.id,
+            op.naturalKey.value,
+            dVals.invoice_amount_aed ?? null,
+            dVals.approved_amount_aed ?? null,
+            dVals.dispute_status ?? null
+          );
+        }
         break;
+      }
       case "returns":
         r = await upsertRow("returns", keyColumn, op.values as TablesInsert<"returns">);
         break;

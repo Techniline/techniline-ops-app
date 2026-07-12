@@ -82,11 +82,14 @@ export function parseRemittance(payload: IngestPayload): ParseResult {
           invoice_number: ln.invoiceNumber,
           invoice_date: ln.invoiceDate,
           description: ln.description,
+          vendor_code: ln.vendorCode ?? null,
+          transaction_type: ln.transactionType ?? (isCoop ? "coop" : null),
+          invoice_amount_aed: ln.invoiceAmount ?? null,
+          terms_discount_taken_aed: ln.termsDiscountTaken ?? null,
           amount_paid_aed: ln.amountPaid,
           amount_remaining_aed: ln.amountRemaining,
           is_credit: (ln.amountPaid ?? 0) < 0,
           partial: ln.partial,
-          transaction_type: isCoop ? "coop" : null,
         },
       });
 

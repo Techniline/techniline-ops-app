@@ -47,6 +47,25 @@ export async function evidenceFileUrl(path: string): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+/**
+ * After a `pairs` task is submitted, upsert each (amazon_order_id, invoice_number)
+ * pair into seller_order_docs so every other module that reads that table gets the
+ * invoice number automatically — no double entry needed.
+ * Fails silently per-row so a bad order ID doesn't block the whole submission.
+ */
+export async function syncOrderInvoicePairs(evidenceText: string): Promise<void> {
+  const pairs = evidenceText
+    .split(",")
+    .map((p) => { const [o, inv] = p.split(":"); return { order: o?.trim() ?? "", invoice: inv?.trim() ?? "" }; })
+    .filter((p) => p.order && p.invoice);
+  for (const { order, invoice } of pairs) {
+    const { error } = await supabase
+      .from("seller_order_docs")
+      .upsert({ amazon_order_id: order, invoice_number: invoice }, { onConflict: "amazon_order_id" });
+    if (error) console.error(`[syncInvoicePairs] ${order}:`, error.message);
+  }
+}
+
 /** The evidence portion of a submission, built by the UI per evidence_type. */
 export interface TaskEvidence {
   evidenceText?: string | null;

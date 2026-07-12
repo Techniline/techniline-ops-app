@@ -13,6 +13,8 @@ import { formatAED, formatDate } from "@/lib/format";
 import {
   deductionsReport,
   fetchDeductions,
+  markRemittanceReviewed,
+  saveLineRemark,
   summarizeRecovery,
   type RecoverySummary,
 } from "@/lib/remittanceDeductions";
@@ -31,13 +33,17 @@ function errorMessage(error: unknown): string {
 function RemittanceDetailModal({
   remittance,
   onClose,
+  onReviewed,
 }: {
   remittance: Remittance;
   onClose: () => void;
+  onReviewed?: () => void;
 }) {
   const [lines, setLines] = useState<RemittanceLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
+  const [reviewedOk, setReviewedOk] = useState(!!remittance.reviewed_at);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +61,19 @@ function RemittanceDetailModal({
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function handleMarkReviewed() {
+    setMarkingReviewed(true);
+    try {
+      await markRemittanceReviewed(remittance.remittance_ref);
+      setReviewedOk(true);
+      onReviewed?.();
+      setTimeout(() => onClose(), 900);
+    } catch (e) {
+      alert(errorMessage(e));
+      setMarkingReviewed(false);
+    }
+  }
 
   return (
     <Modal title={`Remittance ${remittance.remittance_ref}`} onClose={onClose} wide>
@@ -109,34 +128,73 @@ function RemittanceDetailModal({
               <tr>
                 <th className={thCell}>Invoice Number</th>
                 <th className={thCell}>Invoice Date</th>
-                <th className={thCell}>Type</th>
+                <th className={thCell}>Description</th>
+                <th className={thCell}>Vendor Code</th>
+                <th className={thCell}>Transaction Type</th>
                 <th className={thCell}>Invoice Amount</th>
+                <th className={thCell}>Discount Taken</th>
                 <th className={thCell}>Amount Paid</th>
                 <th className={thCell}>Remaining</th>
-                <th className={thCell}>Description</th>
+                <th className={thCell}>Remark</th>
               </tr>
             </thead>
             <tbody>
-              {lines.map((line) => (
+              {lines.map((line) => {
+                const isDeduction = (line.amount_paid_aed ?? 0) < 0;
+                return (
                 <tr
                   key={line.id}
-                  className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+                  className={`border-b border-slate-100 last:border-0 dark:border-slate-800/60 ${isDeduction ? "bg-rose-50/40 dark:bg-rose-950/10" : ""}`}
                 >
                   <td className={`${tdCell} font-medium text-slate-900 dark:text-slate-100`}>
                     {line.invoice_number ?? "—"}
+                    {line.partial ? <span className="ml-1 text-xs text-amber-500">*</span> : null}
                   </td>
                   <td className={tdCell}>{formatDate(line.invoice_date)}</td>
+                  <td className={`${tdCell} max-w-[160px] truncate`}>{line.description ?? "—"}</td>
+                  <td className={`${tdCell} font-mono text-xs`}>{line.vendor_code ?? "—"}</td>
                   <td className={tdCell}>{line.transaction_type ?? "—"}</td>
-                  <td className={tdCell}>{formatAED(line.invoice_amount_aed)}</td>
-                  <td className={tdCell}>{formatAED(line.amount_paid_aed)}</td>
+                  <td className={tdCell}>{line.invoice_amount_aed != null ? formatAED(line.invoice_amount_aed) : "—"}</td>
+                  <td className={tdCell}>{line.terms_discount_taken_aed != null ? formatAED(line.terms_discount_taken_aed) : "—"}</td>
+                  <td className={`${tdCell} font-medium ${isDeduction ? "text-rose-600 dark:text-rose-400" : ""}`}>
+                    {formatAED(line.amount_paid_aed)}
+                  </td>
                   <td className={tdCell}>{formatAED(line.amount_remaining_aed)}</td>
-                  <td className={`${tdCell} max-w-xs truncate`}>
-                    {line.description ?? "—"}
+                  <td className={tdCell}>
+                    <input
+                      type="text"
+                      defaultValue={line.recon_remark ?? ""}
+                      onBlur={(e) => {
+                        saveLineRemark(line.id, e.target.value).catch(console.error);
+                      }}
+                      className="w-full min-w-[160px] rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800"
+                      placeholder="SRT / PRT / co-op…"
+                    />
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="mt-4 flex items-center justify-end gap-3">
+          {reviewedOk ? (
+            <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              ✓ Marked as reviewed
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleMarkReviewed()}
+              disabled={markingReviewed}
+              className={btnSmall}
+            >
+              {markingReviewed ? "Saving…" : "Mark reviewed"}
+            </button>
+          )}
         </div>
       )}
     </Modal>
@@ -381,6 +439,7 @@ function RemittancesContent() {
         <RemittanceDetailModal
           remittance={selected}
           onClose={() => setSelected(null)}
+          onReviewed={() => void load()}
         />
       ) : null}
     </div>

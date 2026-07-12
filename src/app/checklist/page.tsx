@@ -15,6 +15,7 @@ import {
   generateDailyTasks,
   setDailyTaskStatus,
   submitTaskWithEvidence,
+  syncOrderInvoicePairs,
   type DailyTaskWithDefinition,
   type Submission,
   type TaskEvidence,
@@ -156,10 +157,20 @@ function TaskCard({
   const [count, setCount] = useState("");
   const [chips, setChips] = useState<string[]>([]);
   const [chipInput, setChipInput] = useState("");
+  const [pairs, setPairs] = useState<Array<{ order: string; invoice: string }>>([]);
+  const [pairOrder, setPairOrder] = useState("");
+  const [pairInvoice, setPairInvoice] = useState("");
+  const [pairError, setPairError] = useState<string | null>(null);
+  // Vendor tasks get a mode selector: "vendor" = PO number, "df" = DF order number
+  const isVendorTask = /vendor/i.test(title);
+  const [pairDocType, setPairDocType] = useState<"vendor" | "df">("vendor");
+  const pairFirstLabel = isVendorTask
+    ? pairDocType === "vendor" ? "PO Number (e.g. 6000141979)" : "Order Number (e.g. 0-00-0000000)"
+    : "Amazon Order # (e.g. 302-1234567)";
 
   // Map evidence_type to a concrete input. Unknown types fall back to text.
-  const inputKind: "text" | "count" | "id_list" =
-    evType === "id_list" ? "id_list" : evType === "count" ? "count" : "text";
+  const inputKind: "text" | "count" | "id_list" | "pairs" =
+    evType === "pairs" ? "pairs" : evType === "id_list" ? "id_list" : evType === "count" ? "count" : "text";
 
   const isOpen = task.status === "open";
 
@@ -172,6 +183,28 @@ function TaskCard({
 
   function removeChip(index: number) {
     setChips((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addPair() {
+    const o = pairOrder.trim();
+    const inv = pairInvoice.trim().toUpperCase();
+    setPairError(null);
+    if (!o || !inv) return;
+    if (!/^WS\/\d+$/i.test(inv)) {
+      setPairError("Invoice must be in WS/XXXXXXX format (e.g. WS/2601656)");
+      return;
+    }
+    if (pairs.some((p) => p.order === o)) {
+      setPairError(`Order ${o} already added`);
+      return;
+    }
+    setPairs((prev) => [...prev, { order: o, invoice: inv }]);
+    setPairOrder("");
+    setPairInvoice("");
+  }
+
+  function removePair(index: number) {
+    setPairs((prev) => prev.filter((_, i) => i !== index));
   }
 
   function onChipKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -188,11 +221,13 @@ function TaskCard({
   const hasProof =
     evType === "one_tap"
       ? true
-      : inputKind === "id_list"
-        ? chips.length > 0
-        : inputKind === "count"
-          ? countValid
-          : text.trim() !== "";
+      : inputKind === "pairs"
+        ? pairs.length > 0
+        : inputKind === "id_list"
+          ? chips.length > 0
+          : inputKind === "count"
+            ? countValid
+            : text.trim() !== "";
 
   /** Build the evidence payload for a positive submission, or null if invalid. */
   function buildEvidence(): TaskEvidence | null {
@@ -200,6 +235,15 @@ function TaskCard({
       return {
         evidenceText: "Confirmed",
         evidenceCount: null,
+        isNothingToAction: false,
+        nothingToActionNote: null,
+      };
+    }
+    if (evType === "pairs") {
+      if (pairs.length === 0) return null;
+      return {
+        evidenceText: pairs.map((p) => `${p.order}:${p.invoice}`).join(","),
+        evidenceCount: pairs.length,
         isNothingToAction: false,
         nothingToActionNote: null,
       };
@@ -383,6 +427,61 @@ function TaskCard({
                             onClick={() => removeChip(index)}
                             className="text-indigo-500 hover:text-indigo-700"
                             aria-label={`Remove ${chip}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {inputKind === "pairs" ? (
+                <div>
+                  {isVendorTask ? (
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Invoice type:</span>
+                      <select
+                        value={pairDocType}
+                        onChange={(e) => { setPairDocType(e.target.value as "vendor" | "df"); setPairOrder(""); setPairError(null); }}
+                        className="rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      >
+                        <option value="vendor">Vendor Invoice (PO)</option>
+                        <option value="df">DF Invoice (Order)</option>
+                      </select>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      className={`${inputClass} flex-1 min-w-[160px]`}
+                      placeholder={pairFirstLabel}
+                      value={pairOrder}
+                      onChange={(e) => { setPairOrder(e.target.value); setPairError(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPair(); } }}
+                    />
+                    <input
+                      className={`${inputClass} flex-1 min-w-[160px]`}
+                      placeholder="WS/Invoice # (e.g. WS/2601656)"
+                      value={pairInvoice}
+                      onChange={(e) => { setPairInvoice(e.target.value); setPairError(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPair(); } }}
+                    />
+                    <button type="button" onClick={addPair} className={btnSecondary}>Add</button>
+                  </div>
+                  {pairError ? <p className="mt-1 text-xs text-rose-600">{pairError}</p> : null}
+                  {pairs.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {pairs.map((p, index) => (
+                        <span key={index} className={chipClass}>
+                          <span className="font-mono text-xs">{p.order}</span>
+                          <span className="mx-1 text-slate-400">/</span>
+                          <span className="font-mono text-xs text-emerald-700 dark:text-emerald-400">{p.invoice}</span>
+                          <button
+                            type="button"
+                            onClick={() => removePair(index)}
+                            className="text-indigo-500 hover:text-indigo-700"
+                            aria-label={`Remove ${p.order}`}
                           >
                             ×
                           </button>
@@ -826,8 +925,165 @@ function HolidayModal({
   );
 }
 
+function TeamChecklistView() {
+  const { profile } = useAuth();
+  const [date, setDate] = useState(todayISODate());
+  const [tasks, setTasks] = useState<DailyTaskWithDefinition[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [userNames, setUserNames] = useState<Map<string, string>>(new Map());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const [taskRows, names] = await Promise.all([
+          fetchChecklistForDate({ date, profile }),
+          fetchUserNames(),
+        ]);
+        if (cancelled) return;
+        const subs = await fetchSubmissionsForTasks(taskRows.map((t) => t.id));
+        if (cancelled) return;
+        setTasks(taskRows);
+        setSubmissions(subs);
+        setUserNames(names);
+      } catch (e) {
+        if (!cancelled) setError(errorMessage(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, profile?.id]);
+
+  const lastSubByTask = useMemo(() => {
+    const m = new Map<string, Submission>();
+    for (const s of submissions) if (!m.has(s.daily_task_id)) m.set(s.daily_task_id, s);
+    return m;
+  }, [submissions]);
+
+  // Group tasks by assigned_to
+  const byUser = useMemo(() => {
+    const m = new Map<string, DailyTaskWithDefinition[]>();
+    for (const t of tasks) {
+      const uid = t.assigned_to ?? "__unassigned__";
+      const arr = m.get(uid);
+      if (arr) arr.push(t);
+      else m.set(uid, [t]);
+    }
+    return [...m.entries()].map(([uid, userTasks]) => ({
+      uid,
+      name: userNames.get(uid) ?? uid,
+      tasks: userTasks.sort((a, b) => (a.task_definitions?.sort_order ?? 9999) - (b.task_definitions?.sort_order ?? 9999)),
+      done: userTasks.filter((t) => DONE_STATUSES.has(t.status)).length,
+      breached: userTasks.filter((t) => t.status === "breached").length,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tasks, userNames]);
+
+  function evidenceLine(task: DailyTaskWithDefinition): string | null {
+    const sub = lastSubByTask.get(task.id);
+    if (!sub) return null;
+    if (sub.is_nothing_to_action) return `Nothing to action${sub.nothing_to_action_note ? ` — ${sub.nothing_to_action_note}` : ""}`;
+    if (sub.evidence_text && task.task_definitions?.evidence_type === "pairs") {
+      return sub.evidence_text
+        .split(",")
+        .map((p) => { const [o, inv] = p.split(":"); return `${o?.trim()} → ${inv?.trim()}`; })
+        .join("  ·  ");
+    }
+    if (sub.evidence_text) return sub.evidence_text;
+    if (sub.evidence_count != null) return `Count: ${sub.evidence_count}`;
+    return "Done";
+  }
+
+  const isLabel = date === todayISODate() ? "Today" : new Date(date + "T00:00").toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "short" });
+
+  return (
+    <div>
+      <div className="mb-5 flex items-center gap-3">
+        <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Date</label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+        />
+        <span className="text-sm text-slate-500">{isLabel}</span>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-sm text-slate-500">Loading…</div>
+      ) : error ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : byUser.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+          <p className="text-sm text-slate-500">No checklist tasks found for this date.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {byUser.map(({ uid, name, tasks: userTasks, done, breached }) => (
+            <div key={uid} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                    {name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{name}</span>
+                </div>
+                <span className={`text-sm font-medium ${done === userTasks.length ? "text-emerald-600 dark:text-emerald-400" : breached > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500"}`}>
+                  {done}/{userTasks.length}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all ${done === userTasks.length ? "bg-emerald-500" : breached > 0 ? "bg-rose-500" : "bg-indigo-500"}`}
+                  style={{ width: `${userTasks.length > 0 ? Math.round((done / userTasks.length) * 100) : 0}%` }}
+                />
+              </div>
+
+              <ul className="space-y-1.5">
+                {userTasks.map((task) => {
+                  const ev = evidenceLine(task);
+                  return (
+                    <li key={task.id} className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full ${
+                          task.status === "submitted" || task.status === "verified"
+                            ? "bg-emerald-500"
+                            : task.status === "breached"
+                            ? "bg-rose-500"
+                            : "bg-slate-300 dark:bg-slate-600"
+                        }`} />
+                        <span className={`text-sm ${task.status === "breached" ? "text-rose-600 line-through dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}`}>
+                          {task.task_definitions?.title ?? "Task"}
+                        </span>
+                      </div>
+                      {ev ? (
+                        <p className="ml-4 text-xs text-slate-500 dark:text-slate-400">{ev}</p>
+                      ) : task.status === "breached" ? (
+                        <p className="ml-4 text-xs text-rose-500">Missed</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChecklistContent() {
   const { profile } = useAuth();
+  const [tab, setTab] = useState<"mine" | "team">("mine");
   const [showLeave, setShowLeave] = useState(false);
   const [showHolidays, setShowHolidays] = useState(false);
   const [holidays, setHolidays] = useState<HolidayRow[]>([]);
@@ -895,6 +1151,11 @@ function ChecklistContent() {
     setActionError(null);
     try {
       await submitTaskWithEvidence({ taskId, submittedBy: profile.id, ...evidence });
+      // Sync order+invoice pairs to seller_order_docs so other modules get it automatically.
+      const task = tasks.find((t) => t.id === taskId);
+      if (task?.task_definitions?.evidence_type === "pairs" && evidence.evidenceText) {
+        await syncOrderInvoicePairs(evidence.evidenceText);
+      }
       await load();
     } catch (submitError) {
       setActionError(errorMessage(submitError));
@@ -969,9 +1230,15 @@ function ChecklistContent() {
         actions={
           <div className="flex items-center gap-2">
             {managerView ? (
-              <button type="button" onClick={() => setShowHolidays(true)} className={btnSecondary}>
-                Holidays
-              </button>
+              <>
+                <div className="flex rounded-lg border border-slate-200 dark:border-slate-700">
+                  <button type="button" onClick={() => setTab("mine")} className={`rounded-l-lg px-3 py-1.5 text-sm font-medium transition-colors ${tab === "mine" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800"}`}>My tasks</button>
+                  <button type="button" onClick={() => setTab("team")} className={`rounded-r-lg px-3 py-1.5 text-sm font-medium transition-colors ${tab === "team" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800"}`}>Team view</button>
+                </div>
+                <button type="button" onClick={() => setShowHolidays(true)} className={btnSecondary}>
+                  Holidays
+                </button>
+              </>
             ) : null}
             <button type="button" onClick={() => setShowLeave(true)} className={btnSecondary}>
               Leave / absence
@@ -1010,8 +1277,9 @@ function ChecklistContent() {
         </p>
       ) : null}
 
-
-      {loading ? (
+      {managerView && tab === "team" ? (
+        <TeamChecklistView />
+      ) : loading ? (
         <div className={`${surface} p-8 text-center text-sm text-slate-500`}>
           Loading checklist…
         </div>
@@ -1090,6 +1358,7 @@ function ChecklistContent() {
     </div>
   );
 }
+
 
 export default function ChecklistPage() {
   return (

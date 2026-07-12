@@ -22,6 +22,7 @@ import {
   REMITTANCE_START,
   saveLineRemark,
   triggerReingest,
+  triggerReparseLines,
   recoveryPct,
   reopenDeduction,
   rowToDraft,
@@ -255,6 +256,22 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   const [sending, setSending] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [reparsing, setReparsing] = useState(false);
+
+  async function reparseLines(): Promise<void> {
+    setErr(null);
+    setBanner(null);
+    setReparsing(true);
+    try {
+      const msg = await triggerReparseLines();
+      setBanner(msg);
+      await load();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setReparsing(false);
+    }
+  }
 
   async function syncEmails(): Promise<void> {
     setErr(null);
@@ -349,9 +366,14 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.2)]" />
           REMITTANCE — PAYMENTS TO REVIEW
         </h2>
-        <button type="button" onClick={syncEmails} disabled={syncing} className={btnSecondary}>
-          {syncing ? "Syncing…" : "Sync remittance emails"}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={syncEmails} disabled={syncing} className={btnSecondary}>
+            {syncing ? "Syncing…" : "Sync remittance emails"}
+          </button>
+          <button type="button" onClick={reparseLines} disabled={reparsing} className={btnSecondary} title="Re-parse all stored email bodies to fill vendor code, transaction type, invoice amount, and discount columns">
+            {reparsing ? "Repopulating…" : "Repopulate columns"}
+          </button>
+        </div>
       </div>
       <p className="mb-3 text-xs text-slate-500">
         Each Amazon payment captured from email. Break it down line-wise; every negative needs a charge type + mandatory evidence before it closes, then mark the payment reviewed.

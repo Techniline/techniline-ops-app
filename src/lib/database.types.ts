@@ -1528,7 +1528,10 @@ export type Database = {
           partial: boolean | null
           recon_remark: string | null
           remittance_ref: string
+          settled_at: string | null
+          terms_discount_taken_aed: number | null
           transaction_type: string | null
+          vendor_code: string | null
         }
         Insert: {
           amount_paid_aed?: number | null
@@ -1548,7 +1551,10 @@ export type Database = {
           partial?: boolean | null
           recon_remark?: string | null
           remittance_ref: string
+          settled_at?: string | null
+          terms_discount_taken_aed?: number | null
           transaction_type?: string | null
+          vendor_code?: string | null
         }
         Update: {
           amount_paid_aed?: number | null
@@ -1568,7 +1574,10 @@ export type Database = {
           partial?: boolean | null
           recon_remark?: string | null
           remittance_ref?: string
+          settled_at?: string | null
+          terms_discount_taken_aed?: number | null
           transaction_type?: string | null
+          vendor_code?: string | null
         }
         Relationships: []
       }

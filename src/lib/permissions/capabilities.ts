@@ -13,6 +13,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   "stock_reservation",
   "stock_reservation_manager",
   "consults",
+  "accounts",
 ] as const;
 
 /**

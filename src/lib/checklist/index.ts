@@ -23,6 +23,7 @@ export {
 
 export {
   submitTaskWithEvidence,
+  syncOrderInvoicePairs,
   fetchSubmissionsForTasks,
   uploadEvidenceFile,
   evidenceFileUrl,

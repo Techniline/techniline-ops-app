@@ -282,6 +282,26 @@ export async function triggerReingest(): Promise<string> {
   return `Email sync complete (${j.written ?? 0} written, ${j.errors ?? 0} errors).`;
 }
 
+/** Re-fetch remittance emails from Outlook (90-day window) and re-ingest with the 9-column parser. */
+export async function triggerReparseLines(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/amazon/reparse-lines", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; remittances?: number; linesReparsed?: number; writeErrors?: number; errors?: number };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+  return `Re-synced ${j.remittances ?? 0} remittance email(s), ${j.linesReparsed ?? 0} line(s) repopulated${j.writeErrors ? ` (${j.writeErrors} write errors)` : ""}.`;
+}
+
+/** Accounts team: mark a remittance line as settled in the books (toggles). */
+export async function markLineSettled(lineId: string, settled: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("remittance_lines")
+    .update({ settled_at: settled ? new Date().toISOString() : null })
+    .eq("id", lineId);
+  if (error) throw new Error(error.message);
+}
+
 /** Save a per-line reconciliation remark (any line, not just negatives). */
 export async function saveLineRemark(lineId: string, remark: string): Promise<void> {
   const { error } = await supabase

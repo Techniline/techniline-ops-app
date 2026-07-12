@@ -10,6 +10,10 @@ export interface RemittanceLineParsed {
   invoiceNumber: string;
   invoiceDate: string | null; // ISO yyyy-mm-dd
   description: string;
+  vendorCode: string | null;
+  transactionType: string | null;
+  invoiceAmount: number | null;
+  termsDiscountTaken: number | null;
   amountPaid: number | null; // signed (negative = deduction)
   amountRemaining: number | null; // signed
   partial: boolean; // had a leading "*"
@@ -89,19 +93,42 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
   const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   for (const row of rows) {
     const rawCells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]);
-    if (rawCells.length !== 6) continue;
-    const invoiceNumber = stripTags(rawCells[0]);
-    const invoiceDate = toIsoDate(stripTags(rawCells[1]));
-    if (!looksLikeInvoice(invoiceNumber) || !invoiceDate) continue; // not an invoice row
-    const rawPaid = rawCells[4];
-    out.lines.push({
-      invoiceNumber,
-      invoiceDate,
-      description: stripTags(rawCells[2]),
-      amountPaid: parseAmount(stripTags(rawPaid)),
-      amountRemaining: parseAmount(stripTags(rawCells[5])),
-      partial: /\*/.test(rawPaid),
-    });
+    // Amazon vendor emails now use a 9-column table; older/seller emails use 6.
+    if (rawCells.length === 9) {
+      const invoiceNumber = stripTags(rawCells[0]);
+      const invoiceDate = toIsoDate(stripTags(rawCells[1]));
+      if (!looksLikeInvoice(invoiceNumber) || !invoiceDate) continue;
+      const rawPaid = rawCells[7];
+      out.lines.push({
+        invoiceNumber,
+        invoiceDate,
+        description: stripTags(rawCells[2]),
+        vendorCode: stripTags(rawCells[3]) || null,
+        transactionType: stripTags(rawCells[4]) || null,
+        invoiceAmount: parseAmount(stripTags(rawCells[5])),
+        termsDiscountTaken: parseAmount(stripTags(rawCells[6])),
+        amountPaid: parseAmount(stripTags(rawPaid)),
+        amountRemaining: parseAmount(stripTags(rawCells[8])),
+        partial: /\*/.test(rawPaid),
+      });
+    } else if (rawCells.length === 6) {
+      const invoiceNumber = stripTags(rawCells[0]);
+      const invoiceDate = toIsoDate(stripTags(rawCells[1]));
+      if (!looksLikeInvoice(invoiceNumber) || !invoiceDate) continue;
+      const rawPaid = rawCells[4];
+      out.lines.push({
+        invoiceNumber,
+        invoiceDate,
+        description: stripTags(rawCells[2]),
+        vendorCode: null,
+        transactionType: null,
+        invoiceAmount: null,
+        termsDiscountTaken: parseAmount(stripTags(rawCells[3])),
+        amountPaid: parseAmount(stripTags(rawPaid)),
+        amountRemaining: parseAmount(stripTags(rawCells[5])),
+        partial: /\*/.test(rawPaid),
+      });
+    }
   }
 
   // Fallback: Graph usually returns the body as PLAIN TEXT. Capture EVERY line of
@@ -134,6 +161,10 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
         invoiceNumber: firstTok,
         invoiceDate: dateMatch ? toIsoDate(dateMatch[1]) : null,
         description: desc.replace(/\s+/g, " ").trim(),
+        vendorCode: null,
+        transactionType: null,
+        invoiceAmount: null,
+        termsDiscountTaken: null,
         amountPaid: parseAmount(paidTok),
         amountRemaining: parseAmount(remainTok),
         partial: /\*/.test(paidTok),

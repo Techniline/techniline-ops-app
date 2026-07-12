@@ -109,6 +109,10 @@ export function canViewConsults(profile: ProfileArg): boolean {
   return hasCapability(profile, "consults") || isManager(profile);
 }
 
+export function canViewAccounts(profile: ProfileArg): boolean {
+  return hasCapability(profile, "accounts") || isManager(profile);
+}
+
 /**
  * Logistics page keys. Full-access users (logistics role / manager / logistics
  * capability) see every page; specific staff can be granted individual pages by

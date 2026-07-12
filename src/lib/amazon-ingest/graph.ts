@@ -149,7 +149,7 @@ export async function fetchBody(
     {
       headers: {
         Authorization: `Bearer ${token}`,
-        Prefer: 'outlook.body-content-type="text"',
+        Prefer: 'outlook.body-content-type="html"',
       },
     }
   );

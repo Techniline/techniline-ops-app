@@ -152,7 +152,7 @@ export async function fetchScorecard(cycle: KpiCycle, mmMonthKey?: string): Prom
   //    (reconciled but no reviewed_at) are EXCLUDED — never guessed.
   const inCycle = (t: string | null | undefined) => !!t && t >= qStart && t < qEnd; // ISO compare
   const remits = (remitRes.data ?? []).filter(
-    (r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref) && inCycle(r.created_at)
+    (r) => r.remittance_ref && /^\d{6,}$/.test(r.remittance_ref) && inCycle(r.payment_date ?? r.created_at)
   );
   let onTimeR = 0, lateR = 0, openBreach = 0;
   for (const r of remits) {
