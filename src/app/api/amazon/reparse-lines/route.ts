@@ -48,8 +48,7 @@ export async function POST(request: Request): Promise<Response> {
       dryRun: false,
       lookbackHours: 720, // 30 days — covers recent unreviewed remittances within timeout
       force: true,         // re-process even already-ingested emails
-      // No subjectIncludes — $search causes Graph 504 on large mailboxes.
-      // $filter by date is used instead; isAmazonEmail() filters for remittances.
+      subjectFilter: "remittance", // client-side filter: only fetch bodies for remittance emails
     });
     const lineOps = summary.items
       .filter((i) => i.type === "remittance")

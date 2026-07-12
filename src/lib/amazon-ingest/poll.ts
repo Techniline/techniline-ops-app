@@ -91,6 +91,8 @@ export async function runPoll(opts: {
   lookbackHours: number;
   force?: boolean;
   subjectIncludes?: string;
+  /** Client-side subject filter applied BEFORE body fetch — no Graph $search, avoids 504 on large mailboxes. */
+  subjectFilter?: string;
 }): Promise<PollSummary> {
   const sinceIso = new Date(
     Date.now() - opts.lookbackHours * 3_600_000
@@ -132,11 +134,14 @@ export async function runPoll(opts: {
     }
   }
 
-  // Optional subject scope (e.g. only "remittance") — keeps a forced wide-window
-  // re-ingest fast by downloading bodies for just the relevant emails.
-  const scoped = opts.subjectIncludes
+  // Optional subject scope — keeps a forced wide-window re-ingest fast by
+  // downloading bodies only for the relevant emails. subjectIncludes also drove
+  // the Graph $search (which can 504 on large mailboxes); subjectFilter is the
+  // client-side-only equivalent that works with $filter-based date queries.
+  const subjectScope = opts.subjectIncludes ?? opts.subjectFilter;
+  const scoped = subjectScope
     ? candidates.filter((c) =>
-        (c.msg.subject ?? "").toLowerCase().includes(opts.subjectIncludes!.toLowerCase())
+        (c.msg.subject ?? "").toLowerCase().includes(subjectScope.toLowerCase())
       )
     : candidates;
 
