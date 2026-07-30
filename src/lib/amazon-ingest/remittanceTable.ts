@@ -76,8 +76,9 @@ export function parseRemittanceTable(html: string | null | undefined): Remittanc
   if (!html) return out;
 
   // Header fields (from the small key/value table).
-  const num = html.match(/Payment\s*number:\s*<\/b>\s*<\/td>\s*<td[^>]*>\s*([0-9]{6,})/i)
-    ?? html.match(/Payment\s*number[:\s]*([0-9]{6,})/i);
+  // Cap at 13 digits — Amazon payment numbers are 9 digits; 14-15 digit numbers are Return IDs.
+  const num = html.match(/Payment\s*number:\s*<\/b>\s*<\/td>\s*<td[^>]*>\s*([0-9]{6,13})/i)
+    ?? html.match(/Payment\s*number[:\s]*([0-9]{6,13})/i);
   if (num) out.paymentNumber = num[1];
 
   const amt = html.match(/Payment\s*amount:\s*<\/b>\s*<\/td>\s*<td[^>]*>\s*([()*\d.,\-]+)/i);

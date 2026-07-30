@@ -15,14 +15,22 @@ export function parseRemittance(payload: IngestPayload): ParseResult {
   const parsed = parseRemittanceTable(payload.bodyText);
 
   // Prefer the explicit "Payment number: <digits>" from the table; fall back to text.
+  // The alphanumeric-ref fallback requires 3+ digits to avoid capturing English words
+  // like "information" or "Advice" from subject lines like "Remittance information".
+  const _alphaRef = matchOne(text, /remittance[\s#:-]*(?:ref|number|id)?[\s#:-]*([A-Z0-9-]{6,})/i);
+  // Cap all numeric matches at 13 digits — Amazon payment numbers are 9 digits.
+  // 14-15 digit numbers are Return IDs (e.g. 150001590244552) and must not be used as payment refs.
   const remittanceRef =
     parsed.paymentNumber ??
-    matchOne(text, /payment[\s#:-]*(?:number|no)[\s#:-]*([0-9]{6,})/i) ??
-    matchOne(text, /remittance[\s#:-]*(?:ref|number|id)?[\s#:-]*([A-Z0-9-]{6,})/i) ??
-    matchOne(text, /\b\d{9,}\b/);
+    matchOne(text, /payment[\s#:-]*(?:number|no)[\s#:-]*([0-9]{6,13})/i) ??
+    (_alphaRef && (_alphaRef.match(/\d/g)?.length ?? 0) >= 3 ? _alphaRef : null) ??
+    matchOne(text, /\b\d{9,13}\b/);
   const netPaid = parsed.paymentAmount ?? amountNear(text, /net\s*paid|net\s*payment/i);
-  const gross = amountNear(text, /gross/i);
-  const deductions = amountNear(text, /deduction/i);
+  // Amazon 6-column emails don't have explicit Gross/Deductions header labels — derive from lines.
+  const computedGross = parsed.lines.reduce((s, ln) => s + ((ln.amountPaid ?? 0) > 0 ? (ln.amountPaid ?? 0) : 0), 0);
+  const computedDeductions = parsed.lines.reduce((s, ln) => s + ((ln.amountPaid ?? 0) < 0 ? (ln.amountPaid ?? 0) : 0), 0);
+  const gross = amountNear(text, /gross/i) ?? (computedGross > 0 ? Math.round(computedGross * 100) / 100 : null);
+  const deductions = amountNear(text, /deduction/i) ?? (computedDeductions < 0 ? Math.round(computedDeductions * 100) / 100 : null);
 
   const receivedAt = payload.receivedAt ?? new Date().toISOString();
   const operations: UpsertOperation[] = [];
@@ -34,7 +42,7 @@ export function parseRemittance(payload: IngestPayload): ParseResult {
       net_paid_aed: netPaid ?? null,
       gross_amount_aed: gross ?? null,
       deductions_aed: deductions ?? null,
-      payment_date: payload.receivedAt ? payload.receivedAt.slice(0, 10) : null,
+      payment_date: parsed.paymentDate ?? (payload.receivedAt ? payload.receivedAt.slice(0, 10) : null),
       // Keep the raw body so the line parser can be diagnosed/improved without re-fetching.
       raw_body: payload.bodyText ? payload.bodyText.slice(0, 20000) : null,
     };
