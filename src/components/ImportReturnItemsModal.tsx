@@ -259,9 +259,6 @@ export function ImportReturnItemsModal({
             <p className="font-medium text-emerald-800 dark:text-emerald-300">✓ Imported {summary.parsed} return rows.</p>
             <ul className="mt-2 space-y-0.5 text-emerald-900 dark:text-emerald-200">
               <li>{summary.created} created · {summary.updated} updated · {summary.skipped} unchanged</li>
-              {summary.remittancesCreated > 0 ? (
-                <li>{summary.remittancesCreated} missing remittance record{summary.remittancesCreated !== 1 ? "s" : ""} created</li>
-              ) : null}
               {summary.deductionsCreated > 0 ? (
                 <li>{summary.deductionsCreated} remittance breakdown line{summary.deductionsCreated !== 1 ? "s" : ""} linked</li>
               ) : null}

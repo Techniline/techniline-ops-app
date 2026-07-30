@@ -27,7 +27,6 @@ export interface ReturnImportSummary {
   created: number;
   updated: number;
   skipped: number;
-  remittancesCreated: number;
   deductionsCreated: number;
   errors: string[];
 }
@@ -72,7 +71,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!url || !service) return Response.json({ ok: false, error: "Server not configured." }, { status: 500 });
   const db = createClient<Database>(url, service, { auth: { persistSession: false } });
 
-  const summary: ReturnImportSummary = { parsed: rows.length, created: 0, updated: 0, skipped: 0, remittancesCreated: 0, deductionsCreated: 0, errors: [] };
+  const summary: ReturnImportSummary = { parsed: rows.length, created: 0, updated: 0, skipped: 0, deductionsCreated: 0, errors: [] };
 
   const returnIds = [...new Set(rows.map((r) => r.return_id))];
 
@@ -125,25 +124,10 @@ export async function POST(request: Request): Promise<Response> {
         summary.created++;
       }
 
-      // Create remittance breakdown for this return ID.
-      // Amazon deducts returns from vendor payments and sends a remittance advice email.
-      // If that email was never received, neither the remittances record nor the deduction line
-      // will exist — we create both from the CSV data so the breakdown is visible.
-      if (!deductionSet.has(row.return_id)) {
-        // Create the remittances header first if the email was never received.
-        if (!remittanceSet.has(row.return_id)) {
-          const { error: remErr } = await db.from("remittances").insert({
-            remittance_ref: row.return_id,
-            payment_date: row.date_received,
-            net_paid_aed: -(row.total_cost_aed),
-          });
-          if (remErr) {
-            summary.errors.push(`remittance for ${row.return_id}: ${remErr.message}`);
-            continue;
-          }
-          remittanceSet.add(row.return_id);
-          summary.remittancesCreated++;
-        }
+      // If Amazon sent a remittance payment keyed by this Return ID (email was received),
+      // and no deduction line exists yet, create one automatically.
+      // We do NOT create remittances records here — those come from emails only.
+      if (remittanceSet.has(row.return_id) && !deductionSet.has(row.return_id)) {
         const { error: dedErr } = await db.from("remittance_deductions").insert({
           remittance_ref: row.return_id,
           return_id: row.return_id,
