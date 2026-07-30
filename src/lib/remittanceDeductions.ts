@@ -235,7 +235,7 @@ export async function fetchOpenRemittancePayments(): Promise<RemittancePayment[]
     .filter(
       (r) =>
         r.ref_number &&
-        /^\d{6,}$/.test(r.ref_number) && // real Amazon payment numbers only (drops "Payment Advice")
+        /^\d{6,13}$/.test(r.ref_number) && // real Amazon payment numbers only; cap at 13 to exclude 14-15 digit Return IDs
         !reviewed.has(r.ref_number) // hide only payments explicitly marked reviewed
     )
     .map((r) => ({
