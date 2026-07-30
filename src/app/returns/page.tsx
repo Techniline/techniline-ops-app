@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
+import { ImportReturnItemsModal } from "@/components/ImportReturnItemsModal";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
@@ -27,7 +28,7 @@ import {
 type ColKey =
   | "date" | "returnId" | "vretNumber" | "authorizationId" | "reference"
   | "warehouse" | "sku" | "poNumber" | "erpInvoice" | "qty" | "amount"
-  | "type" | "refs" | "trackingNumber" | "comments" | "source";
+  | "type" | "refs" | "trackingNumber" | "comments" | "source" | "status";
 
 const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "date",            label: "Return date" },
@@ -46,6 +47,7 @@ const COL_DEFS: { key: ColKey; label: string }[] = [
   { key: "trackingNumber",  label: "Tracking #" },
   { key: "comments",        label: "Comment" },
   { key: "source",          label: "Source" },
+  { key: "status",          label: "Status" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -132,18 +134,22 @@ function ReturnsContent() {
   const [month, setMonth]     = useState<string>(dubaiMonth());
 
   // modal state
-  const [showAdd, setShowAdd] = useState(false);
-  const [editRow, setEditRow] = useState<UnifiedReturn | null>(null);
-  const [draft, setDraft]     = useState<ReturnDraft>(EMPTY_RETURN);
-  const [saving, setSaving]   = useState(false);
-  const [addErr, setAddErr]   = useState<string | null>(null);
+  const [showAdd, setShowAdd]           = useState(false);
+  const [showImportCsv, setShowImportCsv] = useState(false);
+  const [editRow, setEditRow]           = useState<UnifiedReturn | null>(null);
+  const [draft, setDraft]               = useState<ReturnDraft>(EMPTY_RETURN);
+  const [saving, setSaving]             = useState(false);
+  const [addErr, setAddErr]             = useState<string | null>(null);
   const setD = <K extends keyof ReturnDraft>(k: K, v: ReturnDraft[K]) =>
     setDraft((p) => ({ ...p, [k]: v }));
 
   // search + columns
   const [search, setSearch]           = useState("");
   const [colOrder, setColOrder]       = useState<ColKey[]>(COL_DEFS.map(c => c.key));
-  const [hiddenCols, setHiddenCols]   = useState<Set<ColKey>>(new Set<ColKey>());
+  const [hiddenCols, setHiddenCols]   = useState<Set<ColKey>>(new Set<ColKey>(
+    // Hide noisier columns by default; show status prominently
+    ["authorizationId", "trackingNumber"] as ColKey[]
+  ));
   const [showColPicker, setShowColPicker] = useState(false);
   const [dragCol, setDragCol]         = useState<ColKey | null>(null);
 
@@ -272,6 +278,14 @@ function ReturnsContent() {
           {r.source === "remittance" ? "Remittance" : "Manual"}
         </span>
       );
+      case "status": {
+        const s = r.status ?? "Open";
+        const tone =
+          s === "Recovered" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" :
+          s === "Rejected"  ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" :
+                              "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+        return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${tone}`}>{s}</span>;
+      }
       default: return "—";
     }
   }
@@ -300,6 +314,7 @@ function ReturnsContent() {
             />
             <button type="button" onClick={exportCsv} disabled={monthRows.length === 0} className={`${btnSecondary} disabled:opacity-40`}>CSV</button>
             <button type="button" onClick={exportPdf} disabled={monthRows.length === 0} className={`${btnSecondary} disabled:opacity-40`}>PDF</button>
+            <button type="button" onClick={() => setShowImportCsv(true)} className={btnSecondary}>Import CSV</button>
             <button type="button" onClick={openAdd} className={btnPrimary}>+ Add return</button>
           </div>
         }
@@ -539,6 +554,13 @@ function ReturnsContent() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {showImportCsv && (
+        <ImportReturnItemsModal
+          onClose={() => setShowImportCsv(false)}
+          onImported={() => { setShowImportCsv(false); void load(); }}
+        />
       )}
     </div>
   );

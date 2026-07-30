@@ -30,6 +30,28 @@ function enrichmentFromLog(log: ActionLog | null): ActionEnrichment {
   };
 }
 
+function enrichmentFromSubject(subject: string | null): Partial<ActionEnrichment> {
+  if (!subject) return {};
+  // Extract return IDs from subjects like "…return IDs - 10011049378016"
+  const m = subject.match(/\b(\d{12,20})\b/);
+  return m ? { returnId: m[1] } : {};
+}
+
+function mergeEnrichment(fromLog: ActionEnrichment, fromSubject: Partial<ActionEnrichment>): ActionEnrichment {
+  return {
+    tleInvoiceNumber: fromLog.tleInvoiceNumber ?? fromSubject.tleInvoiceNumber ?? null,
+    paymentNumber: fromLog.paymentNumber ?? fromSubject.paymentNumber ?? null,
+    returnId: fromLog.returnId ?? fromSubject.returnId ?? null,
+    srtNumber: fromLog.srtNumber ?? fromSubject.srtNumber ?? null,
+    prtNumber: fromLog.prtNumber ?? fromSubject.prtNumber ?? null,
+    invoiceDate: fromLog.invoiceDate ?? fromSubject.invoiceDate ?? null,
+    invoiceValueAed: fromLog.invoiceValueAed ?? fromSubject.invoiceValueAed ?? null,
+    sku: fromLog.sku ?? fromSubject.sku ?? null,
+    approvedAmountAed: fromLog.approvedAmountAed ?? fromSubject.approvedAmountAed ?? null,
+    notes: fromLog.notes ?? fromSubject.notes ?? null,
+  };
+}
+
 interface ExpectedActionRow {
   id: string;
   type: string;
@@ -128,6 +150,19 @@ export async function logAction(input: ActionLogInput): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error("Action saved, but the status could not be updated.");
   }
+
+  // 3) Write recovery status back to the linked return so the Returns page
+  //    reflects the outcome without needing a separate dispute import.
+  const returnId = input.enrichment?.returnId?.trim();
+  if (returnId) {
+    const returnStatus =
+      input.outcome === "credit_received" || input.outcome === "partial_credit_received" ? "recovered" :
+      input.outcome === "amazon_rejected" || input.outcome === "closed_no_recovery" ? "rejected" :
+      null;
+    if (returnStatus) {
+      await supabase.from("returns").update({ status: returnStatus }).eq("return_id", returnId);
+    }
+  }
 }
 
 /**
@@ -205,7 +240,7 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
       missingDocumentation,
       missingKind: missingDocumentation ? missingKindFor(category) : null,
       duplicateWarning,
-      enrichment: enrichmentFromLog(log),
+      enrichment: mergeEnrichment(enrichmentFromLog(log), enrichmentFromSubject(ea.email_subject)),
     };
   });
 }

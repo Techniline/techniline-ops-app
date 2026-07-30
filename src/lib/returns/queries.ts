@@ -172,7 +172,7 @@ export interface UnifiedReturn {
 
 export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
   const [emailRes, dedRes] = await Promise.all([
-    supabase.from("returns").select("*").eq("source", "manual").order("date_received", { ascending: false }).limit(500),
+    supabase.from("returns").select("*").in("source", ["manual", "amazon_csv"]).order("date_received", { ascending: false }).limit(500),
     supabase
       .from("remittance_deductions")
       .select("*")
@@ -181,14 +181,108 @@ export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
       .limit(500),
   ]);
 
+  const returns = (emailRes.data ?? []) as ReturnRow[];
+  const returnIds = returns.map((r) => r.return_id).filter(Boolean) as string[];
+
+  // Collect all dispute numbers referenced by these returns (two paths):
+  // Path A: returns.dispute_id_ref (manually entered dispute link)
+  // Path B: dispute_items.return_id → dispute_number (import-linked)
+  const disputeNumsFromRef = returns
+    .map((r) => r.dispute_id_ref)
+    .filter(Boolean) as string[];
+
+  // Build recovery map: return_id → best available approved/recovered amount
+  const recoveryByReturnId = new Map<string, number>();
+  // Also map dispute_number → approved_amount_aed for Path A lookups
+  const approvedByDisp = new Map<string, number>();
+
+  // Collect all dispute numbers we need to look up
+  const allDisputeNums = new Set<string>(disputeNumsFromRef);
+
+  // Path B: dispute_items for numeric return IDs
+  let dispItems: Array<{ return_id: string | null; dispute_number: string | null; line_amount_aed: number | null }> = [];
+  if (returnIds.length > 0) {
+    const { data } = await supabase
+      .from("dispute_items")
+      .select("return_id, dispute_number, line_amount_aed")
+      .in("return_id", returnIds);
+    dispItems = data ?? [];
+    for (const item of dispItems) {
+      if (item.dispute_number) allDisputeNums.add(item.dispute_number);
+    }
+  }
+
+  // Fetch all disputes in one query
+  if (allDisputeNums.size > 0) {
+    const { data: disputes } = await supabase
+      .from("disputes")
+      .select("dispute_number, approved_amount_aed, return_ids")
+      .in("dispute_number", [...allDisputeNums]);
+
+    const countByDisp = new Map<string, number>();
+    for (const d of disputes ?? []) {
+      if (!d.dispute_number || d.approved_amount_aed == null) continue;
+      approvedByDisp.set(d.dispute_number, d.approved_amount_aed);
+      const linkedCount = d.return_ids ? d.return_ids.split(",").filter(Boolean).length : 1;
+      countByDisp.set(d.dispute_number, linkedCount);
+    }
+
+    // Path B: dispute_items with per-line or prorated amount
+    for (const item of dispItems) {
+      if (!item.return_id || !item.dispute_number) continue;
+      let recovered: number | null = item.line_amount_aed;
+      if (recovered == null) {
+        const total = approvedByDisp.get(item.dispute_number) ?? null;
+        const count = countByDisp.get(item.dispute_number) ?? 1;
+        recovered = total != null ? Math.round((total / count) * 100) / 100 : null;
+      }
+      if (recovered != null) {
+        recoveryByReturnId.set(item.return_id, (recoveryByReturnId.get(item.return_id) ?? 0) + recovered);
+      }
+    }
+  }
+
+  // Remittance deduction approved amounts (fallback)
+  if (returnIds.length > 0) {
+    const { data: dedApprovals } = await supabase
+      .from("remittance_deductions")
+      .select("return_id, approved_amount_aed")
+      .in("return_id", returnIds)
+      .not("approved_amount_aed", "is", null);
+
+    for (const d of dedApprovals ?? []) {
+      if (!d.return_id || d.approved_amount_aed == null) continue;
+      if (!recoveryByReturnId.has(d.return_id)) {
+        recoveryByReturnId.set(d.return_id, d.approved_amount_aed);
+      }
+    }
+  }
+
   const out: UnifiedReturn[] = [];
 
-  for (const r of (emailRes.data ?? []) as ReturnRow[]) {
+  for (const r of returns) {
     const rx = r as unknown as Record<string, unknown>;
+    // Priority: manually entered > dispute_items join > direct dispute_id_ref > remittance deduction
+    const disputeRefApproved = r.dispute_id_ref ? (approvedByDisp.get(r.dispute_id_ref) ?? null) : null;
+    const computedRecovery =
+      r.recovery_amt_aed ??
+      recoveryByReturnId.get(r.return_id ?? "") ??
+      disputeRefApproved ??
+      null;
+
+    // Derive display status: DB status takes priority, then fall back to
+    // the computed recovery amount so rows update even before a dispute import.
+    const dbStatus = r.dispute_status_text ?? r.status ?? "open";
+    const displayStatus =
+      dbStatus === "recovered" ? "Recovered" :
+      dbStatus === "rejected"  ? "Rejected"  :
+      computedRecovery != null && computedRecovery > 0 ? "Recovered" :
+      "Open";
+
     out.push({
       id: `e_${r.id}`,
       dbId: r.id,
-      source: r.source === "manual" ? "manual" : "email",
+      source: r.source === "manual" || r.source === "amazon_csv" ? "manual" : "email",
       date: r.date_received ?? r.created_at ?? null,
       returnId: r.return_id ?? null,
       vretNumber: r.vret_number ?? null,
@@ -202,8 +296,8 @@ export async function fetchCombinedReturns(): Promise<UnifiedReturn[]> {
       returnType: (r.return_type as ReturnType | null) ?? null,
       type: r.return_type ?? "Return",
       amount: r.total_cost_aed ?? r.refund_aed ?? r.recovery_amt_aed ?? null,
-      recovery: r.recovery_amt_aed ?? null,
-      status: r.dispute_status_text ?? r.status ?? null,
+      recovery: computedRecovery,
+      status: displayStatus,
       srtNumber: r.srt_number ?? null,
       prtNumber: r.prt_number ?? null,
       disputeId: r.dispute_id_ref ?? null,
