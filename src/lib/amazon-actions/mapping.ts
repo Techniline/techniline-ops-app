@@ -66,6 +66,7 @@ export const OUTCOMES: Record<ActionCategory, OutcomeOption[]> = {
     { key: "credit_received", label: "Credit Received", requires: "recovered", workflowStatus: "resolved" },
     { key: "partial_credit_received", label: "Partial Credit Received", requires: "recovered_and_note", workflowStatus: "waiting_amazon" },
     { key: "amazon_rejected", label: "Amazon Rejected", requires: "reason", workflowStatus: "resolved" },
+    { key: "consolidated", label: "Consolidated by Amazon", requires: "reference", referenceType: "dispute", workflowStatus: "resolved" },
     { key: "closed_no_recovery", label: "Closed No Recovery", requires: "reason", workflowStatus: "closed" },
     { key: "reopened", label: "Reopened", requires: "reason", workflowStatus: "action_required" },
   ],
@@ -110,6 +111,8 @@ export function operationalStatusLabel(input: {
         return "Rejected";
       case "closed_no_recovery":
         return "Closed";
+      case "consolidated":
+        return "Consolidated";
       case "reopened":
         return "Reopened";
       case "dispute_raised":

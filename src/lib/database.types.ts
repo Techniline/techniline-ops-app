@@ -3304,10 +3304,13 @@ export type Database = {
           doc_remarks: string | null
           doc_status: string
           documented_by: string | null
+          documented_by_name: string | null
           id: string
+          image_urls: string[]
           items: Json | null
           location: string | null
           logged_by: string | null
+          logged_by_name: string | null
           notes: string | null
           order_ref: string | null
           physical_status: string
@@ -3317,6 +3320,8 @@ export type Database = {
           reason: string | null
           received_date: string | null
           return_ref: string | null
+          serial_number: string | null
+          serial_number_skipped: boolean
           sku: string | null
           srt_number: string | null
           tracking_number: string | null
@@ -3336,10 +3341,13 @@ export type Database = {
           doc_remarks?: string | null
           doc_status?: string
           documented_by?: string | null
+          documented_by_name?: string | null
           id?: string
+          image_urls?: string[]
           items?: Json | null
           location?: string | null
           logged_by?: string | null
+          logged_by_name?: string | null
           notes?: string | null
           order_ref?: string | null
           physical_status?: string
@@ -3349,6 +3357,8 @@ export type Database = {
           reason?: string | null
           received_date?: string | null
           return_ref?: string | null
+          serial_number?: string | null
+          serial_number_skipped?: boolean
           sku?: string | null
           srt_number?: string | null
           tracking_number?: string | null
@@ -3368,10 +3378,13 @@ export type Database = {
           doc_remarks?: string | null
           doc_status?: string
           documented_by?: string | null
+          documented_by_name?: string | null
           id?: string
+          image_urls?: string[]
           items?: Json | null
           location?: string | null
           logged_by?: string | null
+          logged_by_name?: string | null
           notes?: string | null
           order_ref?: string | null
           physical_status?: string
@@ -3381,12 +3394,52 @@ export type Database = {
           reason?: string | null
           received_date?: string | null
           return_ref?: string | null
+          serial_number?: string | null
+          serial_number_skipped?: boolean
           sku?: string | null
           srt_number?: string | null
           tracking_number?: string | null
           updated_at?: string
         }
         Relationships: []
+      }
+      marketplace_returns_audit: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string | null
+          changed_by_name: string | null
+          id: string
+          return_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_by_name?: string | null
+          id?: string
+          return_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_by_name?: string | null
+          id?: string
+          return_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_returns_audit_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_returns"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       logistics_vehicles: {
         Row: {

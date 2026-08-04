@@ -261,6 +261,65 @@ export async function fetchRemittanceLines(ref: string): Promise<RemittanceLine[
   return data ?? [];
 }
 
+/** Slim return data needed for auto-notes on remittance breakdown lines. */
+export interface ReturnSummary {
+  return_id: string | null;
+  return_type: string | null;
+  srt_number: string | null;
+  prt_number: string | null;
+  dispute_id_ref: string | null;
+  amazon_case_id: string | null;
+  po_number: string | null;
+  vret_number: string | null;
+  recovery_amt_aed: number | null;
+}
+
+/**
+ * Fetch returns keyed by amazon_invoice and tle_invoice_number for auto-note lookup.
+ * Also indexes suffix-stripped variants so WS2601417SC matches a return for WS2601417.
+ */
+export async function fetchReturnsByInvoice(invoiceNumbers: string[]): Promise<Map<string, ReturnSummary>> {
+  if (invoiceNumbers.length === 0) return new Map();
+  // Normalise: also try without trailing SC / R1 / R2 suffixes
+  const normalized = [...new Set([
+    ...invoiceNumbers,
+    ...invoiceNumbers.map((n) => n.replace(/(?:SC|R\d+)$/i, "")),
+  ])].filter(Boolean);
+  const { data, error } = await supabase
+    .from("returns")
+    .select("return_id, return_type, srt_number, prt_number, dispute_id_ref, amazon_case_id, po_number, vret_number, recovery_amt_aed, amazon_invoice, tle_invoice_number")
+    .or(`amazon_invoice.in.(${normalized.join(",")}),tle_invoice_number.in.(${normalized.join(",")})`)
+    .limit(200);
+  if (error) console.error("[fetchReturnsByInvoice] query error:", error);
+  console.log("[fetchReturnsByInvoice] rows returned:", data?.length ?? 0, "for", invoiceNumbers.length, "invoices");
+
+  const map = new Map<string, ReturnSummary>();
+  for (const r of data ?? []) {
+    const rec: ReturnSummary = {
+      return_id: r.return_id ?? null,
+      return_type: r.return_type ?? null,
+      srt_number: r.srt_number ?? null,
+      prt_number: r.prt_number ?? null,
+      dispute_id_ref: r.dispute_id_ref ?? null,
+      amazon_case_id: r.amazon_case_id ?? null,
+      po_number: r.po_number ?? null,
+      vret_number: r.vret_number ?? null,
+      recovery_amt_aed: r.recovery_amt_aed ?? null,
+    };
+    if (r.amazon_invoice) map.set(r.amazon_invoice, rec);
+    if (r.tle_invoice_number) map.set(r.tle_invoice_number, rec);
+  }
+  // Map original suffixed invoice numbers → matched base record
+  for (const inv of invoiceNumbers) {
+    if (!map.has(inv)) {
+      const base = inv.replace(/(?:SC|R\d+)$/i, "");
+      const match = map.get(base);
+      if (match) map.set(inv, match);
+    }
+  }
+  return map;
+}
+
 /** Manager/Maricel-triggered live re-ingest of Amazon emails (no secret needed). */
 export async function triggerReingest(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -326,10 +385,13 @@ export function buildReconEmailHtml(
       const reasonBits = [
         ded?.charge_type ? chargeTypeLabel(ded.charge_type) : null,
         ded?.return_id ? `Return ${ded.return_id}` : null,
+        ded?.srt_number ? `SRT ${ded.srt_number}` : null,
+        ded?.prt_number ? `PRT ${ded.prt_number}` : null,
         ded?.dispute_id ? `Dispute ${ded.dispute_id}` : null,
         ded?.amazon_case_id ? `Case ${ded.amazon_case_id}` : null,
         ded?.po_number ? `PO ${ded.po_number}` : null,
         ded?.tle_invoice_number ? `TLE ${ded.tle_invoice_number}` : null,
+        ded?.approved_amount_aed != null ? `Approved AED ${ded.approved_amount_aed}` : null,
         ded?.remark ?? null,
         l.recon_remark ?? null,
       ].filter(Boolean);

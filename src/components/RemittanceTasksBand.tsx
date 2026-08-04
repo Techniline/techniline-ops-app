@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
+import { ImportPaymentsModal } from "@/components/ImportPaymentsModal";
 import { Modal } from "@/components/Modal";
 import { btnPrimary, btnSecondary, inputClass } from "@/components/ui";
 import { formatAED } from "@/lib/format";
@@ -18,6 +19,7 @@ import {
   fetchDeductions,
   fetchOpenRemittancePayments,
   fetchRemittanceLines,
+  fetchReturnsByInvoice,
   markRemittanceReviewed,
   REMITTANCE_START,
   saveLineRemark,
@@ -33,6 +35,7 @@ import {
   type RemittanceDeduction,
   type RemittanceLine,
   type RemittancePayment,
+  type ReturnSummary,
 } from "@/lib/remittanceDeductions";
 import type { UserProfile } from "@/lib/types";
 
@@ -172,14 +175,72 @@ function DeductionForm({
   );
 }
 
+/** Build an auto-note for a negative line: deduction data first, returns table as fallback. */
+function autoNoteForLine(
+  line: RemittanceLine,
+  dedByLineKey: Map<string, RemittanceDeduction>,
+  returnsByInvoice: Map<string, ReturnSummary>,
+): string {
+  const ded = line.line_key ? dedByLineKey.get(line.line_key) : undefined;
+  const ret = line.invoice_number ? returnsByInvoice.get(line.invoice_number) : undefined;
+  const bits = [
+    // Charge type: from deduction, else infer from return type
+    ded?.charge_type ? chargeTypeLabel(ded.charge_type) : (ret?.return_type ? chargeTypeLabel(ret.return_type) : null),
+    // Return ID
+    ded?.return_id ? `Return ${ded.return_id}`
+      : ret?.return_id ? `Return ${ret.return_id}`
+      : (line.matched_return_id ? `Return ${line.matched_return_id}` : null),
+    // VRET
+    ret?.vret_number ? `VRET ${ret.vret_number}` : null,
+    // SRT
+    ded?.srt_number ? `SRT ${ded.srt_number}` : (ret?.srt_number ? `SRT ${ret.srt_number}` : null),
+    // PRT
+    ded?.prt_number ? `PRT ${ded.prt_number}` : (ret?.prt_number ? `PRT ${ret.prt_number}` : null),
+    // Dispute
+    ded?.dispute_id ? `Dispute ${ded.dispute_id}`
+      : ret?.dispute_id_ref ? `Dispute ${ret.dispute_id_ref}`
+      : ((line.dspt_number ?? line.matched_dispute) ? `Dispute ${line.dspt_number ?? line.matched_dispute}` : null),
+    // Amazon case
+    ded?.amazon_case_id ? `Case ${ded.amazon_case_id}` : (ret?.amazon_case_id ? `Case ${ret.amazon_case_id}` : null),
+    // PO
+    ded?.po_number ? `PO ${ded.po_number}` : (ret?.po_number ? `PO ${ret.po_number}` : null),
+    // TLE invoice
+    ded?.tle_invoice_number ? `TLE ${ded.tle_invoice_number}` : null,
+    // Deduction approved amount
+    ded?.approved_amount_aed != null ? `Approved AED ${ded.approved_amount_aed}` : null,
+    // Return recovery amount (if resolved)
+    ret?.recovery_amt_aed != null ? `Recovered AED ${ret.recovery_amt_aed}` : null,
+    // Freetext remark from deduction
+    ded?.remark ?? null,
+  ].filter(Boolean) as string[];
+  return bits.join(" · ");
+}
+
 /** Auto-parsed invoice breakdown for a payment (read-only table, like the email). */
-function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
+function PaymentBreakdown({ paymentRef, deductions }: { paymentRef: string; deductions: RemittanceDeduction[] }) {
   const [lines, setLines] = useState<RemittanceLine[] | null>(null);
+  const [returnsByInvoice, setReturnsByInvoice] = useState<Map<string, ReturnSummary>>(new Map());
+
   useEffect(() => {
     let active = true;
-    fetchRemittanceLines(paymentRef).then((l) => { if (active) setLines(l); });
+    fetchRemittanceLines(paymentRef).then(async (l) => {
+      if (!active) return;
+      setLines(l);
+      const negInvoices = l
+        .filter((ln) => (ln.amount_paid_aed ?? 0) < 0 && ln.invoice_number)
+        .map((ln) => ln.invoice_number as string);
+      if (negInvoices.length > 0) {
+        const retMap = await fetchReturnsByInvoice(negInvoices);
+        if (active) setReturnsByInvoice(retMap);
+      }
+    });
     return () => { active = false; };
   }, [paymentRef]);
+
+  const dedByLineKey = useMemo(
+    () => new Map(deductions.filter((d) => d.source_line_key).map((d) => [d.source_line_key as string, d])),
+    [deductions]
+  );
 
   if (lines === null) return <p className="mt-2 text-[11px] text-slate-400">Loading breakdown…</p>;
   if (lines.length === 0) {
@@ -201,6 +262,8 @@ function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
         <tbody>
           {lines.map((l) => {
             const neg = (l.amount_paid_aed ?? 0) < 0;
+            const autoNote = neg ? autoNoteForLine(l, dedByLineKey, returnsByInvoice) : "";
+            const effectiveRemark = l.recon_remark ?? autoNote;
             return (
               <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="px-2 py-1 font-medium text-slate-800 dark:text-slate-200">{l.invoice_number}{l.partial ? " *" : ""}</td>
@@ -212,10 +275,11 @@ function PaymentBreakdown({ paymentRef }: { paymentRef: string }) {
                 <td className="px-2 py-1 text-right tabular-nums text-slate-500">{l.amount_remaining_aed != null ? formatAED(l.amount_remaining_aed) : "—"}</td>
                 <td className="px-2 py-1">
                   <input
-                    defaultValue={l.recon_remark ?? ""}
+                    key={`${l.id}-${effectiveRemark}`}
+                    defaultValue={effectiveRemark}
                     placeholder="e.g. distributor return…"
                     onBlur={(e) => { if ((e.target.value.trim() || "") !== (l.recon_remark ?? "")) void saveLineRemark(l.id, e.target.value); }}
-                    className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-800"
+                    className={`w-full rounded border px-1.5 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-800 ${!l.recon_remark && autoNote ? "border-amber-200 bg-amber-50/40 dark:bg-amber-950/10" : "border-slate-200 bg-white"}`}
                   />
                 </td>
               </tr>
@@ -257,6 +321,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
   const [banner, setBanner] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [reparsing, setReparsing] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   async function reparseLines(): Promise<void> {
     setErr(null);
@@ -373,6 +438,9 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
           <button type="button" onClick={reparseLines} disabled={reparsing} className={btnSecondary} title="Re-parse all stored email bodies to fill vendor code, transaction type, invoice amount, and discount columns">
             {reparsing ? "Repopulating…" : "Repopulate columns"}
           </button>
+          <button type="button" onClick={() => setShowImport(true)} className={btnSecondary}>
+            Import Payments xlsx
+          </button>
         </div>
       </div>
       <p className="mb-3 text-xs text-slate-500">
@@ -426,7 +494,7 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
 
                 {isOpen ? (
                   <>
-                  <PaymentBreakdown paymentRef={p.ref} />
+                  <PaymentBreakdown paymentRef={p.ref} deductions={dedsByRef(p.ref)} />
                   {deds.length === 0 ? (
                     <p className="mt-2 text-[11px] text-slate-400">No deductions to categorise. If the breakdown above shows red (negative) lines that aren’t listed below, re-ingest the email; otherwise “Mark reviewed”.</p>
                   ) : (
@@ -505,6 +573,13 @@ export function RemittanceTasksBand({ profile }: { profile: UserProfile }) {
             </div>
           </form>
         </Modal>
+      ) : null}
+
+      {showImport ? (
+        <ImportPaymentsModal
+          onClose={() => setShowImport(false)}
+          onImported={() => { setShowImport(false); void load(); }}
+        />
       ) : null}
     </section>
   );

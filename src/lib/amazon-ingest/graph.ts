@@ -88,7 +88,7 @@ export async function fetchMessages(
 
   const params = new URLSearchParams();
   params.set("$select", "id,internetMessageId,subject,from,receivedDateTime");
-  params.set("$top", "50");
+  params.set("$top", "200");
   const reqHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (search) {
     // Server-side search returns ONLY matching emails (e.g. "remittance"), so a

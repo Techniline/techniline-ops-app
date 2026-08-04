@@ -39,9 +39,11 @@ interface UserWithRoles {
 const CAP_LABELS: Record<string, string> = {
   checklist: "Checklist",
   finance: "Finance",
+  accounts: "Accounts",
+  logistics: "Logistics",
+  consults: "Consults",
   cocoblu: "Cocoblu",
   lp_tracker: "LP Tracker",
-  logistics: "Logistics",
   seller_central: "Seller Central",
   seller_orders: "Seller Orders",
   seller_finance: "Seller Finance",
@@ -52,7 +54,7 @@ const CAP_LABELS: Record<string, string> = {
 const ALL_CAPS = Object.keys(CAP_LABELS);
 
 const CAP_SECTIONS: { heading: string; caps: string[] }[] = [
-  { heading: "Operations", caps: ["checklist", "finance", "logistics"] },
+  { heading: "Operations", caps: ["checklist", "finance", "accounts", "logistics", "consults"] },
   { heading: "Seller / Amazon", caps: ["seller_central", "seller_orders", "seller_finance", "cocoblu"] },
   { heading: "Stock / LP", caps: ["stock_reservation", "stock_reservation_manager", "lp_tracker"] },
 ];
@@ -466,6 +468,10 @@ interface UsersTabProps {
 
 function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
   const [removing, setRemoving] = useState<string | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [pendingCaps, setPendingCaps] = useState<Set<string>>(new Set());
+  const [savingCaps, setSavingCaps] = useState(false);
+  const [capsError, setCapsError] = useState<string | null>(null);
 
   async function removeRole(userId: string, roleId: string) {
     const key = `${userId}:${roleId}`;
@@ -487,6 +493,46 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
     }
   }
 
+  function openModuleEditor(user: UserWithRoles) {
+    setPendingCaps(new Set(user.portal_access ?? []));
+    setCapsError(null);
+    setExpandedUserId(user.id);
+  }
+
+  function closeModuleEditor() {
+    setExpandedUserId(null);
+    setCapsError(null);
+  }
+
+  function toggleCap(cap: string) {
+    setPendingCaps((prev) => {
+      const next = new Set(prev);
+      if (next.has(cap)) next.delete(cap); else next.add(cap);
+      return next;
+    });
+  }
+
+  async function saveCaps(userId: string) {
+    setSavingCaps(true);
+    setCapsError(null);
+    try {
+      const tok = await freshToken();
+      const res = await fetch("/api/admin/user-capabilities", {
+        method: "PATCH",
+        headers: authHeaders(tok),
+        body: JSON.stringify({ user_id: userId, portal_access: [...pendingCaps] }),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (!data.ok) { setCapsError(data.error ?? "Failed to save."); return; }
+      closeModuleEditor();
+      onRefresh();
+    } catch {
+      setCapsError("Network error.");
+    } finally {
+      setSavingCaps(false);
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-sm">
@@ -494,70 +540,154 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
           <tr>
             <th className="px-4 py-3 text-left">User</th>
             <th className="px-4 py-3 text-left">Roles</th>
+            <th className="px-4 py-3 text-left">Modules</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {users.map((user) => {
             const isSuperuser = user.id === SUPERUSER_UID;
             const initials = user.avatar_initials ?? (user.full_name ?? user.email).slice(0, 2).toUpperCase();
+            const isExpanded = expandedUserId === user.id;
+            const activeCaps = user.portal_access ?? [];
+
             return (
-              <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 text-xs font-semibold text-white">
-                      {initials}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900 dark:text-slate-100">
-                        {user.full_name ?? "—"}
-                        {isSuperuser && (
-                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                            Superuser
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-slate-400">{user.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {isSuperuser ? (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                      All capabilities (hardcoded)
-                    </span>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {user.roles.length === 0 ? (
-                        <span className="text-xs text-slate-300 dark:text-slate-600">No roles assigned</span>
-                      ) : (
-                        user.roles.map((role) => {
-                          const key = `${user.id}:${role.id}`;
-                          return (
-                            <span
-                              key={role.id}
-                              className="inline-flex items-center gap-1 rounded-full py-0.5 pl-2.5 pr-1 text-xs font-medium text-white"
-                              style={{ backgroundColor: role.color }}
-                            >
-                              {role.name}
-                              <button
-                                onClick={() => removeRole(user.id, role.id)}
-                                disabled={removing === key}
-                                title={`Remove ${role.name}`}
-                                className="flex h-4 w-4 items-center justify-center rounded-full bg-black/20 hover:bg-black/40 disabled:opacity-40"
-                              >
-                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
+              <>
+                <tr key={user.id} className={`${isExpanded ? "bg-indigo-50/40 dark:bg-indigo-950/20" : "hover:bg-slate-50 dark:hover:bg-slate-800/30"}`}>
+                  {/* User column */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 text-xs font-semibold text-white">
+                        {initials}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                          {user.full_name ?? "—"}
+                          {isSuperuser && (
+                            <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                              Superuser
                             </span>
-                          );
-                        })
-                      )}
-                      <AssignDropdown user={user} allRoles={allRoles} onAssigned={onRefresh} />
+                          )}
+                        </p>
+                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                      </div>
                     </div>
-                  )}
-                </td>
-              </tr>
+                  </td>
+
+                  {/* Roles column */}
+                  <td className="px-4 py-3">
+                    {isSuperuser ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                        All capabilities
+                      </span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {user.roles.length === 0 ? (
+                          <span className="text-xs text-slate-300 dark:text-slate-600">No roles assigned</span>
+                        ) : (
+                          user.roles.map((role) => {
+                            const key = `${user.id}:${role.id}`;
+                            return (
+                              <span
+                                key={role.id}
+                                className="inline-flex items-center gap-1 rounded-full py-0.5 pl-2.5 pr-1 text-xs font-medium text-white"
+                                style={{ backgroundColor: role.color }}
+                              >
+                                {role.name}
+                                <button
+                                  onClick={() => removeRole(user.id, role.id)}
+                                  disabled={removing === key}
+                                  title={`Remove ${role.name}`}
+                                  className="flex h-4 w-4 items-center justify-center rounded-full bg-black/20 hover:bg-black/40 disabled:opacity-40"
+                                >
+                                  <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </span>
+                            );
+                          })
+                        )}
+                        <AssignDropdown user={user} allRoles={allRoles} onAssigned={onRefresh} />
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Modules column */}
+                  <td className="px-4 py-3">
+                    {isSuperuser ? (
+                      <span className="text-xs text-slate-400">—</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">
+                          {activeCaps.length === 0 ? "None" : `${activeCaps.length} active`}
+                        </span>
+                        <button
+                          onClick={() => isExpanded ? closeModuleEditor() : openModuleEditor(user)}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                            isExpanded
+                              ? "border-indigo-300 bg-indigo-100 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                              : "border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/40"
+                          }`}
+                        >
+                          {isExpanded ? "Close" : "Edit modules"}
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+
+                {/* Inline module editor */}
+                {isExpanded && (
+                  <tr key={`${user.id}-modules`} className="bg-indigo-50/40 dark:bg-indigo-950/20">
+                    <td colSpan={3} className="px-6 pb-4 pt-2">
+                      <div className="space-y-3">
+                        {CAP_SECTIONS.map((section) => (
+                          <div key={section.heading}>
+                            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{section.heading}</p>
+                            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                              {section.caps.map((cap) => (
+                                <label key={cap} className="flex cursor-pointer items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={pendingCaps.has(cap)}
+                                    onChange={() => toggleCap(cap)}
+                                    className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+                                  />
+                                  <span className="text-sm text-slate-700 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+
+                        {capsError && (
+                          <p className="text-xs text-rose-600">{capsError}</p>
+                        )}
+
+                        <p className="text-[11px] text-slate-400">
+                          These take effect immediately. Assigning or removing a role will re-sync modules from that role.
+                        </p>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveCaps(user.id)}
+                            disabled={savingCaps}
+                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                          >
+                            {savingCaps ? "Saving…" : "Save modules"}
+                          </button>
+                          <button
+                            onClick={closeModuleEditor}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             );
           })}
         </tbody>

@@ -68,25 +68,34 @@ export async function POST(request: Request): Promise<Response> {
       })
     );
 
-    // Parse and upsert each one.
-    let linesReparsed = 0;
-    let remittancesWritten = 0;
-    let writeErrors = 0;
-    for (const { msg, bodyText } of withBodies) {
-      const result = parseEmail({
-        messageId: msg.internetMessageId ?? msg.id,
-        from: msg.fromAddress ?? undefined,
-        subject: msg.subject ?? undefined,
-        receivedAt: msg.receivedDateTime ?? undefined,
-        bodyText,
-      });
-      if (result.type !== "remittance") continue;
-      const executed = await executePlan(result.operations);
-      const errs = executed.filter((o) => o.result === "error").length;
-      linesReparsed += result.operations.filter((o) => o.table === "remittance_lines").length;
-      writeErrors += errs;
-      remittancesWritten += 1;
-    }
+    // Parse all emails first (CPU-only, instant), then upsert all remittances in parallel.
+    // Parallelising across remittances is safe — each has a distinct remittance_ref so
+    // there are no cross-remittance row conflicts.
+    const parsed = withBodies
+      .map(({ msg, bodyText }) => ({
+        result: parseEmail({
+          messageId: msg.internetMessageId ?? msg.id,
+          from: msg.fromAddress ?? undefined,
+          subject: msg.subject ?? undefined,
+          receivedAt: msg.receivedDateTime ?? undefined,
+          bodyText,
+        }),
+      }))
+      .filter(({ result }) => result.type === "remittance");
+
+    const upsertResults = await Promise.all(
+      parsed.map(async ({ result }) => {
+        const executed = await executePlan(result.operations);
+        return {
+          linesReparsed: result.operations.filter((o) => o.table === "remittance_lines").length,
+          writeErrors: executed.filter((o) => o.result === "error").length,
+        };
+      })
+    );
+
+    const linesReparsed = upsertResults.reduce((s, r) => s + r.linesReparsed, 0);
+    const writeErrors = upsertResults.reduce((s, r) => s + r.writeErrors, 0);
+    const remittancesWritten = upsertResults.length;
 
     return Response.json({
       ok: true,

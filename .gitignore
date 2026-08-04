@@ -60,3 +60,5 @@ docs/*.eml
 /Client identifier*.txt
 /amazon law code.png
 /*.png
+
+.env*

@@ -10,6 +10,16 @@ export interface ReturnItem {
   condition: string | null;
 }
 
+export interface AuditEntry {
+  id: string;
+  return_id: string;
+  action: string;
+  changed_by: string | null;
+  changed_by_name: string | null;
+  changed_at: string;
+  snapshot: unknown;
+}
+
 /** Product lines for a return — from the `items` array, falling back to the
  *  legacy single header fields for older records. */
 export function readItems(r: Pick<ReturnRow, "items" | "sku" | "product" | "qty" | "condition">): ReturnItem[] {
@@ -99,36 +109,73 @@ export async function fetchReturns(f: ReturnFilters = {}): Promise<ReturnRow[]> 
   return data ?? [];
 }
 
-async function uid(): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.id ?? null;
+async function currentUser(): Promise<{ id: string | null; name: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return { id: user?.id ?? null, name: user?.email ?? null };
 }
 
-/** Create or update a return. On create, the row defaults to doc_status 'pending'
- *  (Maricel's queue) and the caller triggers the notify email. Returns the row. */
+const RETURN_IMAGE_BUCKET = "return-images";
+
+export async function uploadReturnImages(returnId: string, files: File[]): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const path = `${returnId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from(RETURN_IMAGE_BUCKET).upload(path, file);
+    if (error) throw new Error(`Image upload failed: ${error.message}`);
+    const { data } = supabase.storage.from(RETURN_IMAGE_BUCKET).getPublicUrl(path);
+    urls.push(data.publicUrl);
+  }
+  return urls;
+}
+
+export async function fetchAuditLog(returnId: string): Promise<AuditEntry[]> {
+  const { data, error } = await supabase
+    .from("marketplace_returns_audit")
+    .select("*")
+    .eq("return_id", returnId)
+    .order("changed_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AuditEntry[];
+}
+
+/** Create or update a return. Stamps logged_by/logged_by_name on creation and writes an audit entry. */
 export async function saveReturn(row: Partial<ReturnRow> & { id?: string }): Promise<ReturnRow> {
   const isNew = !row.id;
-  const me = await uid();
+  const { id: me, name: meName } = await currentUser();
   const payload = {
     ...row,
     logged_by: row.logged_by ?? (isNew ? me : undefined),
+    logged_by_name: row.logged_by_name ?? (isNew ? meName : undefined),
     updated_at: new Date().toISOString(),
   } as TablesInsert<"marketplace_returns">;
   const { data, error } = await supabase.from("marketplace_returns").upsert(payload).select("*").single();
   if (error) throw new Error(error.message);
+  void supabase.from("marketplace_returns_audit").insert({
+    return_id: data.id,
+    action: isNew ? "created" : "updated",
+    changed_by: me,
+    changed_by_name: meName,
+    snapshot: data,
+  });
   return data;
 }
 
-/** Update the documentation section (Maricel); stamps documented_by. */
+/** Update the documentation section (Maricel); stamps documented_by and writes an audit entry. */
 export async function saveReturnDocs(id: string, patch: Partial<ReturnRow>): Promise<void> {
-  const me = await uid();
+  const { id: me, name: meName } = await currentUser();
   const { error } = await supabase
     .from("marketplace_returns")
-    .update({ ...patch, documented_by: me, updated_at: new Date().toISOString() })
+    .update({ ...patch, documented_by: me, documented_by_name: meName, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  void supabase.from("marketplace_returns_audit").insert({
+    return_id: id,
+    action: "updated",
+    changed_by: me,
+    changed_by_name: meName,
+    snapshot: { id, ...patch },
+  });
 }
 
 export interface ReturnImportSummary {
@@ -145,9 +192,7 @@ export async function importAmazonReturns(
   file: File,
   apply: boolean
 ): Promise<{ dryRun: boolean; inserted?: number; summary: ReturnImportSummary }> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) throw new Error("You must be signed in.");
   const form = new FormData();
@@ -160,6 +205,190 @@ export async function importAmazonReturns(
   const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
   return { dryRun: !!j.dryRun, inserted: j.inserted as number | undefined, summary: j.summary as ReturnImportSummary };
+}
+
+export interface ReturnSyncResult {
+  updated: number;
+  created: number;
+}
+
+/** Backfill product names + create new return records from SP-API finance data. */
+export async function syncReturnsFromAmazon(): Promise<ReturnSyncResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("You must be signed in.");
+  const res = await fetch("/api/spapi/returns-sync", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || j.ok !== true) throw new Error((j.error as string) ?? `HTTP ${res.status}`);
+  return { updated: (j.updated as number) ?? 0, created: (j.created as number) ?? 0 };
+}
+
+// ─── Amazon Returns XML import ────────────────────────────────────────────────
+
+export interface XmlReturnRow {
+  return_ref: string | null;
+  order_ref: string;
+  sku: string | null;
+  product: string | null;
+  asin: string | null;
+  qty: number;
+  received_date: string | null;
+  reason: string | null;
+  tracking_number: string | null;
+  channel: string;
+  return_status: string;
+}
+
+const XML_REASON_MAP: Record<string, string> = {
+  "CR-ORDERED_WRONG_ITEM": "wrong_item",
+  "CR-DEFECTIVE": "damaged",
+  "CR-QUALITY_UNACCEPTABLE": "damaged",
+  "CR-MISSING_PARTS": "other",
+  "CR-DAMAGED_BY_CARRIER": "damaged",
+  "CR-DAMAGED_BY_FC": "damaged",
+  "CR-UNWANTED_ITEM": "customer_return",
+  "CR-NOT_COMPATIBLE": "other",
+  "CR-MISSED_ESTIMATED_DELIVERY": "not_delivered",
+  "AMZ-PG-BAD-DESC": "other",
+};
+
+/** Parse Amazon Returns Report XML (client-side). Returns one entry per return_details block. */
+export function parseReturnsXml(xmlText: string): XmlReturnRow[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, "application/xml");
+  if (doc.querySelector("parsererror")) return [];
+
+  const get = (el: Element, tag: string) => el.querySelector(tag)?.textContent?.trim() ?? null;
+
+  return Array.from(doc.querySelectorAll("return_details")).flatMap((rd) => {
+    const orderId = get(rd, "order_id");
+    if (!orderId) return [];
+
+    const carrier = get(rd, "return_carrier");
+    const channel = carrier === "AMZAE" ? "amazon_easy_ship" : "amazon_easy_ship";
+
+    const reasonCode = get(rd, "return_reason_code");
+    const reason = reasonCode ? (XML_REASON_MAP[reasonCode] ?? "other") : null;
+
+    const requestDate = get(rd, "return_request_date");
+    const receivedDate = requestDate ? requestDate.slice(0, 10) : null;
+
+    return [{
+      return_ref: get(rd, "amazon_rma_id"),
+      order_ref: orderId,
+      sku: get(rd, "merchant_sku"),
+      product: get(rd, "item_name"),
+      asin: get(rd, "asin"),
+      qty: parseInt(get(rd, "return_quantity") ?? "1") || 1,
+      received_date: receivedDate,
+      reason,
+      tracking_number: get(rd, "tracking_id"),
+      channel,
+      return_status: get(rd, "return_request_status") ?? "",
+    }];
+  });
+}
+
+export interface XmlImportPreview {
+  willInsert: number;
+  willUpdate: number;
+  alreadyExists: number;
+}
+
+export interface XmlImportResult extends XmlImportPreview {
+  inserted: number;
+  updated: number;
+}
+
+/** Preview or apply an import of parsed XML return records.
+ *  Deduplication: by return_ref first; then by order_ref for records without a return_ref. */
+export async function importReturnsXml(
+  records: XmlReturnRow[],
+  apply: boolean
+): Promise<XmlImportResult> {
+  if (records.length === 0) return { willInsert: 0, willUpdate: 0, alreadyExists: 0, inserted: 0, updated: 0 };
+
+  const returnRefs = records.map((r) => r.return_ref).filter(Boolean) as string[];
+  const orderRefs = [...new Set(records.map((r) => r.order_ref))];
+
+  const [refRes, orderRes] = await Promise.all([
+    returnRefs.length
+      ? supabase.from("marketplace_returns").select("id, return_ref").in("return_ref", returnRefs)
+      : Promise.resolve({ data: [] as { id: string; return_ref: string | null }[] }),
+    supabase.from("marketplace_returns").select("id, order_ref, return_ref").in("order_ref", orderRefs),
+  ]);
+
+  const existingRefSet = new Set(
+    ((refRes.data ?? []) as { return_ref: string | null }[]).map((r) => r.return_ref ?? "")
+  );
+  const existingOrderMap = new Map<string, { id: string; return_ref: string | null }>();
+  for (const r of (orderRes.data ?? []) as { id: string; order_ref: string | null; return_ref: string | null }[]) {
+    if (r.order_ref) existingOrderMap.set(r.order_ref, { id: r.id, return_ref: r.return_ref });
+  }
+
+  let willInsert = 0, willUpdate = 0, alreadyExists = 0;
+  const toInsert: XmlReturnRow[] = [];
+  const toUpdate: { id: string; record: XmlReturnRow }[] = [];
+
+  for (const record of records) {
+    if (record.return_ref && existingRefSet.has(record.return_ref)) {
+      alreadyExists++;
+      continue;
+    }
+    const existing = existingOrderMap.get(record.order_ref);
+    if (existing) {
+      if (!existing.return_ref && record.return_ref) {
+        willUpdate++;
+        toUpdate.push({ id: existing.id, record });
+      } else {
+        alreadyExists++;
+      }
+      continue;
+    }
+    willInsert++;
+    toInsert.push(record);
+  }
+
+  let inserted = 0, updated = 0;
+
+  if (apply) {
+    for (const r of toInsert) {
+      const { error } = await supabase.from("marketplace_returns").insert({
+        channel: r.channel,
+        order_ref: r.order_ref,
+        return_ref: r.return_ref,
+        sku: r.sku,
+        product: r.product,
+        asin: r.asin,
+        qty: r.qty,
+        received_date: r.received_date,
+        reason: r.reason,
+        tracking_number: r.tracking_number,
+        physical_status: "received",
+        doc_status: "pending",
+        items: [{ sku: r.sku, product: r.product, qty: r.qty, condition: null }],
+        logged_by_name: "Amazon Returns XML import",
+      });
+      if (!error) inserted++;
+    }
+
+    for (const { id, record } of toUpdate) {
+      const { error } = await supabase.from("marketplace_returns").update({
+        return_ref: record.return_ref,
+        ...(record.reason ? { reason: record.reason } : {}),
+        ...(record.tracking_number ? { tracking_number: record.tracking_number } : {}),
+        ...(record.received_date ? { received_date: record.received_date } : {}),
+        ...(record.product ? { product: record.product } : {}),
+        ...(record.asin ? { asin: record.asin } : {}),
+      }).eq("id", id);
+      if (!error) updated++;
+    }
+  }
+
+  return { willInsert, willUpdate, alreadyExists, inserted, updated };
 }
 
 export async function deleteReturn(id: string): Promise<void> {
@@ -207,7 +436,6 @@ export function returnEmailHtml(r: ReturnRow): string {
             ${row("Channel", esc(rLabel(CHANNELS, r.channel)))}
             ${row("Return ID", esc(r.return_ref ?? "—"))}
             ${row("Order number", esc(r.order_ref ?? "—"))}
-            ${row("ASIN", esc(r.asin ?? "—"))}
             ${row("Reason", esc(rLabel(RETURN_REASONS, r.reason)))}
             ${row("Return date", esc(r.received_date ?? "—"))}
             ${row(
@@ -232,9 +460,7 @@ export function returnEmailHtml(r: ReturnRow): string {
 
 /** Notify Maricel that a return was logged (server emails her). Best-effort. */
 export async function notifyReturnLogged(r: ReturnRow): Promise<void> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) return;
   await fetch("/api/logistics/notify-return", {

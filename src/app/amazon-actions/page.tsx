@@ -5,6 +5,7 @@ import type { FormEvent, WheelEvent } from "react";
 
 import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
+import { ImportDisputesModal } from "@/components/ImportDisputesModal";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
@@ -304,7 +305,9 @@ function LogActionModal({
   const [reasonNote, setReasonNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [amount, setAmount] = useState(action.amount != null ? String(action.amount) : "");
-  const [recovered, setRecovered] = useState("");
+  const [recovered, setRecovered] = useState(
+    action.enrichment.approvedAmountAed != null ? String(action.enrichment.approvedAmountAed) : ""
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -470,6 +473,9 @@ function LogActionModal({
               onChange={(e) => setReferenceValue(e.target.value)}
               inputMode={showQtyReason ? "numeric" : "text"}
             />
+            {outcome === "consolidated" ? (
+              <span className="text-xs text-slate-500">Enter the new consolidated Dispute ID (e.g. DSPT21669556063)</span>
+            ) : null}
             {dupWarning ? (
               <span className="text-xs text-amber-600 dark:text-amber-400">
                 ⚠ This reference is already used on another action (not blocked).
@@ -662,6 +668,7 @@ function AmazonActionsContent() {
   const [categoryFilter, setCategoryFilter] = useState<UiFilter>("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -769,6 +776,15 @@ function AmazonActionsContent() {
             })}
           </div>
           <div className="flex items-center gap-2">
+            {managerFlag ? (
+              <button
+                type="button"
+                onClick={() => setShowImport(true)}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                ⬆ Import dispute report
+              </button>
+            ) : null}
             <span className="text-xs text-slate-500">Sort</span>
             <select
               value={sortOrder}
@@ -936,6 +952,13 @@ function AmazonActionsContent() {
           usedRefs={usedRefs}
           onClose={() => setSelected(null)}
           onSaved={handleSaved}
+        />
+      ) : null}
+
+      {showImport ? (
+        <ImportDisputesModal
+          onClose={() => setShowImport(false)}
+          onImported={() => { setBanner("Dispute report imported — statuses updated."); void load(); }}
         />
       ) : null}
     </div>
