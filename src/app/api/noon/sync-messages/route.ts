@@ -36,7 +36,13 @@ export async function POST(request: Request): Promise<Response> {
         }
       }),
     );
-    return Response.json({ ok: true, probe: true, results });
+    const found = Object.entries(results)
+      .filter(([, v]) => v.startsWith("200"))
+      .map(([k]) => k);
+    const summary = found.length
+      ? `FOUND: ${found.join(" | ")}`
+      : Object.entries(results).map(([k, v]) => `${v.slice(0, 3)} ${k.split("/").pop()}`).join(", ");
+    return Response.json({ ok: true, probe: true, summary, results });
   }
 
   // ── Normal sync ───────────────────────────────────────────────────────────────

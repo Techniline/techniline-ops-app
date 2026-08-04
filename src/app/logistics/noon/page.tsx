@@ -139,7 +139,7 @@ function SyncPanel({ token, onDone }: { token: string; onDone: () => void }) {
       if (!j.ok) throw new Error(String(j.error ?? "Unknown error"));
       const detail = Object.entries(j)
         .filter(([k]) => k !== "ok")
-        .map(([k, v]) => `${k}: ${v}`)
+        .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v).slice(0, 200) : v}`)
         .join(", ");
       setLog((l) => [`✓ ${label} — ${detail}`, ...l]);
       onDone();
