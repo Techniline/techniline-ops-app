@@ -151,6 +151,14 @@ export async function noonFbpGet<T>(path: string, qs?: Record<string, string>): 
   return JSON.parse(text) as T;
 }
 
+/** Probe an arbitrary full URL with the Noon session cookie; returns {status, body}. */
+export async function noonProbeUrl(fullUrl: string): Promise<{ status: number; body: string }> {
+  const cookie = await getSessionCookie();
+  const res = await fetch(fullUrl, { headers: reqHeaders(cookie) });
+  const body = await res.text();
+  return { status: res.status, body: body.slice(0, 300) };
+}
+
 export async function noonMpGet<T>(path: string, qs?: Record<string, string>): Promise<T> {
   const cookie = await getSessionCookie();
   const url = new URL(`${MP_PARTNERS_BASE}${path}`);
