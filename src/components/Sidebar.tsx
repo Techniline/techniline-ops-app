@@ -163,6 +163,7 @@ export function Sidebar({
       items: [
         { href: "/amazon-actions", label: "Amazon Actions", icon: ActionsIcon, show: canViewFinance(profile) },
         { href: "/amazon-actions/seller", label: "Amazon Seller Central", icon: ShopifyIcon, show: canViewSellerCentral(profile) },
+        { href: "/logistics/noon", label: "Noon Orders & Finance", icon: ActionsIcon, show: canViewFinance(profile) && !canViewLogistics(profile) },
         { href: "/returns", label: "Returns & Disputes (Finance)", icon: ReturnsIcon, show: canViewFinance(profile) },
         { href: "/vendor-orders", label: "Vendor POs", icon: ShopifyIcon, show: canViewFinance(profile) },
         { href: "/accounts/remittances", label: "Accounts — Remittances", icon: ReturnsIcon, show: canViewAccounts(profile) },
@@ -211,6 +212,7 @@ export function Sidebar({
         { href: "/logistics/orders", label: "Shopify / MusicMajlis", icon: ShopifyIcon, show: can("orders") },
         { href: "/logistics/amazon-fulfillment", label: "Amazon (Seller + Flex)", icon: ActionsIcon, show: can("amazon_fulfillment") },
         { href: "/logistics/amazon-pricing", label: "Amazon Profit & Pricing", icon: AnalyticsIcon, show: can("amazon_profit") },
+        { href: "/logistics/noon", label: "Noon", icon: ActionsIcon, show: can("noon") },
         { href: "/logistics/returns", label: "Marketplace Returns", icon: ReturnsIcon, show: can("marketplace") },
       ],
     },

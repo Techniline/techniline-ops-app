@@ -37,6 +37,14 @@ interface RouteGuardProps {
    * grant for this page (full-access users always do); otherwise redirected.
    */
   logisticsPage?: LogisticsPage;
+  /**
+   * Alternative capability that grants access as a substitute for the logistics
+   * requirement. A user who holds this capability passes `requireLogistics` and
+   * `logisticsPage` checks even without logistics access. Used for cross-portal
+   * pages (e.g. Noon is under the logistics Channels section but also reachable
+   * by finance users who lack a logistics role).
+   */
+  altCapability?: Capability;
 }
 
 /**
@@ -48,7 +56,7 @@ interface RouteGuardProps {
  * to /logistics. This enforces the access rule at the routing layer, not just
  * by hiding sidebar items.
  */
-export function RouteGuard({ children, requireCapability, requireLogistics, logisticsPage }: RouteGuardProps) {
+export function RouteGuard({ children, requireCapability, requireLogistics, logisticsPage, altCapability }: RouteGuardProps) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -56,12 +64,15 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
   const onLogisticsRoute = pathname?.startsWith("/logistics") ?? false;
   const onLpRoute = pathname?.startsWith("/lp") ?? false;
 
+  // altCapability lets a user bypass requireLogistics/logisticsPage if they hold that capability.
+  const hasAlt = !!altCapability && !!profile && hasCapability(profile, altCapability);
+
   const authorized =
     !!user &&
     !!profile &&
     (!requireCapability || hasCapability(profile, requireCapability)) &&
-    (!requireLogistics || canViewLogistics(profile)) &&
-    (!logisticsPage || canViewLogisticsPage(profile, logisticsPage)) &&
+    (!requireLogistics || canViewLogistics(profile) || hasAlt) &&
+    (!logisticsPage || canViewLogisticsPage(profile, logisticsPage) || hasAlt) &&
     // A logistics-only user may never view a non-logistics route.
     (!isLogisticsOnly(profile) || onLogisticsRoute) &&
     // An LP-only user may never view a non-LP route.
@@ -87,12 +98,14 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
       return;
     }
 
-    if (requireLogistics && !canViewLogistics(profile)) {
+    const hasAltCap = !!altCapability && hasCapability(profile, altCapability);
+
+    if (requireLogistics && !canViewLogistics(profile) && !hasAltCap) {
       router.replace("/dashboard");
       return;
     }
 
-    if (logisticsPage && !canViewLogisticsPage(profile, logisticsPage)) {
+    if (logisticsPage && !canViewLogisticsPage(profile, logisticsPage) && !hasAltCap) {
       router.replace("/dashboard");
       return;
     }
@@ -100,7 +113,7 @@ export function RouteGuard({ children, requireCapability, requireLogistics, logi
     if (requireCapability && !hasCapability(profile, requireCapability)) {
       router.replace("/dashboard");
     }
-  }, [loading, user, profile, requireCapability, requireLogistics, logisticsPage, onLogisticsRoute, onLpRoute, router]);
+  }, [loading, user, profile, requireCapability, requireLogistics, logisticsPage, altCapability, onLogisticsRoute, onLpRoute, router]);
 
   if (loading) {
     return <LoadingScreen message="Checking your session…" />;

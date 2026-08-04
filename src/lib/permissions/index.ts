@@ -129,11 +129,12 @@ export type LogisticsPage =
   | "marketplace"
   | "masters"
   | "amazon_fulfillment"
-  | "amazon_profit";
+  | "amazon_profit"
+  | "noon";
 
 const LOGISTICS_PAGE_GRANTS: Readonly<Record<string, readonly LogisticsPage[]>> = {
-  // Maricel — also documents Amazon return paperwork (invoice/PRT/SRT)
-  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports", "marketplace", "amazon_fulfillment", "amazon_profit"],
+  // Maricel — also documents Amazon return paperwork (invoice/PRT/SRT) + Noon returns
+  "227fdb27-80b5-4040-ab14-4bb945068af7": ["reseller", "prt", "reports", "marketplace", "amazon_fulfillment", "amazon_profit", "noon"],
   // Aaron
   "cbb81b27-8756-4f2d-bfe0-04211c27092c": ["orders", "reseller"],
 };
