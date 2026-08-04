@@ -202,6 +202,9 @@ function SyncPanel({ token, onDone }: { token: string; onDone: () => void }) {
         <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Messages", "/api/noon/sync-messages", {})} className={btnSecondary}>
           {syncing === "Messages" ? "Syncing…" : "Sync Messages"}
         </button>
+        <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Probe endpoints", "/api/noon/sync-messages", { probe: true })} className={btnSecondary}>
+          {syncing === "Probe endpoints" ? "Probing…" : "Probe Endpoints"}
+        </button>
       </div>
 
       {log.length > 0 && (
