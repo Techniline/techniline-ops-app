@@ -633,16 +633,16 @@ export default function NoonPage() {
               💬
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Buyer messages are managed in the Noon Partner Portal</p>
-              <p className="mt-1 text-xs text-slate-400">Noon does not expose a messages API — open the portal to read and reply to buyer messages.</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Buyer messages are managed in the Noon FBP Returns Portal</p>
+              <p className="mt-1 text-xs text-slate-400">Open the portal to initiate or reply to order-level buyer messages.</p>
             </div>
             <a
-              href="https://mp-partners.noon.partners/en-ae/messages"
+              href="https://mp-partners-fbp-returns.noon.partners/en-ae?project=PRJ14351"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 dark:bg-sky-700 dark:hover:bg-sky-600"
             >
-              Open Noon Inbox ↗
+              Open Noon Messages ↗
             </a>
           </div>
         )
