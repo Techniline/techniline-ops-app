@@ -199,6 +199,10 @@ function SyncPanel({ token, onDone }: { token: string; onDone: () => void }) {
         <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Statements", "/api/noon/sync-statements", { from_date: fromDate, to_date: toDate })} className={btnPrimary}>
           {syncing === "Statements" ? "Syncing…" : "Sync Statements"}
         </button>
+        <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Returns → Marketplace", "/api/noon/sync-marketplace", {})}
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40">
+          {syncing === "Returns → Marketplace" ? "Syncing…" : "Sync Noon → Marketplace Returns"}
+        </button>
       </div>
 
       {log.length > 0 && (
