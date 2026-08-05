@@ -1507,6 +1507,8 @@ function ManagerPage() {
   const [managerStats, setManagerStats] = useState<{ reservedUnits: number; depositsCollected: number; availableUnits: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
   const [editingEta, setEditingEta] = useState<{ impoId: string; eta: string } | null>(null);
   const [savingEta, setSavingEta] = useState(false);
   const [receiveModalImpoId, setReceiveModalImpoId] = useState<string | null>(null);
@@ -1572,6 +1574,31 @@ function ManagerPage() {
     } finally { setSavingEta(false); }
   }
 
+  async function syncShopify() {
+      setSyncing(true);
+      setSyncToast(null);
+      try {
+            const tok = await freshToken();
+            const res = await fetch("/api/stock-reservation/shopify-restock-sync", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${tok}` },
+            });
+            const data = await res.json() as { ok: boolean; updated?: number; cleared?: number; errors?: { scope: string; message: string }[]; error?: string };
+            if (!data.ok) {
+                    setSyncToast(data.error ?? "Sync failed.");
+            } else {
+                    const errCount = data.errors?.length ?? 0;
+                    setSyncToast(`${data.updated ?? 0} updated, ${data.cleared ?? 0} cleared, ${errCount} error${errCount === 1 ? "" : "s"}`);
+                    load();
+            }
+      } catch {
+            setSyncToast("Network error while syncing.");
+      } finally {
+            setSyncing(false);
+            setTimeout(() => setSyncToast(null), 8000);
+      }
+  }
+
   function markReceived(impoId: string) {
     setReceiveModalImpoId(impoId);
   }
@@ -1617,6 +1644,7 @@ function ManagerPage() {
         title="Stock Reservation — Manager"
         subtitle="Upload shipment sheets, set ETAs, approve requests, and run allocation reports."
         actions={
+          <>
           <button
             onClick={() => setShowUpload(!showUpload)}
             className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
@@ -1626,6 +1654,20 @@ function ManagerPage() {
             </svg>
             Upload Sheet
           </button>
+            <button
+                onClick={syncShopify}
+                disabled={syncing}
+                className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-900/40 dark:bg-slate-900 dark:text-indigo-300"
+              >
+              {syncing && (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-700" />
+                )}
+              {syncing ? "Syncing…" : "Sync to Shopify"}
+            </button>
+            {syncToast && (
+            <div className="fixed bottom-6 right-6 z-50 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{syncToast}</div>
+            )}
+          </>              
         }
       />
 
