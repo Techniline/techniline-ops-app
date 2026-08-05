@@ -346,6 +346,10 @@ export default function NoonPage() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [retFrom, setRetFrom] = useState("");
   const [retTo, setRetTo] = useState("");
+  const [ordFrom, setOrdFrom] = useState("");
+  const [ordTo, setOrdTo] = useState("");
+  const [stmtFrom, setStmtFrom] = useState("");
+  const [stmtTo, setStmtTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -378,13 +382,41 @@ export default function NoonPage() {
     if (retTo   && d > retTo)   return false;
     return true;
   });
+  const filteredOrders = orders.filter((o) => {
+    const d = o.order_date ?? "";
+    if (ordFrom && d < ordFrom) return false;
+    if (ordTo   && d > ordTo)   return false;
+    return true;
+  });
+  const filteredStatements = statements.filter((s) => {
+    const d = s.payment_date ?? s.period_from ?? "";
+    if (stmtFrom && d < stmtFrom) return false;
+    if (stmtTo   && d > stmtTo)   return false;
+    return true;
+  });
   const unloggedReturns = returns.filter((r) => !noonLinkedIds.has(r.return_id)).length;
   const lastStatement = statements[0];
   const returnedAmount = returns.reduce((s, r) => s + Math.abs(r.return_amount_aed ?? 0), 0);
 
-  const TAB_STYLE = "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors";
-  const activeTab = `${TAB_STYLE} bg-white text-sky-700 shadow-sm dark:bg-slate-800 dark:text-sky-300`;
-  const inactiveTab = `${TAB_STYLE} text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200`;
+  const TAB_BASE = "px-4 py-2 text-sm font-semibold rounded-xl border-2 transition-colors";
+  const TAB_CHIPS: Record<Tab, { active: string; inactive: string }> = {
+    statements: {
+      active:   `${TAB_BASE} bg-violet-100 text-violet-800 border-violet-400 dark:bg-violet-900/50 dark:text-violet-200 dark:border-violet-500`,
+      inactive: `${TAB_BASE} bg-violet-50 text-violet-500 border-violet-200 hover:bg-violet-100 hover:text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-900/40`,
+    },
+    orders: {
+      active:   `${TAB_BASE} bg-sky-100 text-sky-800 border-sky-400 dark:bg-sky-900/50 dark:text-sky-200 dark:border-sky-500`,
+      inactive: `${TAB_BASE} bg-sky-50 text-sky-500 border-sky-200 hover:bg-sky-100 hover:text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800 dark:hover:bg-sky-900/40`,
+    },
+    returns: {
+      active:   `${TAB_BASE} bg-amber-100 text-amber-800 border-amber-400 dark:bg-amber-900/50 dark:text-amber-200 dark:border-amber-500`,
+      inactive: `${TAB_BASE} bg-amber-50 text-amber-500 border-amber-200 hover:bg-amber-100 hover:text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/40`,
+    },
+    messages: {
+      active:   `${TAB_BASE} bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-500`,
+      inactive: `${TAB_BASE} bg-emerald-50 text-emerald-500 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/40`,
+    },
+  };
 
   return (
     <LogisticsShell
@@ -423,19 +455,15 @@ export default function NoonPage() {
       )}
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50">
-        <button type="button" onClick={() => setTab("statements")} className={tab === "statements" ? activeTab : inactiveTab}>
-          Statements ({statements.length})
-        </button>
-        <button type="button" onClick={() => setTab("orders")} className={tab === "orders" ? activeTab : inactiveTab}>
-          Orders ({orders.length})
-        </button>
-        <button type="button" onClick={() => setTab("returns")} className={tab === "returns" ? activeTab : inactiveTab}>
-          Returns ({returns.length})
-        </button>
-        <button type="button" onClick={() => setTab("messages")} className={tab === "messages" ? activeTab : inactiveTab}>
-          Messages
-        </button>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(["statements", "orders", "returns", "messages"] as Tab[]).map((t) => (
+          <button key={t} type="button" onClick={() => setTab(t)} className={TAB_CHIPS[t][tab === t ? "active" : "inactive"]}>
+            {t === "statements" ? `Statements (${statements.length})` :
+             t === "orders"     ? `Orders (${orders.length})` :
+             t === "returns"    ? `Returns (${returns.length})` :
+             "Messages"}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -444,12 +472,31 @@ export default function NoonPage() {
 
         /* ── Statements ── */
         tab === "statements" ? (
-          <div className={surface}>
+          <div>
+            {/* Date filter */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">From</label>
+              <input type="date" value={stmtFrom} max={stmtTo || TODAY} onChange={(e) => setStmtFrom(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">To</label>
+              <input type="date" value={stmtTo} min={stmtFrom} max={TODAY} onChange={(e) => setStmtTo(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+              {(stmtFrom || stmtTo) && (
+                <button type="button" onClick={() => { setStmtFrom(""); setStmtTo(""); }}
+                  className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700">
+                  Clear
+                </button>
+              )}
+              {(stmtFrom || stmtTo) && (
+                <span className="text-xs text-slate-400">{filteredStatements.length} of {statements.length} shown</span>
+              )}
+            </div>
+            <div className={surface}>
             {statements.length === 0 ? (
               <p className="p-6 text-sm text-slate-400">No statements synced yet. Use "Sync Statements" above to pull from Noon API.</p>
             ) : (
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {statements.map((s) => {
+                {filteredStatements.map((s) => {
                   const isOpen = expandedStmt === s.statement_id;
                   return (
                     <li key={s.id}>
@@ -492,11 +539,31 @@ export default function NoonPage() {
                 })}
               </ul>
             )}
+            </div>
           </div>
 
         /* ── Orders ── */
         ) : tab === "orders" ? (
-          <div className={surface}>
+          <div>
+            {/* Date filter */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">From</label>
+              <input type="date" value={ordFrom} max={ordTo || TODAY} onChange={(e) => setOrdFrom(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">To</label>
+              <input type="date" value={ordTo} min={ordFrom} max={TODAY} onChange={(e) => setOrdTo(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+              {(ordFrom || ordTo) && (
+                <button type="button" onClick={() => { setOrdFrom(""); setOrdTo(""); }}
+                  className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700">
+                  Clear
+                </button>
+              )}
+              {(ordFrom || ordTo) && (
+                <span className="text-xs text-slate-400">{filteredOrders.length} of {orders.length} shown</span>
+              )}
+            </div>
+            <div className={surface}>
             {orders.length === 0 ? (
               <p className="p-6 text-sm text-slate-400">No orders synced yet. Use "Sync Orders" above.</p>
             ) : (
@@ -515,7 +582,7 @@ export default function NoonPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {orders.map((o) => {
+                    {filteredOrders.map((o) => {
                       const isExpanded = expandedOrder === o.order_nr;
                       return (
                         <Fragment key={o.id}>
@@ -540,6 +607,7 @@ export default function NoonPage() {
                 </table>
               </div>
             )}
+            </div>
           </div>
 
         /* ── Returns ── */
@@ -630,8 +698,8 @@ export default function NoonPage() {
                               </button>
                             ) : "—"}
                           </td>
-                          <td className={`${tdCell} max-w-[200px] truncate`} title={r.raw_data?.product_title ?? r.sku ?? ""}>
-                            {r.raw_data?.product_title ?? r.sku ?? "—"}
+                          <td className={`${tdCell} max-w-[200px] truncate`} title={r.raw_data?.product_title ?? ""}>
+                            {r.raw_data?.product_title ?? "—"}
                           </td>
                           <td className={tdCell}>{r.return_date ?? "—"}</td>
                           <td className={tdCell}>{r.sku ?? "—"}</td>
