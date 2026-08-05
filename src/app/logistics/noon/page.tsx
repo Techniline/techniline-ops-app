@@ -94,18 +94,18 @@ const ORDER_STATUS_STYLE: Record<string, string> = {
 };
 
 const RETURN_STATUS_STYLE: Record<string, string> = {
-  items_returned:   "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  refunded:         "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  rejected:         "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
-  return_requested: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  completed:        "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  closed:           "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  items_returned:   "bg-amber-100 text-amber-700   dark:bg-amber-950/60 dark:text-amber-300",
+  refunded:         "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  rejected:         "bg-rose-100 text-rose-700     dark:bg-rose-950/60 dark:text-rose-300",
+  return_requested: "bg-sky-100 text-sky-700       dark:bg-sky-950/60 dark:text-sky-300",
+  completed:        "bg-teal-100 text-teal-700     dark:bg-teal-950/60 dark:text-teal-300",
+  closed:           "bg-slate-100 text-slate-500   dark:bg-slate-800 dark:text-slate-400",
 };
 
-function Badge({ label, styleMap, fallback = "bg-slate-100 text-slate-600" }: { label: string; styleMap: Record<string, string>; fallback?: string }) {
+function Badge({ label, styleMap, fallback = "bg-slate-100 text-slate-500" }: { label: string; styleMap: Record<string, string>; fallback?: string }) {
   const cls = styleMap[label] ?? fallback;
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
+    <span className={`inline-block rounded-lg px-3 py-1 text-xs font-semibold capitalize tracking-wide ${cls}`}>
       {label.replace(/_/g, " ")}
     </span>
   );
@@ -344,6 +344,8 @@ export default function NoonPage() {
   const [loading, setLoading] = useState(true);
   const [expandedStmt, setExpandedStmt] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [retFrom, setRetFrom] = useState("");
+  const [retTo, setRetTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,6 +372,12 @@ export default function NoonPage() {
   const totalOrders = orders.length;
   const deliveredOrders = orders.filter((o) => o.status === "delivered").length;
   const openReturns = returns.filter((r) => r.status !== "refunded" && r.status !== "rejected" && r.status !== "completed" && r.status !== "closed").length;
+  const filteredReturns = returns.filter((r) => {
+    const d = r.return_date ?? "";
+    if (retFrom && d < retFrom) return false;
+    if (retTo   && d > retTo)   return false;
+    return true;
+  });
   const unloggedReturns = returns.filter((r) => !noonLinkedIds.has(r.return_id)).length;
   const lastStatement = statements[0];
   const returnedAmount = returns.reduce((s, r) => s + Math.abs(r.return_amount_aed ?? 0), 0);
@@ -543,6 +551,41 @@ export default function NoonPage() {
               </div>
             )}
 
+            {/* Date filter */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">From</label>
+              <input
+                type="date"
+                value={retFrom}
+                max={retTo || TODAY}
+                onChange={(e) => setRetFrom(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">To</label>
+              <input
+                type="date"
+                value={retTo}
+                min={retFrom}
+                max={TODAY}
+                onChange={(e) => setRetTo(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              />
+              {(retFrom || retTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setRetFrom(""); setRetTo(""); }}
+                  className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+              )}
+              {(retFrom || retTo) && (
+                <span className="text-xs text-slate-400">
+                  {filteredReturns.length} of {returns.length} shown
+                </span>
+              )}
+            </div>
+
             {/* Cross-link callout */}
             <div className="mb-3 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
               <span>Noon returns must also be logged in Marketplace Returns for warehouse documentation.</span>
@@ -573,7 +616,7 @@ export default function NoonPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {returns.map((r) => (
+                      {filteredReturns.map((r) => (
                         <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                           <td className={`${tdCell} font-mono text-xs text-slate-600 dark:text-slate-400`}>{r.return_id}</td>
                           <td className={tdCell}>
