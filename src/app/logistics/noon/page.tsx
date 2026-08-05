@@ -199,12 +199,6 @@ function SyncPanel({ token, onDone }: { token: string; onDone: () => void }) {
         <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Statements", "/api/noon/sync-statements", { from_date: fromDate, to_date: toDate })} className={btnPrimary}>
           {syncing === "Statements" ? "Syncing…" : "Sync Statements"}
         </button>
-        <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Messages", "/api/noon/sync-messages", {})} className={btnSecondary}>
-          {syncing === "Messages" ? "Syncing…" : "Sync Messages"}
-        </button>
-        <button type="button" disabled={!!syncing} onClick={() => syncEndpoint("Probe endpoints", "/api/noon/sync-messages", { probe: true })} className={btnSecondary}>
-          {syncing === "Probe endpoints" ? "Probing…" : "Probe Endpoints"}
-        </button>
       </div>
 
       {log.length > 0 && (
@@ -319,22 +313,6 @@ function OrderItemsRow({ order, colSpan }: { order: NoonOrder; colSpan: number }
   );
 }
 
-// ── Message types ────────────────────────────────────────────────────────────
-
-interface NoonMessage {
-  id: string;
-  message_id: string;
-  order_nr: string | null;
-  thread_id: string | null;
-  buyer_name: string | null;
-  subject: string | null;
-  body: string | null;
-  direction: "inbound" | "outbound";
-  sent_at: string | null;
-  is_read: boolean;
-  replied: boolean;
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 type Tab = "statements" | "orders" | "returns" | "messages";
@@ -362,26 +340,22 @@ export default function NoonPage() {
   const [orders, setOrders] = useState<NoonOrder[]>([]);
   const [statements, setStatements] = useState<NoonStatement[]>([]);
   const [returns, setReturns] = useState<NoonReturn[]>([]);
-  const [messages, setMessages] = useState<NoonMessage[]>([]);
   const [noonLinkedIds, setNoonLinkedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [expandedStmt, setExpandedStmt] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
-  const [expandedMsg, setExpandedMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [oRes, sRes, rRes, mRes, linkedRes] = await Promise.all([
+    const [oRes, sRes, rRes, linkedRes] = await Promise.all([
       db.from("noon_orders").select("*").order("order_date", { ascending: false }).limit(200),
       db.from("noon_statements").select("*").order("payment_date", { ascending: false }).limit(50),
       db.from("noon_returns").select("*").order("return_date", { ascending: false }).limit(200),
-      db.from("noon_messages").select("*").order("sent_at", { ascending: false }).limit(200),
       db.from("marketplace_returns").select("return_ref").eq("channel", "noon"),
     ]);
     setOrders((oRes.data ?? []) as NoonOrder[]);
     setStatements((sRes.data ?? []) as NoonStatement[]);
     setReturns((rRes.data ?? []) as NoonReturn[]);
-    setMessages((mRes.data ?? []) as NoonMessage[]);
     const ids = new Set<string>(
       ((linkedRes.data ?? []) as { return_ref: string | null }[])
         .map((r) => r.return_ref ?? "")
@@ -399,7 +373,6 @@ export default function NoonPage() {
   const unloggedReturns = returns.filter((r) => !noonLinkedIds.has(r.return_id)).length;
   const lastStatement = statements[0];
   const returnedAmount = returns.reduce((s, r) => s + Math.abs(r.return_amount_aed ?? 0), 0);
-  const unreadMessages = messages.filter((m) => !m.is_read && m.direction === "inbound").length;
 
   const TAB_STYLE = "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors";
   const activeTab = `${TAB_STYLE} bg-white text-sky-700 shadow-sm dark:bg-slate-800 dark:text-sky-300`;
@@ -452,13 +425,8 @@ export default function NoonPage() {
         <button type="button" onClick={() => setTab("returns")} className={tab === "returns" ? activeTab : inactiveTab}>
           Returns ({returns.length})
         </button>
-        <button type="button" onClick={() => setTab("messages")} className={`${tab === "messages" ? activeTab : inactiveTab} relative`}>
-          Messages ({messages.length})
-          {unreadMessages > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[10px] font-bold text-white">
-              {unreadMessages}
-            </span>
-          )}
+        <button type="button" onClick={() => setTab("messages")} className={tab === "messages" ? activeTab : inactiveTab}>
+          Messages
         </button>
       </div>
 
@@ -660,101 +628,22 @@ export default function NoonPage() {
           </div>
         /* ── Messages ── */
         ) : (
-          <div>
-            {messages.length === 0 ? (
-              <div className={`${surface} p-6`}>
-                <p className="text-sm text-slate-400">
-                  No messages synced yet. Click <strong>Sync Messages</strong> above to pull buyer messages from Noon.
-                </p>
-                <p className="mt-2 text-xs text-slate-400">
-                  Note: if sync returns an error, the messaging endpoint may differ — open a support ticket with the error details shown in the sync log.
-                </p>
-              </div>
-            ) : (
-              <div className={surface}>
-                {unreadMessages > 0 && (
-                  <div className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-rose-600 dark:border-slate-800 dark:text-rose-400">
-                    {unreadMessages} unread message{unreadMessages !== 1 ? "s" : ""}
-                  </div>
-                )}
-                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {messages.map((m) => {
-                    const isOpen = expandedMsg === m.message_id;
-                    return (
-                      <li key={m.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setExpandedMsg(isOpen ? null : m.message_id);
-                            if (!m.is_read && m.direction === "inbound") {
-                              // Mark as read locally (optimistic)
-                              setMessages((prev) =>
-                                prev.map((x) => x.message_id === m.message_id ? { ...x, is_read: true } : x)
-                              );
-                              db.from("noon_messages").update({ is_read: true }).eq("message_id", m.message_id);
-                            }
-                          }}
-                          className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                        >
-                          {/* Unread dot */}
-                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${!m.is_read && m.direction === "inbound" ? "bg-rose-500" : "bg-transparent"}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-sm ${!m.is_read && m.direction === "inbound" ? "font-semibold text-slate-900 dark:text-slate-100" : "font-medium text-slate-700 dark:text-slate-300"}`}>
-                                {m.buyer_name ?? "Buyer"}
-                              </span>
-                              {m.direction === "outbound" && (
-                                <span className="rounded-full bg-slate-100 px-1.5 py-0 text-[10px] font-medium text-slate-500 dark:bg-slate-800">sent</span>
-                              )}
-                              {m.replied && (
-                                <span className="rounded-full bg-emerald-50 px-1.5 py-0 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950/30">replied</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-500">{m.subject ?? "(no subject)"}</p>
-                            <p className="mt-0.5 truncate text-xs text-slate-400">{m.body ?? ""}</p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            {m.order_nr && (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => { e.stopPropagation(); setTab("orders"); setExpandedOrder(m.order_nr); }}
-                                onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setTab("orders"); setExpandedOrder(m.order_nr); } }}
-                                className="mb-1 block text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400"
-                              >
-                                {m.order_nr}
-                              </span>
-                            )}
-                            <p className="text-[11px] text-slate-400">{m.sent_at ? m.sent_at.slice(0, 10) : "—"}</p>
-                          </div>
-                          <span className="mt-1 shrink-0 text-xs text-slate-300">{isOpen ? "▲" : "▼"}</span>
-                        </button>
-                        {isOpen && (
-                          <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-3 dark:border-slate-800 dark:bg-slate-800/20">
-                            {m.subject && <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">{m.subject}</p>}
-                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{m.body ?? "(no body)"}</p>
-                            <div className="mt-3 flex items-center gap-3">
-                              {m.order_nr && (
-                                <button
-                                  type="button"
-                                  onClick={() => { setTab("orders"); setExpandedOrder(m.order_nr); }}
-                                  className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
-                                >
-                                  View order {m.order_nr} →
-                                </button>
-                              )}
-                              <p className="ml-auto text-[11px] text-slate-400">
-                                {m.sent_at ?? "—"} · {m.direction}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
+          <div className={`${surface} flex flex-col items-center gap-4 px-6 py-12 text-center`}>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-50 text-2xl dark:bg-sky-950/40">
+              💬
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Buyer messages are managed in the Noon Partner Portal</p>
+              <p className="mt-1 text-xs text-slate-400">Noon does not expose a messages API — open the portal to read and reply to buyer messages.</p>
+            </div>
+            <a
+              href="https://mp-partners.noon.partners/en-ae/messages"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 dark:bg-sky-700 dark:hover:bg-sky-600"
+            >
+              Open Noon Inbox ↗
+            </a>
           </div>
         )
       )}
