@@ -114,9 +114,37 @@ function Badge({ label, styleMap, fallback = "bg-slate-100 text-slate-500" }: { 
 // ── Sync controls ────────────────────────────────────────────────────────────
 
 const TODAY = new Date().toISOString().slice(0, 10);
+
+function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
+function weekStart(weeksAgo = 0): string {
+  const now = new Date();
+  const day = now.getDay();
+  const back = (day === 0 ? 6 : day - 1) + weeksAgo * 7;
+  const d = new Date(now); d.setDate(now.getDate() - back); return isoDate(d);
+}
+function monthStart(monthsAgo = 0): string {
+  const now = new Date();
+  return isoDate(new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1));
+}
+function monthEnd(monthsAgo = 0): string {
+  const now = new Date();
+  return isoDate(new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 0));
+}
+const WEEK_START      = weekStart(0);
+const LAST_WEEK_START = weekStart(1);
+const LAST_WEEK_END   = isoDate(new Date(new Date(WEEK_START).getTime() - 86_400_000));
+
+const ANALYTICS_PRESETS: { label: string; from: string; to: string }[] = [
+  { label: "This Week",  from: WEEK_START,      to: TODAY },
+  { label: "Last Week",  from: LAST_WEEK_START,  to: LAST_WEEK_END },
+  { label: "This Month", from: monthStart(0),    to: TODAY },
+  { label: "Last Month", from: monthStart(1),    to: monthEnd(1) },
+  { label: "30 Days",    from: isoDate(new Date(Date.now() - 30 * 86_400_000)), to: TODAY },
+];
+
 const PRESETS: { label: string; from: string }[] = [
-  { label: "30 d",  from: new Date(Date.now() - 30  * 86_400_000).toISOString().slice(0, 10) },
-  { label: "3 mo",  from: new Date(Date.now() - 90  * 86_400_000).toISOString().slice(0, 10) },
+  { label: "30 d",  from: isoDate(new Date(Date.now() - 30  * 86_400_000)) },
+  { label: "3 mo",  from: isoDate(new Date(Date.now() - 90  * 86_400_000)) },
   { label: "2026",  from: "2026-01-01" },
   { label: "2025",  from: "2025-01-01" },
 ];
@@ -354,6 +382,8 @@ export default function NoonPage() {
   const [ordTo, setOrdTo] = useState("");
   const [stmtFrom, setStmtFrom] = useState("");
   const [stmtTo, setStmtTo] = useState("");
+  const [analyticsFrom, setAnalyticsFrom] = useState(WEEK_START);
+  const [analyticsTo, setAnalyticsTo] = useState(TODAY);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -402,6 +432,22 @@ export default function NoonPage() {
   const lastStatement = statements[0];
   const returnedAmount = returns.reduce((s, r) => s + Math.abs(r.return_amount_aed ?? 0), 0);
 
+  // Analytics (date-filtered)
+  const aOrders = orders.filter((o) => {
+    const d = o.order_date ?? "";
+    return (!analyticsFrom || d >= analyticsFrom) && (!analyticsTo || d <= analyticsTo);
+  });
+  const aReturns = returns.filter((r) => {
+    const d = r.return_date ?? "";
+    return (!analyticsFrom || d >= analyticsFrom) && (!analyticsTo || d <= analyticsTo);
+  });
+  const aRevenue    = aOrders.reduce((s, o) => s + (o.total_aed ?? 0), 0);
+  const aDelivered  = aOrders.filter((o) => o.status === "delivered").length;
+  const aCancelled  = aOrders.filter((o) => o.status === "cancelled").length;
+  const aReturnAmt  = aReturns.reduce((s, r) => s + Math.abs(r.return_amount_aed ?? 0), 0);
+  const aOpenRet    = aReturns.filter((r) => !["completed", "closed", "refunded", "rejected"].includes(r.status ?? "")).length;
+  const aReturnRate = aOrders.length > 0 ? (aReturns.length / aOrders.length * 100) : 0;
+
   const TAB_BASE = "px-4 py-2 text-sm font-semibold rounded-xl border-2 transition-colors";
   const TAB_CHIPS: Record<Tab, { active: string; inactive: string }> = {
     statements: {
@@ -429,20 +475,91 @@ export default function NoonPage() {
       page="noon"
       altCapability="finance"
     >
-      {/* KPI strip */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: "Orders synced", value: totalOrders.toString() },
-          { label: "Delivered", value: deliveredOrders.toString(), sub: totalOrders > 0 ? `${Math.round(deliveredOrders / totalOrders * 100)}%` : "—" },
-          { label: "Open Returns", value: openReturns.toString(), alert: openReturns > 0 },
-          { label: "Last Net Payment", value: lastStatement ? formatAED(lastStatement.net_amount_aed ?? 0) : "—", sub: lastStatement?.payment_date ?? undefined },
-        ].map((k) => (
-          <div key={k.label} className={`${surface} p-4`}>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{k.label}</p>
-            <p className={`mt-1 text-2xl font-bold tabular-nums ${k.alert ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"}`}>{k.value}</p>
-            {k.sub && <p className="mt-0.5 text-xs text-slate-400">{k.sub}</p>}
+      {/* Analytics */}
+      <div className="mb-6">
+        {/* Period selector */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Period</span>
+          {ANALYTICS_PRESETS.map((p) => {
+            const active = analyticsFrom === p.from && analyticsTo === p.to;
+            return (
+              <button key={p.label} type="button"
+                onClick={() => { setAnalyticsFrom(p.from); setAnalyticsTo(p.to); }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  active
+                    ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                    : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                }`}
+              >{p.label}</button>
+            );
+          })}
+          <span className="text-slate-300 dark:text-slate-600">|</span>
+          <input type="date" value={analyticsFrom} max={analyticsTo || TODAY}
+            onChange={(e) => setAnalyticsFrom(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+          <span className="text-xs text-slate-400">→</span>
+          <input type="date" value={analyticsTo} min={analyticsFrom} max={TODAY}
+            onChange={(e) => setAnalyticsTo(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+        </div>
+
+        {/* KPI panels */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {/* Orders panel */}
+          <div className={`${surface} p-4`}>
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-sky-500 dark:text-sky-400">
+              Orders — {aOrders.length} in period
+            </p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Revenue</p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatAED(aRevenue)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Orders</p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{aOrders.length}</p>
+                <p className="text-[10px] text-slate-400">of {orders.length} total</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Delivered</p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{aDelivered}</p>
+                <p className="text-[10px] text-slate-400">{aOrders.length > 0 ? `${Math.round(aDelivered / aOrders.length * 100)}%` : "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Cancelled</p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${aCancelled > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"}`}>{aCancelled}</p>
+              </div>
+            </div>
           </div>
-        ))}
+
+          {/* Returns panel */}
+          <div className={`${surface} p-4`}>
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-500 dark:text-amber-400">
+              Returns — {aReturns.length} in period
+            </p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Return Amt</p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatAED(aReturnAmt)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Returns</p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${aReturns.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>{aReturns.length}</p>
+                <p className="text-[10px] text-slate-400">of {returns.length} total</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Open</p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${aOpenRet > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"}`}>{aOpenRet}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Return Rate</p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${aReturnRate > 10 ? "text-rose-600 dark:text-rose-400" : aReturnRate > 5 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-slate-100"}`}>
+                  {aReturnRate.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Sync panel */}
