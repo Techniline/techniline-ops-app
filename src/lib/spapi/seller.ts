@@ -94,16 +94,20 @@ export async function syncPrices(): Promise<PriceSyncResult> {
   return { count: j.count ?? 0, withBuyBox: j.withBuyBox ?? 0, remaining: j.remaining ?? 0, lastSync: j.lastSync ?? "", note: j.note };
 }
 
-/** All line items (lite) for the below-cost / margin analysis across orders. */
+/** All line items (lite) for the below-cost / margin analysis across orders.
+ *  Uses the server-side route (serviceClient) to bypass RLS on seller_order_items. */
 export async function fetchAllSellerItemsLite(): Promise<
   { amazon_order_id: string; seller_sku: string | null; item_price: number | null; quantity_ordered: number | null }[]
 > {
-  const { data, error } = await supabase
-    .from("seller_order_items")
-    .select("amazon_order_id, seller_sku, item_price, quantity_ordered")
-    .limit(20000);
-  if (error) return [];
-  return data ?? [];
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return [];
+  const res = await fetch("/api/spapi/order-items", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; items?: { amazon_order_id: string; seller_sku: string | null; item_price: number | null; quantity_ordered: number | null }[] };
+  return j.items ?? [];
 }
 
 export type SellerOrderDocRow = Tables<"seller_order_docs">;

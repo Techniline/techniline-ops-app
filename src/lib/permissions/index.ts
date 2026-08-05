@@ -150,13 +150,17 @@ export function logisticsPages(profile: ProfileArg): "all" | readonly LogisticsP
 /** May the user see the Logistics portal at all (full access OR any page grant)? */
 export function canViewLogistics(profile: ProfileArg): boolean {
   const pages = logisticsPages(profile);
-  return pages === "all" || pages.length > 0;
+  if (pages === "all" || pages.length > 0) return true;
+  // A standalone "noon" capability also grants portal entry (for the Noon page only).
+  return hasCapability(profile, "noon");
 }
 
 /** May the user access a specific logistics page? */
 export function canViewLogisticsPage(profile: ProfileArg, page: LogisticsPage): boolean {
   // Master data management is manager/admin only — never the logistics user.
   if (page === "masters") return isManager(profile) || profile?.role === "admin";
+  // Noon page can be granted via the "noon" capability independently of full logistics access.
+  if (page === "noon" && hasCapability(profile, "noon")) return true;
   const pages = logisticsPages(profile);
   return pages === "all" || pages.includes(page);
 }
