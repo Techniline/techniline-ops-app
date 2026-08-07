@@ -101,12 +101,12 @@ export async function fetchAllSellerItemsLite(): Promise<
 > {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token) return [];
+  if (!token) throw new Error("Not signed in.");
   const res = await fetch("/api/spapi/order-items", {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) return [];
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; items?: { amazon_order_id: string; seller_sku: string | null; item_price: number | null; quantity_ordered: number | null }[] };
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; items?: { amazon_order_id: string; seller_sku: string | null; item_price: number | null; quantity_ordered: number | null }[]; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `Failed to load order items (HTTP ${res.status})`);
   return j.items ?? [];
 }
 
