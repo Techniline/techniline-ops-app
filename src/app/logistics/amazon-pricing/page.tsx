@@ -562,7 +562,36 @@ function Content() {
       </>
       )}
 
-      {showCosts && manager ? <SkuCostsModal onClose={() => setShowCosts(false)} onSaved={() => void load()} initialSku={typeof showCosts === "string" ? showCosts : undefined} /> : null}
+      {showCosts && manager ? (
+        <SkuCostsModal
+          onClose={() => setShowCosts(false)}
+          initialSku={typeof showCosts === "string" ? showCosts : undefined}
+          initialCosts={costs}
+          onSaved={(entry) => {
+            if (entry) {
+              // Quick-add: splice into costs map directly — no reload needed
+              setCosts((prev) => {
+                const next = new Map(prev);
+                const existing = prev.get(entry.seller_sku);
+                next.set(entry.seller_sku, {
+                  seller_sku: entry.seller_sku,
+                  expected_in_hand: entry.expected_in_hand,
+                  cost: existing?.cost ?? null,
+                  sell_price: existing?.sell_price ?? null,
+                  notes: existing?.notes ?? null,
+                  updated_by: null,
+                  updated_at: new Date().toISOString(),
+                  currency: existing?.currency ?? "AED",
+                  created_at: existing?.created_at ?? new Date().toISOString(),
+                } as SkuCostRow);
+                return next;
+              });
+            } else {
+              void load(); // bulk import / save-all / delete → full refresh
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

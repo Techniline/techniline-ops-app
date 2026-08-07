@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 import { btnPrimary, btnSecondary, inputClass } from "@/components/ui";
-import { deleteSkuCost, fetchSkuCosts, saveSkuCosts, type SkuCostInput } from "@/lib/spapi/seller";
+import { deleteSkuCost, fetchSkuCosts, saveSkuCosts, type SkuCostInput, type SkuCostRow } from "@/lib/spapi/seller";
 
 interface EditRow {
   seller_sku: string;
@@ -41,13 +41,21 @@ export function SkuCostsModal({
   onClose,
   onSaved,
   initialSku,
+  initialCosts,
 }: {
   onClose: () => void;
-  onSaved: () => void;
+  /** Called with the new entry after a quick-add, or with no args after bulk import/save/delete. */
+  onSaved: (entry?: { seller_sku: string; expected_in_hand: number | null }) => void;
   initialSku?: string;
+  /** Seed list from parent's costs map so the modal opens instantly without a server call. */
+  initialCosts?: Map<string, SkuCostRow>;
 }) {
-  const [list, setList] = useState<EditRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [list, setList] = useState<EditRow[]>(() =>
+    initialCosts
+      ? [...initialCosts.values()].map((r) => ({ seller_sku: r.seller_sku, expected: r.expected_in_hand != null ? String(r.expected_in_hand) : "" }))
+      : []
+  );
+  const [loading, setLoading] = useState(!initialCosts);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -70,7 +78,8 @@ export function SkuCostsModal({
       setLoading(false);
     }
   }
-  useEffect(() => { void reload(); }, []);
+  // If we were seeded from parent, skip the initial server fetch; otherwise load from server.
+  useEffect(() => { if (!initialCosts) void reload(); }, []);
 
   // When quick-add opens, focus the expected field if SKU is pre-filled
   useEffect(() => {
@@ -101,7 +110,7 @@ export function SkuCostsModal({
     setErr(null); setMsg(null); setBusy(true);
     try {
       await saveSkuCosts([{ seller_sku: sku, expected_in_hand }]);
-      // Optimistically update local state immediately so the row shows without waiting for reload
+      // Update local list immediately — no server reload needed for quick-add
       const newRow: EditRow = { seller_sku: sku, expected: qExpected.trim() };
       setList((prev) => {
         const idx = prev.findIndex((r) => r.seller_sku.toLowerCase() === sku.toLowerCase());
@@ -110,7 +119,8 @@ export function SkuCostsModal({
       });
       setMsg(`Saved ${sku}.`);
       setQSku(""); setQExpected(""); setShowQuickAdd(false);
-      void reload(); onSaved();
+      // Pass the entry back so the parent can update its costs map directly (no full reload needed)
+      onSaved({ seller_sku: sku, expected_in_hand });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed.");
     } finally { setBusy(false); }
@@ -123,7 +133,7 @@ export function SkuCostsModal({
       if (rows.length === 0) throw new Error("No rows found. Need columns: SKU, Expected in hand.");
       const n = await saveSkuCosts(rows);
       setMsg(`Imported ${n} SKU${n === 1 ? "" : "s"}.`);
-      await reload(); onSaved();
+      await reload(); onSaved(); // no entry → parent does full reload
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Import failed.");
     } finally { setBusy(false); }
