@@ -99,8 +99,10 @@ export function SkuCostsModal({ onClose, onSaved }: { onClose: () => void; onSav
     finally { setBusy(false); }
   }
 
-  function addRow() {
-    setList((rows) => [{ seller_sku: "", expected: "", isNew: true }, ...rows]);
+  function addRow(prefill = "") {
+    const sku = prefill.trim();
+    setSearch("");
+    setList((rows) => [{ seller_sku: sku, expected: "", isNew: true }, ...rows]);
   }
 
   return (
@@ -121,7 +123,7 @@ export function SkuCostsModal({ onClose, onSaved }: { onClose: () => void; onSav
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ""; }} />
           </label>
           <span className="text-[11px] text-slate-400">Columns: <strong>SKU</strong>, <strong>Expected in hand</strong></span>
-          <button type="button" onClick={addRow} disabled={busy} className={`${btnSecondary} ml-auto`}>+ Add SKU</button>
+          <button type="button" onClick={() => addRow(search)} disabled={busy} className={`${btnSecondary} ml-auto`}>+ Add SKU</button>
         </div>
 
         <input className={`${inputClass} mb-2`} placeholder="Search SKU…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -142,7 +144,11 @@ export function SkuCostsModal({ onClose, onSaved }: { onClose: () => void; onSav
               {loading ? (
                 <tr><td colSpan={3} className="px-2 py-6 text-center text-slate-400">Loading…</td></tr>
               ) : shown.length === 0 ? (
-                <tr><td colSpan={3} className="px-2 py-6 text-center text-slate-400">No SKUs yet — import a spreadsheet or add one.</td></tr>
+                <tr><td colSpan={3} className="px-2 py-6 text-center text-slate-400">
+                  {search.trim()
+                    ? <><span>No match for &quot;{search.trim()}&quot; — </span><button type="button" onClick={() => addRow(search)} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">add it now ↗</button></>
+                    : "No SKUs yet — import a spreadsheet or add one."}
+                </td></tr>
               ) : shown.map((r) => (
                 <tr key={r.seller_sku || "new"} className="border-t border-slate-200/70 dark:border-slate-800">
                   <td className="px-2 py-1">
