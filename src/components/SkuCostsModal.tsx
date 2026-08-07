@@ -88,6 +88,11 @@ export function SkuCostsModal({
     setList((rows) => rows.map((r) => (r.seller_sku === sku ? { ...r, expected: val } : r)));
   }
 
+  const existingMatch = useMemo(() => {
+    const q = qSku.trim().toLowerCase();
+    return q ? list.find((r) => r.seller_sku.toLowerCase() === q) ?? null : null;
+  }, [qSku, list]);
+
   async function quickSave() {
     const sku = qSku.trim();
     if (!sku) { setErr("Enter a SKU."); return; }
@@ -96,9 +101,16 @@ export function SkuCostsModal({
     setErr(null); setMsg(null); setBusy(true);
     try {
       await saveSkuCosts([{ seller_sku: sku, expected_in_hand }]);
+      // Optimistically update local state immediately so the row shows without waiting for reload
+      const newRow: EditRow = { seller_sku: sku, expected: qExpected.trim() };
+      setList((prev) => {
+        const idx = prev.findIndex((r) => r.seller_sku.toLowerCase() === sku.toLowerCase());
+        if (idx >= 0) return prev.map((r, i) => i === idx ? newRow : r);
+        return [...prev, newRow].sort((a, b) => a.seller_sku.localeCompare(b.seller_sku));
+      });
       setMsg(`Saved ${sku}.`);
       setQSku(""); setQExpected(""); setShowQuickAdd(false);
-      await reload(); onSaved();
+      void reload(); onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed.");
     } finally { setBusy(false); }
@@ -161,12 +173,19 @@ export function SkuCostsModal({
           <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-800 dark:bg-indigo-950/30">
             <p className="mb-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">Add / update SKU target</p>
             <input
-              className={`${inputClass} mb-2`}
+              className={`${inputClass} mb-1`}
               placeholder="SKU (e.g. Flex_GK10)"
               value={qSku}
               onChange={(e) => setQSku(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") qExpRef.current?.focus(); }}
             />
+            {existingMatch ? (
+              <p className="mb-2 text-[11px] text-amber-600 dark:text-amber-400">
+                Already in master — current target: {existingMatch.expected !== "" ? `AED ${existingMatch.expected}` : "not set"}. Saving will update it.
+              </p>
+            ) : qSku.trim() ? (
+              <p className="mb-2 text-[11px] text-slate-400">New SKU — will be added to master.</p>
+            ) : <div className="mb-2" />}
             <div className="flex gap-2">
               <input
                 ref={qExpRef}
