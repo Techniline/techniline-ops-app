@@ -7,6 +7,27 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/** GET /api/spapi/sku-costs — read all SKU cost rows via service-role (bypasses RLS). */
+export async function GET(request: Request): Promise<Response> {
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !service || !anon) return Response.json({ ok: false, error: "Server DB not configured." }, { status: 500 });
+
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+
+  const auth = createClient(url, anon, { auth: { persistSession: false } });
+  const { data: u, error: authErr } = await auth.auth.getUser(token);
+  if (authErr || !u.user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+
+  const svc = createClient(url, service, { auth: { persistSession: false } });
+  const { data, error } = await svc.from("seller_sku_costs").select("*").order("seller_sku");
+  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+  return Response.json({ ok: true, rows: data ?? [] });
+}
+
 /** Users allowed to edit SKU costs (beyond managers): Aaron + Kesh (Amazon ops). */
 const COST_EDITORS = new Set([
   "cbb81b27-8756-4f2d-bfe0-04211c27092c", // Aaron

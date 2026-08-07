@@ -280,12 +280,16 @@ export async function syncSeller(): Promise<SellerSyncResult> {
 // ── SKU cost master (purchase cost per seller SKU, for margin / below-cost) ──────
 export type SkuCostRow = Tables<"seller_sku_costs">;
 
-/** All SKU costs as a map keyed by seller_sku (browser read; RLS-gated). */
+/** All SKU costs as a map keyed by seller_sku. Uses service-role route to bypass RLS. */
 export async function fetchSkuCosts(): Promise<Map<string, SkuCostRow>> {
   const map = new Map<string, SkuCostRow>();
-  const { data, error } = await supabase.from("seller_sku_costs").select("*").order("seller_sku");
-  if (error) return map;
-  for (const r of data ?? []) map.set(r.seller_sku, r);
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return map;
+  const res = await fetch("/api/spapi/sku-costs", { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return map;
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; rows?: SkuCostRow[] };
+  for (const r of j.rows ?? []) map.set(r.seller_sku, r);
   return map;
 }
 
