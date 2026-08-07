@@ -285,10 +285,10 @@ export async function fetchSkuCosts(): Promise<Map<string, SkuCostRow>> {
   const map = new Map<string, SkuCostRow>();
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token) return map;
+  if (!token) throw new Error("Not signed in.");
   const res = await fetch("/api/spapi/sku-costs", { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) return map;
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; rows?: SkuCostRow[] };
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; rows?: SkuCostRow[]; error?: string };
+  if (!res.ok || !j.ok) throw new Error(j.error ?? `Failed to load SKU costs (HTTP ${res.status})`);
   for (const r of j.rows ?? []) map.set(r.seller_sku, r);
   return map;
 }

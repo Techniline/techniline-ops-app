@@ -61,9 +61,14 @@ export function SkuCostsModal({
 
   async function reload() {
     setLoading(true);
-    const map = await fetchSkuCosts();
-    setList([...map.values()].map((r) => ({ seller_sku: r.seller_sku, expected: r.expected_in_hand != null ? String(r.expected_in_hand) : "" })));
-    setLoading(false);
+    try {
+      const map = await fetchSkuCosts();
+      setList([...map.values()].map((r) => ({ seller_sku: r.seller_sku, expected: r.expected_in_hand != null ? String(r.expected_in_hand) : "" })));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load SKU list.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { void reload(); }, []);
 
