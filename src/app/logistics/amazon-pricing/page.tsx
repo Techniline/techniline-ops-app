@@ -71,7 +71,7 @@ function Content() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [showCosts, setShowCosts] = useState(false);
+  const [showCosts, setShowCosts] = useState<string | true | false>(false);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [view, setView] = useState<"orders" | "repricing">("orders");
@@ -443,7 +443,7 @@ function Content() {
                                           <td className="py-0.5">
                                             {target != null
                                               ? <span className="text-emerald-700 dark:text-emerald-400">Target: {formatAED(target)}/unit</span>
-                                              : <button type="button" onClick={() => setShowCosts(true)} className="text-amber-600 hover:underline dark:text-amber-400" title="Set expected in-hand target for this SKU">set target ↗</button>}
+                                              : <button type="button" onClick={() => setShowCosts(sku)} className="text-amber-600 hover:underline dark:text-amber-400" title="Set expected in-hand target for this SKU">set target ↗</button>}
                                           </td>
                                         </tr>
                                       );
@@ -562,7 +562,7 @@ function Content() {
       </>
       )}
 
-      {showCosts && manager ? <SkuCostsModal onClose={() => setShowCosts(false)} onSaved={() => void load()} /> : null}
+      {showCosts && manager ? <SkuCostsModal onClose={() => setShowCosts(false)} onSaved={() => void load()} initialSku={typeof showCosts === "string" ? showCosts : undefined} /> : null}
     </div>
   );
 }
