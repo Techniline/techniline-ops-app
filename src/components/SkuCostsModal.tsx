@@ -155,27 +155,27 @@ export function SkuCostsModal({
         {showQuickAdd ? (
           <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-800 dark:bg-indigo-950/30">
             <p className="mb-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">Add / update SKU target</p>
+            <input
+              className={`${inputClass} mb-2`}
+              placeholder="SKU (e.g. Flex_GK10)"
+              value={qSku}
+              onChange={(e) => setQSku(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") qExpRef.current?.focus(); }}
+            />
             <div className="flex gap-2">
-              <input
-                className={`${inputClass} flex-1`}
-                placeholder="SKU (e.g. Flex_GK10)"
-                value={qSku}
-                onChange={(e) => setQSku(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") qExpRef.current?.focus(); }}
-              />
               <input
                 ref={qExpRef}
                 type="number"
                 step="0.01"
                 min="0"
-                className={`${inputClass} w-36 text-right`}
-                placeholder="AED target"
+                className={`${inputClass} flex-1 text-right`}
+                placeholder="Expected in-hand (AED)"
                 value={qExpected}
                 onChange={(e) => setQExpected(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void quickSave(); }}
               />
               <button type="button" onClick={() => void quickSave()} disabled={busy || !qSku.trim()} className={btnPrimary}>
-                {busy ? "…" : "Save"}
+                {busy ? "Saving…" : "Save"}
               </button>
               <button type="button" onClick={() => setShowQuickAdd(false)} className={btnSecondary}>Cancel</button>
             </div>
