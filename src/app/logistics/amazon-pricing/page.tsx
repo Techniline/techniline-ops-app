@@ -280,7 +280,14 @@ function Content() {
           <button type="button" onClick={() => setView("repricing")} className={`px-2.5 py-1 font-medium ${view === "repricing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}>Repricing (per SKU)</button>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {manager ? <button type="button" onClick={() => setShowCosts(true)} className={btnSecondary}>🎯 Expected in‑hand</button> : null}
+          {manager ? (
+            <button type="button" onClick={() => setShowCosts(true)} className={btnSecondary}>
+              🎯 Expected in‑hand
+              <span className={`ml-1.5 rounded px-1 py-0.5 text-[10px] font-mono ${costs.size > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                {costs.size} loaded
+              </span>
+            </button>
+          ) : null}
           {view === "repricing" && manager ? <button type="button" onClick={syncPricesNow} disabled={syncingPrices} className={btnSecondary}>{syncingPrices ? "Syncing prices…" : "Sync prices"}</button> : null}
           <button type="button" onClick={syncNow} disabled={syncing} className={btnPrimary}>{syncing ? "Syncing…" : "Sync now"}</button>
         </div>

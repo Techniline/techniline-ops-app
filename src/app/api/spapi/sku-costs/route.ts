@@ -99,7 +99,14 @@ export async function POST(request: Request): Promise<Response> {
   for (const r of rows) bySku.set(r.seller_sku as string, r);
   const deduped = [...bySku.values()];
 
-  const { error } = await svc.from("seller_sku_costs").upsert(deduped as never, { onConflict: "seller_sku" });
+  const { data: written, error } = await svc
+    .from("seller_sku_costs")
+    .upsert(deduped as never, { onConflict: "seller_sku" })
+    .select("seller_sku");
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-  return Response.json({ ok: true, count: deduped.length });
+  const writtenCount = (written as unknown[] | null)?.length ?? 0;
+  if (writtenCount === 0) {
+    return Response.json({ ok: false, error: `Upsert returned 0 rows written — check if seller_sku_costs has a unique constraint on seller_sku.` }, { status: 500 });
+  }
+  return Response.json({ ok: true, count: writtenCount });
 }
