@@ -23,9 +23,11 @@ export async function GET(request: Request): Promise<Response> {
   if (authErr || !u.user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data, error } = await svc.from("seller_sku_costs").select("*").order("seller_sku").range(0, 49999);
+  const { data, error, count } = await svc.from("seller_sku_costs").select("*", { count: "exact" }).order("seller_sku").range(0, 49999);
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-  return Response.json({ ok: true, rows: data ?? [] });
+  const rows = data ?? [];
+  console.log(`[sku-costs GET] service key set=${!!service}, DB count=${count}, rows returned=${rows.length}`);
+  return Response.json({ ok: true, rows, _dbCount: count ?? rows.length });
 }
 
 /** Users allowed to edit SKU costs (beyond managers): Aaron + Kesh (Amazon ops). */

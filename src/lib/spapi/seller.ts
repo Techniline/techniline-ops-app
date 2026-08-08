@@ -287,7 +287,8 @@ export async function fetchSkuCosts(): Promise<Map<string, SkuCostRow>> {
   const token = session?.access_token;
   if (!token) throw new Error("Not signed in.");
   const res = await fetch("/api/spapi/sku-costs", { headers: { Authorization: `Bearer ${token}` } });
-  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; rows?: SkuCostRow[]; error?: string };
+  const j = (await res.json().catch(() => ({}))) as { ok?: boolean; rows?: SkuCostRow[]; error?: string; _dbCount?: number };
+  console.log("[sku-costs] GET response:", res.status, "rows:", j.rows?.length ?? 0, "DB total:", j._dbCount ?? "?", j.error ?? "");
   if (!res.ok || !j.ok) throw new Error(j.error ?? `Failed to load SKU costs (HTTP ${res.status})`);
   for (const r of j.rows ?? []) map.set(r.seller_sku, r);
   return map;
@@ -312,6 +313,7 @@ export async function saveSkuCosts(rows: SkuCostInput[]): Promise<number> {
     body: JSON.stringify({ action: "upsert", rows }),
   });
   const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; count?: number };
+  console.log("[sku-costs] POST save response:", res.status, JSON.stringify(j));
   if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
   return j.count ?? 0;
 }
