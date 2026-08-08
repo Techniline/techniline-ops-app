@@ -23,11 +23,37 @@ export async function GET(request: Request): Promise<Response> {
   if (authErr || !u.user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
   const svc = createClient(url, service, { auth: { persistSession: false } });
-  const { data, error, count } = await svc.from("seller_sku_costs").select("*", { count: "exact" }).order("seller_sku").range(0, 49999);
-  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-  const rows = data ?? [];
-  console.log(`[sku-costs GET] service key set=${!!service}, DB count=${count}, rows returned=${rows.length}`);
-  return Response.json({ ok: true, rows, _dbCount: count ?? rows.length });
+
+  // PostgREST caps at db-max-rows (default 1000) even with .range().
+  // Fetch the first page + exact count, then remaining pages in parallel.
+  const PAGE = 1000;
+  const { data: first, error: firstErr, count } = await svc
+    .from("seller_sku_costs")
+    .select("*", { count: "exact" })
+    .order("seller_sku")
+    .range(0, PAGE - 1);
+  if (firstErr) return Response.json({ ok: false, error: firstErr.message }, { status: 500 });
+
+  const total = count ?? (first?.length ?? 0);
+  const allRows = [...(first ?? [])];
+
+  if (total > PAGE) {
+    const extraPages = Math.ceil((total - PAGE) / PAGE);
+    const rest = await Promise.all(
+      Array.from({ length: extraPages }, (_, i) => {
+        const from = PAGE + i * PAGE;
+        const to = Math.min(from + PAGE - 1, total - 1);
+        return svc.from("seller_sku_costs").select("*").order("seller_sku").range(from, to);
+      })
+    );
+    for (const pg of rest) {
+      if (pg.error) return Response.json({ ok: false, error: pg.error.message }, { status: 500 });
+      allRows.push(...(pg.data ?? []));
+    }
+  }
+
+  console.log(`[sku-costs GET] DB total=${total}, returned=${allRows.length}`);
+  return Response.json({ ok: true, rows: allRows, _dbCount: total });
 }
 
 /** Users allowed to edit SKU costs (beyond managers): Aaron + Kesh (Amazon ops). */
