@@ -216,7 +216,7 @@ export function parseCsv(text: string): Record<string, string>[] {
 export async function noonExport(
   categoryCode: string,
   params: Record<string, string>,
-  timeoutMs = 60_000,
+  timeoutMs = 180_000,
 ): Promise<string> {
   const { export_code } = await noonPost<{ export_code: string }>("/impex/v1/export/create", {
     export_category_code: categoryCode,
