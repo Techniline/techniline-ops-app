@@ -7,6 +7,7 @@ export {
   lpPdfUrl,
   listLpPdfs,
   saveVerifiedLp,
+  recordRtv,
   recordSale,
   fetchSaleHistory,
   updateLpItem,

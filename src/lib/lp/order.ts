@@ -255,6 +255,63 @@ export async function recordSale(input: RecordSaleInput): Promise<void> {
   }
 }
 
+/* ------------------------------ Return to Vendor (RTV) ------------------- */
+
+export interface RecordRtvInput {
+  lpItemId: string;
+  returnedQty: number;
+  returnDate: string;
+  vendorRef: string | null;
+  reason: string | null;
+  notes: string | null;
+  recordedBy: string;
+}
+
+export async function recordRtv(input: RecordRtvInput): Promise<void> {
+  if (!Number.isFinite(input.returnedQty) || input.returnedQty <= 0) {
+    throw new Error("Return quantity must be a positive number.");
+  }
+
+  const { data: current, error: readErr } = await supabase
+    .from("lp_items_view")
+    .select("qty_remaining")
+    .eq("id", input.lpItemId)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  const available = current?.qty_remaining ?? null;
+  if (available === null) throw new Error("Could not verify remaining quantity.");
+  if (input.returnedQty > available) {
+    throw new Error(`Only ${available} remaining — cannot return more than that.`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from("lp_rtv" as any) as any).insert({
+    lp_item_id: input.lpItemId,
+    returned_qty: input.returnedQty,
+    return_date: input.returnDate,
+    vendor_ref: input.vendorRef,
+    reason: input.reason,
+    notes: input.notes,
+    recorded_by: input.recordedBy,
+  });
+  if (error) throw new Error((error as { message: string }).message);
+
+  // Re-read remaining (now subtracts this RTV) and close line if fully returned.
+  const { data: view } = await supabase
+    .from("lp_items_view")
+    .select("qty_remaining")
+    .eq("id", input.lpItemId)
+    .maybeSingle();
+  const remaining = view?.qty_remaining ?? null;
+  if (remaining !== null) {
+    const patch: TablesUpdate<"lp_items"> = {
+      status: remaining <= 0 ? "cleared" : "open",
+      updated_at: new Date().toISOString(),
+    };
+    await supabase.from("lp_items").update(patch).eq("id", input.lpItemId);
+  }
+}
+
 /** Sale history for one LP line, newest first. */
 export async function fetchSaleHistory(lpItemId: string): Promise<LpSaleRow[]> {
   const { data, error } = await supabase

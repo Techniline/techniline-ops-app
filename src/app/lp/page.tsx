@@ -37,6 +37,7 @@ import {
   lpPdfUrl,
   overviewKpis,
   parseLpViaApi,
+  recordRtv,
   recordSale,
   saveVerifiedLp,
   setGoodsReceivedDate,
@@ -537,6 +538,94 @@ function RecordSaleModal({
   );
 }
 
+/* --------------------------- Return to Vendor (RTV) -------------------- */
+
+function RecordRtvModal({
+  row,
+  recordedBy,
+  onClose,
+  onSaved,
+}: {
+  row: LpItemRow;
+  recordedBy: string;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const remaining = row.qty_remaining ?? 0;
+  const [returnedQty, setReturnedQty] = useState("");
+  const [returnDate, setReturnDate] = useState(todayIso());
+  const [vendorRef, setVendorRef] = useState("");
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setFormError(null);
+    const qty = Number(returnedQty);
+    if (returnedQty.trim() === "" || !Number.isFinite(qty) || qty <= 0) {
+      return setFormError("Return quantity must be a positive number.");
+    }
+    if (qty > remaining) {
+      return setFormError(`Cannot return more than ${remaining} remaining.`);
+    }
+    if (!row.id) return setFormError("This line cannot be updated (missing id).");
+    setSaving(true);
+    try {
+      await recordRtv({
+        lpItemId: row.id,
+        returnedQty: qty,
+        returnDate,
+        vendorRef: vendorRef.trim() || null,
+        reason: reason.trim() || null,
+        notes: notes.trim() || null,
+        recordedBy,
+      });
+      onSaved("Return to vendor recorded.");
+    } catch (err) {
+      setFormError(errorMessage(err));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Return to Vendor (RTV)" onClose={onClose}>
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+        <span className="font-medium text-slate-700 dark:text-slate-300">{row.model_no ?? row.sku ?? "—"}</span>
+        <span>{row.lp_number ?? "—"} · {row.vendor_name ?? "—"}</span>
+        <span>{remaining.toLocaleString()} remaining</span>
+      </div>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormRow label="Qty to Return *">
+            <input type="number" min="1" step="1" max={remaining} onWheel={blurOnWheel} className={inputClass} value={returnedQty} onChange={(e) => setReturnedQty(e.target.value)} required />
+          </FormRow>
+          <FormRow label="Return Date">
+            <input type="date" className={inputClass} value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+          </FormRow>
+          <FormRow label="Vendor RMA / Reference">
+            <input className={inputClass} value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} placeholder="Optional" />
+          </FormRow>
+          <FormRow label="Reason">
+            <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. defective, overstock" />
+          </FormRow>
+        </div>
+        <FormRow label="Notes">
+          <textarea className={inputClass} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </FormRow>
+        {formError ? (
+          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{formError}</p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
+          <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Saving…" : "Record RTV"}</button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
 /* --------------------------- Manager edit line ------------------------- */
 
 function EditLpItemModal({
@@ -787,6 +876,7 @@ function LpTable({
   filters,
   onFilter,
   onSale,
+  onRtv,
   onEdit,
   computeItemRrp,
 }: {
@@ -796,6 +886,7 @@ function LpTable({
   filters: ColFilters;
   onFilter: (key: keyof ColFilters, value: string) => void;
   onSale: (row: LpItemRow) => void;
+  onRtv: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
   computeItemRrp: (row: LpItemRow) => number | null;
 }) {
@@ -981,6 +1072,7 @@ function LpTable({
                   <td className={TD}>
                     <div className="flex gap-2">
                       <button type="button" onClick={(e) => { e.stopPropagation(); onSale(row); }} disabled={!row.id || remaining <= 0} className={btnSmall}>Sale</button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onRtv(row); }} disabled={!row.id || remaining <= 0} className={btnSmall}>RTV</button>
                       {managerFlag ? (
                         <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(row); }} disabled={!row.id} className={btnSmall}>Edit</button>
                       ) : null}
@@ -1396,12 +1488,14 @@ function LpoRow({
   managerFlag,
   onSetGrn,
   onSale,
+  onRtv,
   onEdit,
 }: {
   lp: LpOverviewRow;
   managerFlag: boolean;
   onSetGrn: (lp: LpOverviewRow) => void;
   onSale: (row: LpItemRow) => void;
+  onRtv: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1474,6 +1568,7 @@ function LpoRow({
                         <td className="py-1.5">
                           <div className="flex gap-2">
                             <button type="button" disabled={!l.id || rem <= 0} onClick={() => onSale(l)} className={btnSmall}>Record sale</button>
+                            <button type="button" disabled={!l.id || rem <= 0} onClick={() => onRtv(l)} className={btnSmall}>RTV</button>
                             {managerFlag ? (
                               <button type="button" disabled={!l.id} onClick={() => onEdit(l)} className={btnSmall}>Edit</button>
                             ) : null}
@@ -1498,6 +1593,7 @@ function OverviewSection({
   managerFlag,
   onSetGrn,
   onSale,
+  onRtv,
   onEdit,
   onAgeingFilter,
 }: {
@@ -1506,6 +1602,7 @@ function OverviewSection({
   managerFlag: boolean;
   onSetGrn: (lp: LpOverviewRow) => void;
   onSale: (row: LpItemRow) => void;
+  onRtv: (row: LpItemRow) => void;
   onEdit: (row: LpItemRow) => void;
   onAgeingFilter?: (status: string) => void;
 }) {
@@ -1544,7 +1641,7 @@ function OverviewSection({
                 <div className="border-t border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800/60 dark:bg-slate-800/20">
                   <div className="flex flex-col gap-2">
                     {rows.filter((r) => (r.vendor_name ?? "—") === v.vendor).map((lp) => (
-                      <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onEdit={onEdit} />
+                      <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onRtv={onRtv} onEdit={onEdit} />
                     ))}
                   </div>
                 </div>
@@ -1555,7 +1652,7 @@ function OverviewSection({
       ) : (
         <div className="flex flex-col gap-2">
           {rows.map((lp) => (
-            <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onEdit={onEdit} />
+            <LpoRow key={lp.lp_id} lp={lp} managerFlag={managerFlag} onSetGrn={onSetGrn} onSale={onSale} onRtv={onRtv} onEdit={onEdit} />
           ))}
         </div>
       )}
@@ -1916,6 +2013,7 @@ function LpContent() {
 
   // Modals.
   const [saleRow, setSaleRow] = useState<LpItemRow | null>(null);
+  const [rtvRow, setRtvRow] = useState<LpItemRow | null>(null);
   const [editRow, setEditRow] = useState<LpItemRow | null>(null);
   const [grnLp, setGrnLp] = useState<LpOverviewRow | null>(null);
   const [showPdfs, setShowPdfs] = useState(false);
@@ -2150,6 +2248,7 @@ function LpContent() {
                 managerFlag={managerFlag}
                 onSetGrn={(lp) => setGrnLp(lp)}
                 onSale={(row) => setSaleRow(row)}
+                onRtv={(row) => setRtvRow(row)}
                 onEdit={(row) => setEditRow(row)}
                 onAgeingFilter={(status) => void handleAgeingFilter(status)}
               />
@@ -2246,7 +2345,7 @@ function LpContent() {
                       <p className="text-sm text-slate-500">No loaded lines match your search / filters.</p>
                     </div>
                   ) : (
-                    <LpTable rows={filtered} alerts={alerts} managerFlag={managerFlag} filters={filters} onFilter={setFilter} onSale={(row) => setSaleRow(row)} onEdit={(row) => setEditRow(row)} computeItemRrp={computeItemRrp} />
+                    <LpTable rows={filtered} alerts={alerts} managerFlag={managerFlag} filters={filters} onFilter={setFilter} onSale={(row) => setSaleRow(row)} onRtv={(row) => setRtvRow(row)} onEdit={(row) => setEditRow(row)} computeItemRrp={computeItemRrp} />
                   )}
                   {hasMore ? (
                     <div className="mt-4 flex justify-center">
@@ -2273,6 +2372,9 @@ function LpContent() {
       ) : null}
       {saleRow && profile ? (
         <RecordSaleModal row={saleRow} rrp={computeItemRrp(saleRow)} recordedBy={profile.id} onClose={() => setSaleRow(null)} onSaved={handleSaved} />
+      ) : null}
+      {rtvRow && profile ? (
+        <RecordRtvModal row={rtvRow} recordedBy={profile.id} onClose={() => setRtvRow(null)} onSaved={handleSaved} />
       ) : null}
       {editRow ? (
         <EditLpItemModal row={editRow} onClose={() => setEditRow(null)} onSaved={handleSaved} />
