@@ -3,9 +3,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, WheelEvent } from "react";
 
+import * as XLSX from "xlsx";
+
 import { useAuth } from "@/app/providers/AuthProvider";
 import { AppShell } from "@/components/AppShell";
-import { ImportDisputesModal } from "@/components/ImportDisputesModal";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteGuard } from "@/components/RouteGuard";
@@ -22,6 +23,12 @@ import {
 } from "@/components/ui";
 import { formatAED, formatDate } from "@/lib/format";
 import { normalizeRef } from "@/lib/finance/accuracy";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  parseDisputeReportSheet,
+  type DisputeReportRow,
+  type ImportSummary,
+} from "@/lib/amazon-actions/importDisputes";
 import {
   CATEGORY_LABELS,
   deriveConfidence,
@@ -35,6 +42,7 @@ import {
   validateActionLog,
   type ActionCategory,
   type ActionEnrichment,
+  type ActionLog,
   type ActionLogInput,
   type AmazonAction,
   type ReferenceType,
@@ -250,6 +258,14 @@ function ActionDetail({
         </dd>
       </div>
 
+      {/* Dispute record — fetched lazily from the disputes table. */}
+      {action.category === "dispute" && action.amazonRef ? (
+        <DisputeDetail disputeNumber={action.amazonRef} />
+      ) : null}
+
+      {/* Full activity log. */}
+      <LogTimeline logs={action.allLogs} />
+
       {/* Cross-linked records (same PO / dispute / return / invoice reference). */}
       {related.length > 0 ? (
         <div className="mt-4">
@@ -276,6 +292,110 @@ function ActionDetail({
           {action.missingDocumentation ? "Add missing details" : action.resolved ? "Update action" : "Log action"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ----------------------- dispute detail block -------------------------- */
+
+interface DisputeRecord {
+  dispute_number: string;
+  dispute_status: string | null;
+  dispute_type: string | null;
+  invoice_amount_aed: number | null;
+  approved_amount_aed: number | null;
+  raised_at: string | null;
+  resolved_at: string | null;
+  maricel_comment: string | null;
+  maricel_recommendation: string | null;
+  gap_aed: number | null;
+  approval_status: string | null;
+}
+
+function DisputeDetail({ disputeNumber }: { disputeNumber: string }) {
+  const [data, setData] = useState<DisputeRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("disputes")
+      .select("dispute_number,dispute_status,dispute_type,invoice_amount_aed,approved_amount_aed,raised_at,resolved_at,maricel_comment,maricel_recommendation,gap_aed,approval_status")
+      .eq("dispute_number", disputeNumber)
+      .maybeSingle()
+      .then(({ data: row, error }) => {
+        if (error) setErr(error.message);
+        else setData(row as DisputeRecord | null);
+        setLoading(false);
+      });
+  }, [disputeNumber]);
+
+  if (loading) return <p className="text-xs text-slate-400 italic">Loading dispute record…</p>;
+  if (err) return <p className="text-xs text-red-500">{err}</p>;
+  if (!data) return <p className="text-xs text-slate-400">No dispute record found for {disputeNumber}.</p>;
+
+  return (
+    <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 dark:border-indigo-900 dark:bg-indigo-950/30">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Dispute Record</h4>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+        <DetailRow label="Dispute status" value={data.dispute_status} />
+        <DetailRow label="Dispute type" value={data.dispute_type} />
+        <DetailRow label="Approval status" value={data.approval_status} />
+        <DetailRow label="Raised" value={data.raised_at ? formatDate(data.raised_at) : null} />
+        <DetailRow label="Resolved" value={data.resolved_at ? formatDate(data.resolved_at) : null} />
+        <DetailRow label="Invoice amount" value={data.invoice_amount_aed != null ? formatAED(data.invoice_amount_aed) : null} />
+        <DetailRow label="Approved amount" value={data.approved_amount_aed != null ? formatAED(data.approved_amount_aed) : null} />
+        <DetailRow label="Gap" value={data.gap_aed != null ? formatAED(data.gap_aed) : null} />
+      </div>
+      {data.maricel_comment ? (
+        <div className="mt-2">
+          <dt className="text-xs text-slate-500">Comment</dt>
+          <dd className="text-sm text-slate-800 dark:text-slate-200">{data.maricel_comment}</dd>
+        </div>
+      ) : null}
+      {data.maricel_recommendation ? (
+        <div className="mt-1">
+          <dt className="text-xs text-slate-500">Recommendation</dt>
+          <dd className="text-sm text-slate-800 dark:text-slate-200">{data.maricel_recommendation}</dd>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ----------------------- activity log timeline ------------------------- */
+
+function LogTimeline({ logs }: { logs: ActionLog[] }) {
+  if (logs.length === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <dt className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Activity log ({logs.length})</dt>
+      <ol className="relative border-l border-slate-200 dark:border-slate-700">
+        {logs.map((log, i) => (
+          <li key={log.id} className={`mb-3 ml-4 ${i === 0 ? "" : "opacity-80"}`}>
+            <div className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <time className="text-xs text-slate-400">{formatDate(log.created_at)}</time>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{log.outcome?.replace(/_/g, " ") ?? "—"}</span>
+              {log.workflow_status ? (
+                <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize ${STATUS_STYLES[log.workflow_status] ?? STATUS_STYLES.closed}`}>
+                  {log.workflow_status.replace(/_/g, " ")}
+                </span>
+              ) : null}
+            </div>
+            {log.reference_value ? (
+              <p className="mt-0.5 font-mono text-xs text-slate-500">ref: {log.reference_value}</p>
+            ) : null}
+            {log.reason_note ? (
+              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">{log.reason_note}</p>
+            ) : null}
+            {log.recovered_aed != null ? (
+              <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-400">Recovered: {formatAED(log.recovered_aed)}</p>
+            ) : null}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -581,6 +701,317 @@ function LogActionModal({
   );
 }
 
+/* ----------------------- unified import modal -------------------------- */
+
+type ImportTab = "disputes" | "payments" | "returns";
+
+interface PaymentRow { paymentNumber: string; paymentDate: string | null; netPaidAed: number | null; lines: [] }
+interface ReturnRow {
+  return_id: string; vret_number: string | null; authorization_id: string | null;
+  date_received: string; return_type: string; tracking_number: string | null;
+  po_number: string | null; warehouse: string | null; total_cost_aed: number;
+  qty: number; model_sku: string | null;
+}
+
+function pickCol(headers: string[], ...candidates: string[]): number {
+  for (const c of candidates) {
+    const i = headers.findIndex((h) => h.toLowerCase().includes(c.toLowerCase()));
+    if (i !== -1) return i;
+  }
+  return -1;
+}
+
+function parsePaymentsSheet(sheet: unknown[][]): PaymentRow[] {
+  const headers = (sheet[0] ?? []).map((h) => String(h ?? ""));
+  const iRef = pickCol(headers, "payment number", "remittance ref", "payment ref", "reference");
+  const iDate = pickCol(headers, "payment date", "date");
+  const iNet = pickCol(headers, "net amount", "net paid", "net");
+  if (iRef === -1) return [];
+  return sheet.slice(1).flatMap((row) => {
+    const ref = String((row[iRef] as string | undefined) ?? "").trim();
+    if (!ref) return [];
+    const rawDate = iDate !== -1 ? (row[iDate] as string | Date | null) : null;
+    let paymentDate: string | null = null;
+    if (rawDate instanceof Date) paymentDate = rawDate.toISOString().slice(0, 10);
+    else if (typeof rawDate === "string" && rawDate.trim()) paymentDate = rawDate.trim().slice(0, 10);
+    const rawNet = iNet !== -1 ? Number(row[iNet]) : NaN;
+    return [{ paymentNumber: ref, paymentDate, netPaidAed: Number.isFinite(rawNet) ? rawNet : null, lines: [] }];
+  });
+}
+
+function parseReturnsSheet(sheet: unknown[][]): ReturnRow[] {
+  const headers = (sheet[0] ?? []).map((h) => String(h ?? ""));
+  const iId = pickCol(headers, "return id");
+  const iVret = pickCol(headers, "vret");
+  const iAuth = pickCol(headers, "authorization");
+  const iDate = pickCol(headers, "date received", "date");
+  const iType = pickCol(headers, "return type", "type");
+  const iTrk = pickCol(headers, "tracking");
+  const iPo = pickCol(headers, "po number", "po #");
+  const iWh = pickCol(headers, "warehouse");
+  const iCost = pickCol(headers, "total cost", "cost");
+  const iQty = pickCol(headers, "qty", "quantity");
+  const iSku = pickCol(headers, "model sku", "sku", "model");
+  if (iId === -1) return [];
+  return sheet.slice(1).flatMap((row) => {
+    const id = String((row[iId] as string | undefined) ?? "").trim();
+    if (!id) return [];
+    const rawDate = iDate !== -1 ? (row[iDate] as string | Date | null) : null;
+    let dateReceived = new Date().toISOString().slice(0, 10);
+    if (rawDate instanceof Date) dateReceived = rawDate.toISOString().slice(0, 10);
+    else if (typeof rawDate === "string" && rawDate.trim()) dateReceived = rawDate.trim().slice(0, 10);
+    const cost = iCost !== -1 ? Math.abs(Number(row[iCost])) : 0;
+    return [{
+      return_id: id,
+      vret_number: iVret !== -1 ? String(row[iVret] ?? "").trim() || null : null,
+      authorization_id: iAuth !== -1 ? String(row[iAuth] ?? "").trim() || null : null,
+      date_received: dateReceived,
+      return_type: iType !== -1 ? String(row[iType] ?? "").trim() || "FBA" : "FBA",
+      tracking_number: iTrk !== -1 ? String(row[iTrk] ?? "").trim() || null : null,
+      po_number: iPo !== -1 ? String(row[iPo] ?? "").trim() || null : null,
+      warehouse: iWh !== -1 ? String(row[iWh] ?? "").trim() || null : null,
+      total_cost_aed: Number.isFinite(cost) ? cost : 0,
+      qty: iQty !== -1 ? Math.max(1, Math.abs(Number(row[iQty]) || 1)) : 1,
+      model_sku: iSku !== -1 ? String(row[iSku] ?? "").trim() || null : null,
+    }];
+  });
+}
+
+function UnifiedImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [tab, setTab] = useState<ImportTab>("disputes");
+
+  // Disputes state
+  const [dRows, setDRows] = useState<DisputeReportRow[]>([]);
+  const [dFile, setDFile] = useState("");
+  const [dParsing, setDParsing] = useState(false);
+  const [dImporting, setDImporting] = useState(false);
+  const [dSummary, setDSummary] = useState<ImportSummary | null>(null);
+  const [dError, setDError] = useState<string | null>(null);
+
+  // Payments state
+  const [pRows, setPRows] = useState<PaymentRow[]>([]);
+  const [pFile, setPFile] = useState("");
+  const [pParsing, setPParsing] = useState(false);
+  const [pImporting, setPImporting] = useState(false);
+  const [pSummary, setPSummary] = useState<{ paymentsCreated: number; paymentsUpdated: number; errors: string[] } | null>(null);
+  const [pError, setPError] = useState<string | null>(null);
+
+  // Returns state
+  const [rRows, setRRows] = useState<ReturnRow[]>([]);
+  const [rFile, setRFile] = useState("");
+  const [rParsing, setRParsing] = useState(false);
+  const [rImporting, setRImporting] = useState(false);
+  const [rSummary, setRSummary] = useState<{ parsed: number; created: number; updated: number; errors: string[] } | null>(null);
+  const [rError, setRError] = useState<string | null>(null);
+
+  async function readSheet(file: File): Promise<unknown[][]> {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false });
+  }
+
+  async function getToken(): Promise<string> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("You must be signed in.");
+    return session.access_token;
+  }
+
+  // Disputes handlers
+  async function onDFile(file: File) {
+    setDError(null); setDSummary(null); setDRows([]); setDFile(file.name); setDParsing(true);
+    try {
+      const sheet = await readSheet(file);
+      const parsed = parseDisputeReportSheet(sheet);
+      if (parsed.length === 0) setDError('No dispute rows found. Expected columns like "Dispute ID", "Dispute status".');
+      setDRows(parsed);
+    } catch (e) { setDError(e instanceof Error ? e.message : "Could not read file."); }
+    finally { setDParsing(false); }
+  }
+  async function doDisputeImport() {
+    setDError(null); setDImporting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/amazon/disputes-import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: dRows }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; summary?: ImportSummary; error?: string };
+      if (!res.ok || !j.ok || !j.summary) throw new Error(j.error ?? `HTTP ${res.status}`);
+      setDSummary(j.summary); onImported();
+    } catch (e) { setDError(e instanceof Error ? e.message : "Import failed."); }
+    finally { setDImporting(false); }
+  }
+
+  // Payments handlers
+  async function onPFile(file: File) {
+    setPError(null); setPSummary(null); setPRows([]); setPFile(file.name); setPParsing(true);
+    try {
+      const sheet = await readSheet(file);
+      const parsed = parsePaymentsSheet(sheet);
+      if (parsed.length === 0) setPError('No payment rows found. Expected columns like "Payment Number", "Date", "Net Amount".');
+      setPRows(parsed);
+    } catch (e) { setPError(e instanceof Error ? e.message : "Could not read file."); }
+    finally { setPParsing(false); }
+  }
+  async function doPaymentsImport() {
+    setPError(null); setPImporting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/amazon/payments-import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ payments: pRows }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; summary?: typeof pSummary; error?: string };
+      if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      setPSummary(j.summary ?? null); onImported();
+    } catch (e) { setPError(e instanceof Error ? e.message : "Import failed."); }
+    finally { setPImporting(false); }
+  }
+
+  // Returns handlers
+  async function onRFile(file: File) {
+    setRError(null); setRSummary(null); setRRows([]); setRFile(file.name); setRParsing(true);
+    try {
+      const sheet = await readSheet(file);
+      const parsed = parseReturnsSheet(sheet);
+      if (parsed.length === 0) setRError('No return rows found. Expected columns like "Return ID", "Date Received", "Total Cost".');
+      setRRows(parsed);
+    } catch (e) { setRError(e instanceof Error ? e.message : "Could not read file."); }
+    finally { setRParsing(false); }
+  }
+  async function doReturnsImport() {
+    setRError(null); setRImporting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/amazon/return-items-import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: rRows }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; summary?: typeof rSummary; error?: string };
+      if (!res.ok || !j.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      setRSummary(j.summary ?? null); onImported();
+    } catch (e) { setRError(e instanceof Error ? e.message : "Import failed."); }
+    finally { setRImporting(false); }
+  }
+
+  const TABS: { key: ImportTab; label: string }[] = [
+    { key: "disputes", label: "Disputes" },
+    { key: "payments", label: "Remittance Payments" },
+    { key: "returns", label: "Return Items" },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Upload / Import</h3>
+        <div className="mt-3 flex gap-1 border-b border-slate-200 dark:border-slate-800">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`rounded-t px-3 py-1.5 text-xs font-medium transition-colors ${tab === t.key ? "border-b-2 border-indigo-600 text-indigo-600" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Disputes tab */}
+        {tab === "disputes" ? (
+          <div className="mt-4">
+            <p className="mb-3 text-xs text-slate-500">Upload the "Disputes" export (xlsx or csv) from Vendor Central. Statuses and approved amounts are applied; resolved disputes auto-close their Amazon Action.</p>
+            {!dSummary ? (
+              <>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onDFile(f); }} className={inputClass} />
+                {dParsing ? <p className="mt-2 text-sm text-slate-500">Reading {dFile}…</p> : null}
+                {!dParsing && dRows.length > 0 ? (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                    <div className="flex justify-between"><span className="text-slate-500">Rows</span><span className="font-semibold">{dRows.length}</span></div>
+                    <div className="flex justify-between mt-1"><span className="text-slate-500">Total approved</span><span className="font-semibold">{formatAED(dRows.reduce((s, r) => s + (r.approvedAed ?? 0), 0))}</span></div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-lg bg-emerald-50 p-3 text-sm dark:bg-emerald-950/40">
+                <p className="font-medium text-emerald-800 dark:text-emerald-300">✓ Imported {dSummary.parsed} rows.</p>
+                <p className="mt-1 text-emerald-700 dark:text-emerald-200">{dSummary.disputesCreated} created · {dSummary.disputesUpdated} updated · {dSummary.actionsClosed} auto-closed</p>
+              </div>
+            )}
+            {dError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{dError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className={btnSecondary}>{dSummary ? "Done" : "Cancel"}</button>
+              {!dSummary ? <button type="button" onClick={() => void doDisputeImport()} disabled={dImporting || dRows.length === 0} className={btnPrimary}>{dImporting ? "Importing…" : `Import ${dRows.length || ""}`.trim()}</button> : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Payments tab */}
+        {tab === "payments" ? (
+          <div className="mt-4">
+            <p className="mb-3 text-xs text-slate-500">Upload a remittance payments report (xlsx/csv). Expected columns: Payment Number, Payment Date, Net Amount. Existing records are patched (blank fields only — email-parsed data is never overwritten).</p>
+            {!pSummary ? (
+              <>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onPFile(f); }} className={inputClass} />
+                {pParsing ? <p className="mt-2 text-sm text-slate-500">Reading {pFile}…</p> : null}
+                {!pParsing && pRows.length > 0 ? (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                    <div className="flex justify-between"><span className="text-slate-500">Rows</span><span className="font-semibold">{pRows.length}</span></div>
+                    <div className="flex justify-between mt-1"><span className="text-slate-500">Total net</span><span className="font-semibold">{formatAED(pRows.reduce((s, r) => s + (r.netPaidAed ?? 0), 0))}</span></div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-lg bg-emerald-50 p-3 text-sm dark:bg-emerald-950/40">
+                <p className="font-medium text-emerald-800 dark:text-emerald-300">✓ Payments imported.</p>
+                <p className="mt-1 text-emerald-700 dark:text-emerald-200">{pSummary.paymentsCreated} created · {pSummary.paymentsUpdated} updated</p>
+              </div>
+            )}
+            {pError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{pError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className={btnSecondary}>{pSummary ? "Done" : "Cancel"}</button>
+              {!pSummary ? <button type="button" onClick={() => void doPaymentsImport()} disabled={pImporting || pRows.length === 0} className={btnPrimary}>{pImporting ? "Importing…" : `Import ${pRows.length || ""}`.trim()}</button> : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Return Items tab */}
+        {tab === "returns" ? (
+          <div className="mt-4">
+            <p className="mb-3 text-xs text-slate-500">Upload the Amazon returns report (xlsx/csv). Expected columns: Return ID, Date Received, Return Type, Total Cost, Qty. New returns are created; existing ones have blank fields patched.</p>
+            {!rSummary ? (
+              <>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onRFile(f); }} className={inputClass} />
+                {rParsing ? <p className="mt-2 text-sm text-slate-500">Reading {rFile}…</p> : null}
+                {!rParsing && rRows.length > 0 ? (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                    <div className="flex justify-between"><span className="text-slate-500">Rows</span><span className="font-semibold">{rRows.length}</span></div>
+                    <div className="flex justify-between mt-1"><span className="text-slate-500">Total cost</span><span className="font-semibold">{formatAED(rRows.reduce((s, r) => s + r.total_cost_aed, 0))}</span></div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-lg bg-emerald-50 p-3 text-sm dark:bg-emerald-950/40">
+                <p className="font-medium text-emerald-800 dark:text-emerald-300">✓ Returns imported.</p>
+                <p className="mt-1 text-emerald-700 dark:text-emerald-200">{rSummary.created} created · {rSummary.updated} updated · {rSummary.parsed} total rows</p>
+              </div>
+            )}
+            {rError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{rError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className={btnSecondary}>{rSummary ? "Done" : "Cancel"}</button>
+              {!rSummary ? <button type="button" onClick={() => void doReturnsImport()} disabled={rImporting || rRows.length === 0} className={btnPrimary}>{rImporting ? "Importing…" : `Import ${rRows.length || ""}`.trim()}</button> : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------- advanced search --------------------------- */
 
 function AdvancedSearch() {
@@ -669,6 +1100,17 @@ function AmazonActionsContent() {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  function applyPreset(days: number): void {
+    const now = new Date();
+    const from = new Date(now);
+    from.setDate(from.getDate() - days);
+    setDateFrom(from.toISOString().slice(0, 10));
+    setDateTo(now.toISOString().slice(0, 10));
+  }
+  function clearDates(): void { setDateFrom(""); setDateTo(""); }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -708,15 +1150,19 @@ function AmazonActionsContent() {
   const list = useMemo(() => {
     let rows = showResolved ? actions : actions.filter((a) => !a.resolved);
     rows = rows.filter((a) => matchesFilter(a, categoryFilter));
+    if (dateFrom) rows = rows.filter((a) => a.emailReceivedAt.slice(0, 10) >= dateFrom);
+    if (dateTo) rows = rows.filter((a) => a.emailReceivedAt.slice(0, 10) <= dateTo);
     return [...rows].sort(byDate);
-  }, [actions, showResolved, categoryFilter, byDate]);
+  }, [actions, showResolved, categoryFilter, byDate, dateFrom, dateTo]);
 
   const queue = useMemo(() => {
-    const base = missingDocumentationQueue(actions).filter((a) =>
+    let base = missingDocumentationQueue(actions).filter((a) =>
       matchesFilter(a, categoryFilter)
     );
+    if (dateFrom) base = base.filter((a) => a.emailReceivedAt.slice(0, 10) >= dateFrom);
+    if (dateTo) base = base.filter((a) => a.emailReceivedAt.slice(0, 10) <= dateTo);
     return [...base].sort(byDate);
-  }, [actions, categoryFilter, byDate]);
+  }, [actions, categoryFilter, byDate, dateFrom, dateTo]);
 
   /** Open a linked record: select its tab if needed, expand it, scroll to it. */
   const openLinked = useCallback(
@@ -782,7 +1228,7 @@ function AmazonActionsContent() {
                 onClick={() => setShowImport(true)}
                 className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                ⬆ Import dispute report
+                ⬆ Upload / Import
               </button>
             ) : null}
             <span className="text-xs text-slate-500">Sort</span>
@@ -795,6 +1241,41 @@ function AmazonActionsContent() {
               <option value="oldest">Oldest first</option>
             </select>
           </div>
+        </div>
+
+        {/* Date range filter */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-500 shrink-0">Date range</span>
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => applyPreset(d)}
+              className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Last {d}d
+            </button>
+          ))}
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            title="From date"
+          />
+          <span className="text-xs text-slate-400">–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            title="To date"
+          />
+          {(dateFrom || dateTo) ? (
+            <button type="button" onClick={clearDates} className="text-xs text-slate-400 underline hover:text-slate-600">
+              Clear
+            </button>
+          ) : null}
         </div>
         <div className="mt-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -956,9 +1437,9 @@ function AmazonActionsContent() {
       ) : null}
 
       {showImport ? (
-        <ImportDisputesModal
+        <UnifiedImportModal
           onClose={() => setShowImport(false)}
-          onImported={() => { setBanner("Dispute report imported — statuses updated."); void load(); }}
+          onImported={() => { setBanner("Import complete — data refreshed."); void load(); }}
         />
       ) : null}
     </div>

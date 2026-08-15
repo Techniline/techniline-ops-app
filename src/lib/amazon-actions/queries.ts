@@ -176,11 +176,15 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
   ]);
 
   const latestByEa = new Map<string, ActionLog>();
+  const allLogsByEa = new Map<string, ActionLog[]>();
   for (const log of logs) {
     const current = latestByEa.get(log.expected_action_id);
     if (!current || log.created_at > current.created_at) {
       latestByEa.set(log.expected_action_id, log);
     }
+    const arr = allLogsByEa.get(log.expected_action_id) ?? [];
+    arr.push(log);
+    allLogsByEa.set(log.expected_action_id, arr);
   }
 
   const refIndex = buildReferenceIndex(logs);
@@ -241,6 +245,9 @@ export async function fetchAmazonActions(): Promise<AmazonAction[]> {
       missingKind: missingDocumentation ? missingKindFor(category) : null,
       duplicateWarning,
       enrichment: mergeEnrichment(enrichmentFromLog(log), enrichmentFromSubject(ea.email_subject)),
+      allLogs: (allLogsByEa.get(ea.id) ?? []).sort((a, b) =>
+        b.created_at.localeCompare(a.created_at)
+      ),
     };
   });
 }

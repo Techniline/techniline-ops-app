@@ -117,6 +117,9 @@ export interface AmazonAction {
 
   /** Latest logged enrichment (for display + modal prefill). */
   enrichment: ActionEnrichment;
+
+  /** Full append-only audit trail, newest first. */
+  allLogs: ActionLog[];
 }
 
 /** A row returned by the read-only search_all RPC. */

@@ -52,6 +52,7 @@ export async function fetchLpOverview(): Promise<LpOverviewRow[]> {
     const { data, error } = await supabase
       .from("lp_orders_overview")
       .select("*")
+      .gt("total_remaining_qty", 0)
       .order("ageing_days", { ascending: false })
       .range(offset, offset + PAGE - 1);
     if (error) throw error;
