@@ -567,6 +567,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               <th className="px-2 py-2 text-left">Country</th>
               <th className="px-2 py-2 text-left">HS Code</th>
               <th className="px-2 py-2 text-right">Qty</th>
+              <th className="px-2 py-2 text-right" title="Units per master carton (from catalog)">Pcs/Ctn</th>
               <th className="px-2 py-2 text-center">Box</th>
               <th className="px-2 py-2 text-right">Weight kg</th>
               {mode === "invoice" && <th className="px-2 py-2 text-right">Unit Price</th>}
@@ -622,6 +623,13 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                       onChange={(e) => updateLine(ln.key, "qty", e.target.value)} />
                   </td>
 
+                  {/* Pcs per carton — read-only, builder only, not printed */}
+                  <td className="px-2 py-1.5 text-right text-xs tabular-nums">
+                    {ln._carton_qty != null
+                      ? <span className="text-slate-500">{ln._carton_qty}</span>
+                      : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                  </td>
+
                   {/* Box badge */}
                   <td className="px-2 py-1.5 text-center">
                     {ln.box_no > 0 ? (
@@ -664,6 +672,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             <tr className="border-t border-slate-200 bg-slate-50 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800/60">
               <td colSpan={7} className="px-2 py-2 text-right text-slate-500">Total</td>
               <td className="px-2 py-2 text-right tabular-nums">{lines.reduce((s, l) => s + l.qty, 0)}</td>
+              <td />{/* Pcs/Ctn — no total */}
               <td />
               <td className="px-2 py-2 text-right tabular-nums">{totWeight.toFixed(2)}</td>
               {mode === "invoice" && <td />}
