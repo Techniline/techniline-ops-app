@@ -55,15 +55,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     consignee_address?: string | null;
     notes?: string | null;
     status?: string;
+    shipping_label?: string | null;
     items?: Record<string, unknown>[];
   };
 
   const svc = svcClient();
-  const { company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, items } = body;
+  const { company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, shipping_label, items } = body;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateErr } = await (svc.from("packing_lists" as any) as any)
-    .update({ company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, updated_at: new Date().toISOString() })
+    .update({ company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, shipping_label: shipping_label ?? null, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (updateErr) return Response.json({ ok: false, error: updateErr.message }, { status: 400 });
 

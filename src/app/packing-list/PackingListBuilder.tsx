@@ -170,6 +170,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   const [consigneeName, setConsigneeName] = useState("");
   const [consigneeAddress, setConsigneeAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [shippingLabel, setShippingLabel] = useState("");
   const [lines, setLines] = useState<PackingLine[]>([newLine()]);
 
   // Box assignment
@@ -203,7 +204,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       setCompany(l.company); setMode(l.mode);
       setInvoiceNo(l.invoice_no ?? ""); setListDate(l.list_date ?? TODAY);
       setConsigneeName(l.consignee_name ?? ""); setConsigneeAddress(l.consignee_address ?? "");
-      setNotes(l.notes ?? "");
+      setNotes(l.notes ?? ""); setShippingLabel(l.shipping_label ?? "");
 
       // Reconstruct boxData: for each box_no > 0, sum no_of_ctns (only primary > 0) and take first cbm > 0
       const newBoxData: Record<number, BoxMeta> = {};
@@ -341,6 +342,35 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
     setBoxData((prev) => { const n = { ...prev }; delete n[boxNo]; return n; });
   }
 
+  function autoSplitLine(key: string) {
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.key === key);
+      if (idx === -1) return prev;
+      const o = prev[idx];
+      const cq = o._carton_qty;
+      if (!cq || cq <= 0 || o.qty <= cq) return prev;
+      const sku = { unit_weight_kg: o._unit_weight_kg, unit_cbm: o._unit_cbm, carton_qty: o._carton_qty, carton_weight_kg: o._carton_weight_kg, carton_cbm: o._carton_cbm };
+      const newRows: PackingLine[] = [];
+      let remaining = o.qty - cq;
+      while (remaining > 0) {
+        const chunkQty = Math.min(cq, remaining);
+        const phys = computePhysical(chunkQty, sku);
+        newRows.push({ ...o, key: Math.random().toString(36).slice(2), qty: chunkQty, ...phys, amount: chunkQty * o.unit_price, box_no: 0, _parent_key: undefined, _split_from_qty: undefined });
+        remaining -= chunkQty;
+      }
+      const firstPhys = computePhysical(cq, sku);
+      const updatedFirst = { ...o, qty: cq, ...firstPhys, amount: cq * o.unit_price, box_no: 0, _parent_key: undefined, _split_from_qty: undefined };
+      const next = [...prev];
+      next.splice(idx, 1, updatedFirst, ...newRows);
+      return next;
+    });
+  }
+
+  function boxLabel(boxNo: number): string {
+    const lbl = shippingLabel.trim().toUpperCase();
+    return lbl ? `${lbl}-${String(boxNo).padStart(2, "0")}` : `Box ${boxNo}`;
+  }
+
   // PDF import
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -429,7 +459,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
           amount: mode === "invoice" ? l.amount : null,
         };
       });
-      const payload = { company, mode, invoice_no: invoiceNo || null, list_date: listDate, consignee_name: consigneeName || null, consignee_address: consigneeAddress || null, notes: notes || null, status, items };
+      const payload = { company, mode, invoice_no: invoiceNo || null, list_date: listDate, consignee_name: consigneeName || null, consignee_address: consigneeAddress || null, notes: notes || null, status, shipping_label: shippingLabel.trim() || null, items };
       const res = await fetch(id ? `/api/packing/lists/${id}` : "/api/packing/lists", {
         method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -515,9 +545,17 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             <input type="date" className={inputCls} value={listDate} onChange={(e) => setListDate(e.target.value)} /></div>
           <div><label className="mb-1 block text-xs font-medium text-slate-500">Consignee Name</label>
             <input className={inputCls} placeholder="Customer / Company" value={consigneeName} onChange={(e) => setConsigneeName(e.target.value)} /></div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Shipping Label
+              <span className="ml-1 font-normal text-slate-400">(e.g. MYG → MYG-01, MYG-02…)</span>
+            </label>
+            <input className={`${inputCls} uppercase`} placeholder="e.g. MYG" value={shippingLabel}
+              onChange={(e) => setShippingLabel(e.target.value.toUpperCase())} />
+          </div>
           <div><label className="mb-1 block text-xs font-medium text-slate-500">Notes</label>
             <input className={inputCls} placeholder="Optional notes" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
-          <div className="col-span-2 md:col-span-4">
+          <div className="col-span-2 md:col-span-3">
             <label className="mb-1 block text-xs font-medium text-slate-500">Consignee Address</label>
             <textarea rows={2} className={`${inputCls} resize-none`} placeholder="Address, City, Country"
               value={consigneeAddress} onChange={(e) => setConsigneeAddress(e.target.value)} />
@@ -535,7 +573,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             return (
               <button key={b} type="button" onClick={() => assignToBox(b)}
                 className={`rounded-full px-3 py-0.5 text-xs font-semibold ${col.badge}`}>
-                Box {b}
+                {boxLabel(b)}
               </button>
             );
           })}
@@ -633,7 +671,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                   {/* Box badge */}
                   <td className="px-2 py-1.5 text-center">
                     {ln.box_no > 0 ? (
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${col!.badge}`}>Box {ln.box_no}</span>
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${col!.badge}`}>{boxLabel(ln.box_no)}</span>
                     ) : (
                       <span className="inline-block rounded-full border border-dashed border-slate-300 px-2.5 py-0.5 text-xs text-slate-400 dark:border-slate-600">Unassigned</span>
                     )}
@@ -658,8 +696,13 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                         className="rounded p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▲</button>
                       <button type="button" title="Move down" onClick={() => moveLine(ln.key, "down")} disabled={idx === lines.length - 1}
                         className="rounded p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▼</button>
-                      <button type="button" title="Split into 2 rows (for items that span multiple boxes)" onClick={() => splitLine(ln.key)}
+                      <button type="button" title="Split manually into 2 rows" onClick={() => splitLine(ln.key)}
                         className="rounded p-0.5 text-slate-300 hover:text-indigo-500 text-xs">✂</button>
+                      <button type="button"
+                        title={ln._carton_qty && ln._carton_qty > 0 && ln.qty > ln._carton_qty ? `Auto-split by carton (${ln._carton_qty} pcs each)` : "Auto-split (needs carton qty from catalog)"}
+                        disabled={!ln._carton_qty || ln._carton_qty <= 0 || ln.qty <= ln._carton_qty}
+                        onClick={() => autoSplitLine(ln.key)}
+                        className="rounded p-0.5 text-slate-300 hover:text-violet-500 disabled:opacity-20 text-xs">⊡</button>
                       <button type="button" title="Remove line" onClick={() => setLines((p) => p.filter((x) => x.key !== ln.key))}
                         className="rounded p-0.5 text-slate-300 hover:text-red-500 text-xs">✕</button>
                     </div>
@@ -707,7 +750,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                 <div key={boxNo} className={`flex flex-wrap items-center gap-3 px-4 py-3 ${col.row.split(" ")[0]}`}>
                   <div className="flex items-center gap-2 min-w-[80px]">
                     <span className={`h-3 w-3 rounded-full flex-shrink-0 ${col.dot}`} />
-                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Box {boxNo}</span>
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{boxLabel(boxNo)}</span>
                   </div>
                   <span className="text-xs text-slate-500">{boxLines.length} item{boxLines.length !== 1 ? "s" : ""}</span>
 

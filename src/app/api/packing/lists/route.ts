@@ -49,6 +49,7 @@ export async function POST(request: Request): Promise<Response> {
     consignee_address: string | null;
     notes: string | null;
     status: string;
+    shipping_label: string | null;
     items: Record<string, unknown>[];
   };
 
@@ -64,6 +65,7 @@ export async function POST(request: Request): Promise<Response> {
       consignee_address: body.consignee_address || null,
       notes: body.notes || null,
       status: body.status ?? "draft",
+      shipping_label: body.shipping_label || null,
       created_by: user.id,
     })
     .select("id")

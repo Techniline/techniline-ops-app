@@ -59,6 +59,13 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
   const totCBM = items.reduce((s, i) => s + (i.tot_cbm ?? 0), 0);
   const totWeight = items.reduce((s, i) => s + (i.total_weight_kg ?? 0), 0);
   const totCtns = items.reduce((s, i) => s + (i.no_of_ctns ?? 0), 0);
+  const shippingLabel = (list as { shipping_label?: string | null }).shipping_label ?? null;
+
+  const assignedBoxNos = [...new Set(items.map((i) => i.box_no).filter((b): b is number => (b ?? 0) > 0))].sort((a, b) => a - b);
+  function boxLabel(boxNo: number) {
+    const lbl = shippingLabel?.trim().toUpperCase() ?? "";
+    return lbl ? `${lbl}-${String(boxNo).padStart(2, "0")}` : `Box ${boxNo}`;
+  }
   const subtotal = items.reduce((s, i) => s + (i.amount ?? 0), 0);
   const vat = Math.round(subtotal * 0.05 * 100) / 100;
   const grandTotal = subtotal + vat;
@@ -202,6 +209,36 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
             <p>Total Cartons:— {totCtns}</p>
             {countries && <p>Country of Origin:— {countries}</p>}
           </div>
+
+          {/* Box Summary — screen only */}
+          {assignedBoxNos.length > 0 && (
+            <div className="mt-6 rounded-xl border border-slate-200 overflow-hidden print:hidden dark:border-slate-700">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">📦 Box Summary</h3>
+                {shippingLabel && <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">Shipping label: {shippingLabel.toUpperCase()}</span>}
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {assignedBoxNos.map((boxNo) => {
+                  const boxItems = items.filter((i) => (i.box_no ?? 0) === boxNo);
+                  const boxCtns = boxItems.reduce((s, i) => s + (i.no_of_ctns ?? 0), 0);
+                  const boxCBM = boxItems.reduce((s, i) => s + (i.tot_cbm ?? 0), 0);
+                  const boxWeight = boxItems.reduce((s, i) => s + (i.total_weight_kg ?? 0), 0);
+                  return (
+                    <div key={boxNo} className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900">
+                      <span className="min-w-[90px] text-sm font-bold text-slate-700 dark:text-slate-200">{boxLabel(boxNo)}</span>
+                      <span className="text-xs text-slate-500">{boxItems.length} item{boxItems.length !== 1 ? "s" : ""}</span>
+                      {boxCtns > 0 && <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">CTNs: {boxCtns}</span>}
+                      {boxCBM > 0 && <span className="text-xs text-slate-500">CBM: {fmt5(boxCBM)}</span>}
+                      <span className="text-xs text-slate-500">{boxWeight.toFixed(2)} kg</span>
+                      <div className="flex-1 min-w-0 text-xs text-slate-400 truncate">
+                        {boxItems.map((i) => `${i.model_no} ×${i.qty}`).join(" · ")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Signature block */}
           <div className="mt-10 grid grid-cols-2 gap-6 text-sm">

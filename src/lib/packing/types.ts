@@ -30,6 +30,7 @@ export interface PackingListRow {
   consignee_address: string | null;
   notes: string | null;
   status: PackingStatus;
+  shipping_label: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
