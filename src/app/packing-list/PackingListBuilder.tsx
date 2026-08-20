@@ -257,18 +257,33 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
   function updateLine(lineKey: string, field: keyof PackingLine, raw: string) {
     const numFields = new Set<keyof PackingLine>(["qty", "unit_price"]);
-    setLines((prev) => prev.map((ln) => {
-      if (ln.key !== lineKey) return ln;
-      const val = numFields.has(field) ? (Number(raw) || 0) : raw;
-      const updated = { ...ln, [field]: val };
-      if (field === "qty") {
-        const sku = { unit_weight_kg: ln._unit_weight_kg, unit_cbm: ln._unit_cbm, carton_qty: ln._carton_qty, carton_weight_kg: ln._carton_weight_kg, carton_cbm: ln._carton_cbm };
-        const phys = computePhysical(Number(raw) || 0, sku);
-        return { ...updated, ...phys, amount: (Number(raw) || 0) * ln.unit_price };
-      }
-      if (field === "unit_price") return { ...updated, amount: ln.qty * (Number(raw) || 0) };
-      return updated;
-    }));
+    setLines((prev) => {
+      // Find the line being edited — needed for split parent lookup
+      const editedLine = prev.find((l) => l.key === lineKey);
+      return prev.map((ln) => {
+        if (ln.key === lineKey) {
+          const val = numFields.has(field) ? (Number(raw) || 0) : raw;
+          const updated = { ...ln, [field]: val };
+          if (field === "qty") {
+            const sku = { unit_weight_kg: ln._unit_weight_kg, unit_cbm: ln._unit_cbm, carton_qty: ln._carton_qty, carton_weight_kg: ln._carton_weight_kg, carton_cbm: ln._carton_cbm };
+            const phys = computePhysical(Number(raw) || 0, sku);
+            return { ...updated, ...phys, amount: (Number(raw) || 0) * ln.unit_price };
+          }
+          if (field === "unit_price") return { ...updated, amount: ln.qty * (Number(raw) || 0) };
+          return updated;
+        }
+        // Auto-adjust parent when a split row's qty changes
+        if (field === "qty" && editedLine?._parent_key === ln.key) {
+          const splitQty = Number(raw) || 0;
+          const original = editedLine._split_from_qty ?? (ln.qty + splitQty);
+          const remaining = Math.max(0, original - splitQty);
+          const sku = { unit_weight_kg: ln._unit_weight_kg, unit_cbm: ln._unit_cbm, carton_qty: ln._carton_qty, carton_weight_kg: ln._carton_weight_kg, carton_cbm: ln._carton_cbm };
+          const phys = computePhysical(remaining, sku);
+          return { ...ln, qty: remaining, ...phys, amount: remaining * ln.unit_price };
+        }
+        return ln;
+      });
+    });
   }
 
   function moveLine(key: string, dir: "up" | "down") {
@@ -288,13 +303,16 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       const idx = prev.findIndex((l) => l.key === key);
       if (idx === -1) return prev;
       const o = prev[idx];
-      const sku = { unit_weight_kg: o._unit_weight_kg, unit_cbm: o._unit_cbm, carton_qty: o._carton_qty, carton_weight_kg: o._carton_weight_kg, carton_cbm: o._carton_cbm };
-      const splitQty = Math.ceil(o.qty / 2);
-      const remainQty = Math.max(1, o.qty - splitQty);
-      const splitRow: PackingLine = { ...o, key: Math.random().toString(36).slice(2), qty: remainQty, ...computePhysical(remainQty, sku), amount: remainQty * o.unit_price, box_no: 0 };
-      const updatedOrig = { ...o, qty: splitQty, ...computePhysical(splitQty, sku), amount: splitQty * o.unit_price };
+      const splitRow: PackingLine = {
+        ...o,
+        key: Math.random().toString(36).slice(2),
+        qty: 0,
+        no_of_ctns: 0, tot_cbm: 0, total_weight_kg: 0, amount: 0,
+        box_no: 0,
+        _parent_key: o.key,
+        _split_from_qty: o.qty,
+      };
       const next = [...prev];
-      next[idx] = updatedOrig;
       next.splice(idx + 1, 0, splitRow);
       return next;
     });

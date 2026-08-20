@@ -74,6 +74,9 @@ export interface PackingLine {
   _carton_qty: number | null;
   _carton_weight_kg: number | null;
   _carton_cbm: number | null;
+  // split tracking (UI-only, not persisted)
+  _parent_key?: string;
+  _split_from_qty?: number;
 }
 
 export const COMPANY_INFO: Record<PackingCompany, {

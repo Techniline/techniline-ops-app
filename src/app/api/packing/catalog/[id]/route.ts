@@ -27,10 +27,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!(await getUser(request))) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   const { id } = await params;
   const body = (await request.json()) as Record<string, unknown>;
+  // Strip read-only / generated fields that must not appear in the UPDATE payload
+  const { id: _id, created_at: _ca, created_by: _cb, source: _src, updated_at: _ua, ...writable } = body;
+  void _id; void _ca; void _cb; void _src; void _ua;
   const svc = svcClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (svc.from("packing_sku_catalog" as any) as any)
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...writable, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();
