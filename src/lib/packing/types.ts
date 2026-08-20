@@ -50,6 +50,7 @@ export interface PackingListItemRow {
   total_weight_kg: number | null;
   unit_price: number | null;
   amount: number | null;
+  box_no: number | null;
 }
 
 /** Editable line during builder session (before save). */
@@ -66,6 +67,7 @@ export interface PackingLine {
   total_weight_kg: number;
   unit_price: number; // invoice mode only
   amount: number; // qty × unit_price
+  box_no: number; // physical carton assignment; shared box_no = merged into one carton
   // source catalog data (for recalc)
   _unit_weight_kg: number | null;
   _unit_cbm: number | null;

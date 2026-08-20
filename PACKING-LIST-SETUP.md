@@ -91,6 +91,12 @@ create policy "packing_list_items_all" on public.packing_list_items
   using (true) with check (true);
 ```
 
+## 2b. Migration — add box_no column (run if tables already exist)
+
+```sql
+ALTER TABLE public.packing_list_items ADD COLUMN IF NOT EXISTS box_no integer;
+```
+
 ## 3. After running
 
 - Go to `/packing-list/catalog` in the app to verify the catalog loaded
