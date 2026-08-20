@@ -54,10 +54,9 @@ interface SkuModalProps {
   initial: Partial<SkuCatalogRow>;
   onSave: (sku: SkuCatalogRow) => void;
   onClose: () => void;
-  token: string;
 }
 
-function SkuModal({ initial, onSave, onClose, token }: SkuModalProps) {
+function SkuModal({ initial, onSave, onClose }: SkuModalProps) {
   const [form, setForm] = useState<Partial<SkuCatalogRow>>(initial);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -70,6 +69,7 @@ function SkuModal({ initial, onSave, onClose, token }: SkuModalProps) {
     if (!form.model_no?.trim()) { setErr("Model No is required."); return; }
     setSaving(true); setErr(null);
     try {
+      const token = await getToken();
       const method = form.id ? "PUT" : "POST";
       const url = form.id ? `/api/packing/catalog/${form.id}` : "/api/packing/catalog";
       const res = await fetch(url, {
@@ -204,7 +204,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
         );
       })
       .catch(() => {});
-  }, [editId, searchParams, token]);
+  }, [editId, searchParams]);
 
   // Debounced SKU search
   const searchSku = useCallback(
@@ -553,7 +553,6 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       {skuModal && (
         <SkuModal
           initial={skuModal.initial}
-          token={token}
           onClose={() => setSkuModal(null)}
           onSave={(sku) => {
             applySku(sku, skuModal.lineKey);
