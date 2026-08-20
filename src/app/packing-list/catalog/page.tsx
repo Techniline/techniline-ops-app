@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useAuth } from "@/app/providers/AuthProvider";
+import { supabase } from "@/lib/supabaseClient";
 import type { SkuCatalogRow } from "@/lib/packing/types";
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 import Link from "next/link";
 
 function SkuForm({
@@ -80,8 +85,6 @@ function SkuForm({
 }
 
 export default function PackingCatalogPage() {
-  const { session } = useAuth();
-  const token = session?.access_token ?? "";
   const [items, setItems] = useState<SkuCatalogRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,16 +94,16 @@ export default function PackingCatalogPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
     setLoading(true); setError(null);
     try {
+      const token = await getToken();
       const res = await fetch("/api/packing/catalog", { headers: { Authorization: `Bearer ${token}` } });
       const json = (await res.json()) as { ok: boolean; items?: SkuCatalogRow[]; error?: string };
       if (!json.ok) throw new Error(json.error);
       setItems(json.items ?? []);
     } catch (e) { setError(e instanceof Error ? e.message : "Load failed."); }
     finally { setLoading(false); }
-  }, [token]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -118,6 +121,7 @@ export default function PackingCatalogPage() {
   async function handleDelete(id: string) {
     if (!confirm("Remove this SKU from catalog?")) return;
     setDeleting(id);
+    const token = await getToken();
     try {
       await fetch(`/api/packing/catalog/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       setItems((p) => p.filter((i) => i.id !== id));

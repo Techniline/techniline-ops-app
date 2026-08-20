@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { use } from "react";
 
-import { useAuth } from "@/app/providers/AuthProvider";
+import { supabase } from "@/lib/supabaseClient";
 import {
   COMPANY_INFO,
   aedToWords,
@@ -12,6 +12,11 @@ import {
   type PackingListItemRow,
   type PackingListRow,
 } from "@/lib/packing/types";
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 
 function fmt2(n: number) {
   return n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -23,8 +28,6 @@ function fmt5(n: number | null | undefined) {
 
 export default function PackingListView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { session } = useAuth();
-  const token = session?.access_token ?? "";
 
   const [list, setList] = useState<PackingListRow | null>(null);
   const [items, setItems] = useState<PackingListItemRow[]>([]);
@@ -32,17 +35,19 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token || !id) return;
-    fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((json) => {
-        if (!json.ok) throw new Error(json.error ?? "Not found");
-        setList(json.list);
-        setItems(json.items ?? []);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [id, token]);
+    if (!id) return;
+    getToken().then((token) => {
+      fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!json.ok) throw new Error(json.error ?? "Not found");
+          setList(json.list);
+          setItems(json.items ?? []);
+        })
+        .catch((e: Error) => setError(e.message))
+        .finally(() => setLoading(false));
+    });
+  }, [id]);
 
   if (loading) return <div className="flex h-64 items-center justify-center text-sm text-slate-400">Loading…</div>;
   if (error || !list) return <div className="p-6 text-sm text-red-600">{error ?? "Not found."}</div>;

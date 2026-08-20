@@ -4,8 +4,13 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { useAuth } from "@/app/providers/AuthProvider";
+import { supabase } from "@/lib/supabaseClient";
 import type { PackingListRow } from "@/lib/packing/types";
+
+async function getToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 
 function badge(status: string) {
   return status === "final"
@@ -18,9 +23,7 @@ function modeLabel(mode: string) {
 }
 
 export default function PackingListPage() {
-  const { session } = useAuth();
   const router = useRouter();
-  const token = session?.access_token ?? "";
 
   const [lists, setLists] = useState<PackingListRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,17 +36,18 @@ export default function PackingListPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "final">("all");
 
   useEffect(() => {
-    if (!token) return;
     setLoading(true);
-    fetch("/api/packing/lists", { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.ok) setLists(json.lists ?? []);
-        else setError(json.error ?? "Load failed.");
-      })
-      .catch(() => setError("Network error."))
-      .finally(() => setLoading(false));
-  }, [token]);
+    getToken().then((token) => {
+      fetch("/api/packing/lists", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.ok) setLists(json.lists ?? []);
+          else setError(json.error ?? "Load failed.");
+        })
+        .catch(() => setError("Network error."))
+        .finally(() => setLoading(false));
+    }).catch(() => setLoading(false));
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -58,6 +62,7 @@ export default function PackingListPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this packing list? This cannot be undone.")) return;
     setDeleting(id);
+    const token = await getToken();
     try {
       await fetch(`/api/packing/lists/${id}`, {
         method: "DELETE",

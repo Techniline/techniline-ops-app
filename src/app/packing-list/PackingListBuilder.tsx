@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { useAuth } from "@/app/providers/AuthProvider";
+import { supabase } from "@/lib/supabaseClient";
 import {
   COMPANY_INFO,
   computePhysical,
@@ -13,6 +13,11 @@ import {
   type PackingMode,
   type SkuCatalogRow,
 } from "@/lib/packing/types";
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -155,8 +160,6 @@ function SkuModal({ initial, onSave, onClose, token }: SkuModalProps) {
 export default function PackingListBuilder({ editId }: { editId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { session } = useAuth();
-  const token = session?.access_token ?? "";
 
   const [company, setCompany] = useState<PackingCompany>("techniline");
   const [mode, setMode] = useState<PackingMode>("physical");
@@ -179,8 +182,8 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   // Load existing if editId
   useEffect(() => {
     const id = editId ?? searchParams.get("edit");
-    if (!id || !token) return;
-    fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!id) return;
+    getToken().then((token) => fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } }))
       .then((r) => r.json())
       .then((json) => {
         if (!json.ok) return;
@@ -211,6 +214,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       if (!q.trim()) { setSuggestions([]); return; }
       suggestRef.current = setTimeout(async () => {
         try {
+          const token = await getToken();
           const res = await fetch(`/api/packing/catalog?q=${encodeURIComponent(q)}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -219,7 +223,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
         } catch { /* ignore */ }
       }, 220);
     },
-    [token]
+    []
   );
 
   function applySku(sku: SkuCatalogRow, lineKey: string) {
@@ -284,6 +288,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
     setSaving(true); setSaveErr(null);
     const id = editId ?? searchParams.get("edit");
     try {
+      const token = await getToken();
       const payload = {
         company, mode, invoice_no: invoiceNo || null, list_date: listDate,
         consignee_name: consigneeName || null, consignee_address: consigneeAddress || null,
