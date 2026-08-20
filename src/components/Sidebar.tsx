@@ -174,6 +174,7 @@ export function Sidebar({
       items: [
         { href: "/cocoblu", label: "Cocoblu", icon: CocobluIcon, show: canViewCocoblu(profile) },
         { href: "/lp", label: "LP Tracker", icon: LpTrackerIcon, show: canViewLpTracker(profile) },
+        { href: "/catalog", label: "ERP Catalog", icon: ShopifyIcon, show: isManager(profile) },
       ],
     },
     {
@@ -185,6 +186,7 @@ export function Sidebar({
           icon: CargoIcon,
           show: canViewStockReservation(profile),
         },
+        { href: "/packing-list", label: "Packing List", icon: CargoIcon, show: true },
       ],
     },
     {
