@@ -15,12 +15,10 @@ function SkuForm({
   initial,
   onSave,
   onClose,
-  token,
 }: {
   initial: Partial<SkuCatalogRow>;
   onSave: (item: SkuCatalogRow) => void;
   onClose: () => void;
-  token: string;
 }) {
   const [form, setForm] = useState<Partial<SkuCatalogRow>>({ country_of_origin: "China", ...initial });
   const [saving, setSaving] = useState(false);
@@ -32,6 +30,7 @@ function SkuForm({
     if (!form.model_no?.trim()) { setErr("Model No is required."); return; }
     setSaving(true); setErr(null);
     try {
+      const token = await getToken();
       const method = form.id ? "PUT" : "POST";
       const url = form.id ? `/api/packing/catalog/${form.id}` : "/api/packing/catalog";
       const res = await fetch(url, {
@@ -236,7 +235,7 @@ export default function PackingCatalogPage() {
       )}
 
       {modal && (
-        <SkuForm initial={modal} token={token} onClose={() => setModal(null)} onSave={handleSave} />
+        <SkuForm initial={modal} onClose={() => setModal(null)} onSave={handleSave} />
       )}
     </div>
   );
