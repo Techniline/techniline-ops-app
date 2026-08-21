@@ -34,7 +34,7 @@ function fmt5(n: number) {
   return n.toFixed(5).replace(/\.?0+$/, "");
 }
 
-interface BoxMeta { ctns: number; cbm: number; }
+interface BoxMeta { ctns: number; }
 
 const BOX_COLOURS = [
   { row: "bg-sky-50/60 border-l-2 border-l-sky-400 dark:bg-sky-950/30", badge: "bg-sky-100 text-sky-700 border border-sky-200 dark:bg-sky-900/50 dark:text-sky-300 dark:border-sky-700", dot: "bg-sky-400" },
@@ -176,6 +176,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   // Box assignment
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [boxData, setBoxData] = useState<Record<number, BoxMeta>>({});
+  const [manualBoxNo, setManualBoxNo] = useState("");
 
   // SKU autocomplete
   const [suggestions, setSuggestions] = useState<SkuCatalogRow[]>([]);
@@ -208,12 +209,11 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
       // Reconstruct boxData: for each box_no > 0, sum no_of_ctns (only primary > 0) and take first cbm > 0
       const newBoxData: Record<number, BoxMeta> = {};
-      for (const item of json.items as Array<PackingLine & { box_no: number | null; no_of_ctns: number; tot_cbm: number }>) {
+      for (const item of json.items as Array<PackingLine & { box_no: number | null; no_of_ctns: number }>) {
         const b = item.box_no ?? 0;
         if (b === 0) continue;
-        if (!newBoxData[b]) newBoxData[b] = { ctns: 0, cbm: 0 };
+        if (!newBoxData[b]) newBoxData[b] = { ctns: 0 };
         newBoxData[b].ctns += item.no_of_ctns ?? 0;
-        if ((item.tot_cbm ?? 0) > 0 && newBoxData[b].cbm === 0) newBoxData[b].cbm = item.tot_cbm ?? 0;
       }
       setBoxData(newBoxData);
 
@@ -321,9 +321,11 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
   // Box assignment
   function assignToBox(boxNo: number) {
+    const selectedLines = lines.filter((l) => selectedKeys.has(l.key));
+    const defaultCtns = selectedLines.reduce((s, l) => s + l.no_of_ctns, 0) || 1;
     setLines((prev) => prev.map((l) => selectedKeys.has(l.key) ? { ...l, box_no: boxNo } : l));
     setSelectedKeys(new Set());
-    setBoxData((prev) => ({ ...prev, [boxNo]: prev[boxNo] ?? { ctns: 1, cbm: 0 } }));
+    setBoxData((prev) => ({ ...prev, [boxNo]: prev[boxNo] ?? { ctns: defaultCtns } }));
   }
 
   function assignToNewBox() {
@@ -428,8 +430,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   const unassignedFilled = lines.filter((l) => l.box_no === 0 && l.model_no.trim());
   const totCtns = uniqueAssignedBoxes.reduce((s, b) => s + (boxData[b]?.ctns ?? 0), 0)
     + unassignedFilled.reduce((s, l) => s + l.no_of_ctns, 0);
-  const totCBM = uniqueAssignedBoxes.reduce((s, b) => s + (boxData[b]?.cbm ?? 0), 0)
-    + unassignedFilled.reduce((s, l) => s + l.tot_cbm, 0);
+  const totCBM = lines.reduce((s, l) => s + l.tot_cbm, 0);
   const totWeight = lines.reduce((s, l) => s + l.total_weight_kg, 0);
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const vat = Math.round(subtotal * 0.05 * 100) / 100;
@@ -444,12 +445,12 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       const filledLines = lines.filter((l) => l.model_no.trim());
       const items = filledLines.map((l) => {
         let no_of_ctns = l.no_of_ctns;
-        let tot_cbm = l.tot_cbm;
+        const tot_cbm = l.tot_cbm; // always per-item computed value
         if (l.box_no > 0) {
           const boxLines = filledLines.filter((x) => x.box_no === l.box_no);
           const isPrimary = boxLines[0].key === l.key;
-          if (isPrimary) { no_of_ctns = boxData[l.box_no]?.ctns ?? 1; tot_cbm = boxData[l.box_no]?.cbm ?? 0; }
-          else { no_of_ctns = 0; tot_cbm = 0; }
+          if (isPrimary) { no_of_ctns = boxData[l.box_no]?.ctns ?? 1; }
+          else { no_of_ctns = 0; }
         }
         return {
           model_no: l.model_no, brand: l.brand, description: l.description,
@@ -567,7 +568,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       {selectedKeys.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 dark:border-indigo-800 dark:bg-indigo-950/40">
           <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">{selectedKeys.size} selected</span>
-          <span className="text-sm text-indigo-400">→ Assign to:</span>
+          <span className="text-sm text-indigo-400">→</span>
           {uniqueAssignedBoxes.map((b) => {
             const col = getBoxColour(b)!;
             return (
@@ -581,6 +582,26 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             className="rounded-full bg-indigo-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-indigo-700">
             + New Box
           </button>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-indigo-400">or box #</span>
+            <input
+              type="number" min="1" step="1" placeholder="#"
+              value={manualBoxNo}
+              onChange={(e) => setManualBoxNo(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const n = parseInt(manualBoxNo, 10);
+                  if (n > 0) { assignToBox(n); setManualBoxNo(""); }
+                }
+              }}
+              className="w-14 rounded border border-indigo-200 bg-white px-2 py-0.5 text-center text-xs focus:border-indigo-500 focus:outline-none dark:border-indigo-700 dark:bg-slate-800" />
+            <button type="button"
+              onClick={() => { const n = parseInt(manualBoxNo, 10); if (n > 0) { assignToBox(n); setManualBoxNo(""); } }}
+              disabled={!manualBoxNo || parseInt(manualBoxNo, 10) < 1}
+              className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-200 disabled:opacity-40">
+              Assign
+            </button>
+          </div>
           <button type="button" onClick={unassignSelected}
             className="rounded-full border border-slate-300 px-3 py-0.5 text-xs text-slate-500 hover:bg-slate-100">
             Unassign
@@ -745,10 +766,11 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               const col = getBoxColour(boxNo)!;
               const boxLines = lines.filter((l) => l.box_no === boxNo && l.model_no.trim());
               const boxWeight = boxLines.reduce((s, l) => s + l.total_weight_kg, 0);
-              const meta = boxData[boxNo] ?? { ctns: 1, cbm: 0 };
+              const meta = boxData[boxNo] ?? { ctns: 1 };
+              const boxCBM = boxLines.reduce((s, l) => s + l.tot_cbm, 0);
               return (
                 <div key={boxNo} className={`flex flex-wrap items-center gap-3 px-4 py-3 ${col.row.split(" ")[0]}`}>
-                  <div className="flex items-center gap-2 min-w-[80px]">
+                  <div className="flex items-center gap-2 min-w-[90px]">
                     <span className={`h-3 w-3 rounded-full flex-shrink-0 ${col.dot}`} />
                     <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{boxLabel(boxNo)}</span>
                   </div>
@@ -757,18 +779,11 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-medium text-slate-500">CTNs</label>
                     <input type="number" min="0" step="1" value={meta.ctns}
-                      onChange={(e) => setBoxData((p) => ({ ...p, [boxNo]: { ...p[boxNo] ?? { ctns: 1, cbm: 0 }, ctns: Number(e.target.value) || 0 } }))}
+                      onChange={(e) => setBoxData((p) => ({ ...p, [boxNo]: { ...p[boxNo] ?? { ctns: 1 }, ctns: Number(e.target.value) || 0 } }))}
                       className="w-16 rounded border border-slate-200 px-2 py-1 text-center text-xs font-semibold focus:border-indigo-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800" />
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <label className="text-xs font-medium text-slate-500">CBM (m³)</label>
-                    <input type="number" min="0" step="any" value={meta.cbm || ""}
-                      placeholder="0"
-                      onChange={(e) => setBoxData((p) => ({ ...p, [boxNo]: { ...p[boxNo] ?? { ctns: 1, cbm: 0 }, cbm: Number(e.target.value) || 0 } }))}
-                      className="w-24 rounded border border-slate-200 px-2 py-1 text-center text-xs focus:border-indigo-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800" />
-                  </div>
-
+                  <span className="text-xs text-slate-400">CBM: {fmt5(boxCBM)}</span>
                   <span className="text-xs text-slate-500 tabular-nums">{boxWeight.toFixed(2)} kg</span>
 
                   <div className="flex-1 min-w-0 text-xs text-slate-400 truncate">

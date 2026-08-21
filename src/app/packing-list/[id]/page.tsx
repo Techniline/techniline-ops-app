@@ -66,6 +66,27 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
     const lbl = shippingLabel?.trim().toUpperCase() ?? "";
     return lbl ? `${lbl}-${String(boxNo).padStart(2, "0")}` : `Box ${boxNo}`;
   }
+
+  // Compute rowspan info for No. of Ctns — detect consecutive runs of same box_no
+  type RenderItem = PackingListItemRow & { _rowspan: number; _showCtn: boolean };
+  const renderItems: RenderItem[] = [];
+  let ri = 0;
+  while (ri < items.length) {
+    const item = items[ri];
+    const boxNo = item.box_no ?? 0;
+    if (boxNo > 0) {
+      let j = ri;
+      while (j < items.length && (items[j].box_no ?? 0) === boxNo) j++;
+      const span = j - ri;
+      for (let k = ri; k < j; k++) {
+        renderItems.push({ ...items[k], _rowspan: k === ri ? span : 0, _showCtn: k === ri });
+      }
+      ri = j;
+    } else {
+      renderItems.push({ ...item, _rowspan: 1, _showCtn: true });
+      ri++;
+    }
+  }
   const subtotal = items.reduce((s, i) => s + (i.amount ?? 0), 0);
   const vat = Math.round(subtotal * 0.05 * 100) / 100;
   const grandTotal = subtotal + vat;
@@ -145,7 +166,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {renderItems.map((item) => (
                   <tr key={item.id} className="border border-slate-200 dark:border-slate-700">
                     <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700">{item.sl_no}</td>
                     <td className="border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700">{item.brand}</td>
@@ -156,7 +177,11 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
                     <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700">{item.qty}</td>
                     {isInvoice
                       ? <td className="border border-slate-200 px-2 py-1.5 text-right text-xs dark:border-slate-700">{item.amount != null ? fmt2(item.amount) : "—"}</td>
-                      : <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700">{item.no_of_ctns ?? "—"}</td>
+                      : item._showCtn
+                        ? <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700" rowSpan={item._rowspan > 1 ? item._rowspan : undefined}>
+                            {item.no_of_ctns ?? "—"}
+                          </td>
+                        : null
                     }
                     <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700">{fmt5(item.tot_cbm)}</td>
                     <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700">{item.total_weight_kg?.toFixed(2) ?? "—"}</td>
