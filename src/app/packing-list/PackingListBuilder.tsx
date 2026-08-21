@@ -425,6 +425,17 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
     setLines((prev) => [...prev.filter((l) => l.model_no.trim()), ...newLines]);
   }
 
+  // Pre-compute rowspan info for the Ctns column (consecutive same-box runs)
+  const lineGroupInfo = lines.map((ln, idx) => {
+    if (ln.box_no === 0) return { showCtn: true, span: 1 };
+    const prev = idx > 0 ? lines[idx - 1] : null;
+    if (prev && prev.box_no === ln.box_no) return { showCtn: false, span: 0 };
+    let count = 1;
+    let j = idx + 1;
+    while (j < lines.length && lines[j].box_no === ln.box_no) { count++; j++; }
+    return { showCtn: true, span: count };
+  });
+
   // Totals
   const uniqueAssignedBoxes = [...new Set(lines.map((l) => l.box_no).filter((b) => b > 0))].sort((a, b) => a - b);
   const unassignedFilled = lines.filter((l) => l.box_no === 0 && l.model_no.trim());
@@ -627,7 +638,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               <th className="px-2 py-2 text-left">HS Code</th>
               <th className="px-2 py-2 text-right">Qty</th>
               <th className="px-2 py-2 text-right" title="Units per master carton (from catalog)">Pcs/Ctn</th>
-              <th className="px-2 py-2 text-center">Box</th>
+              <th className="px-2 py-2 text-center">No. of Ctns</th>
               <th className="px-2 py-2 text-right">Weight kg</th>
               {mode === "invoice" && <th className="px-2 py-2 text-right">Unit Price</th>}
               {mode === "invoice" && <th className="px-2 py-2 text-right">Amount</th>}
@@ -689,14 +700,38 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                       : <span className="text-slate-300 dark:text-slate-600">—</span>}
                   </td>
 
-                  {/* Box badge */}
-                  <td className="px-2 py-1.5 text-center">
-                    {ln.box_no > 0 ? (
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${col!.badge}`}>{boxLabel(ln.box_no)}</span>
-                    ) : (
-                      <span className="inline-block rounded-full border border-dashed border-slate-300 px-2.5 py-0.5 text-xs text-slate-400 dark:border-slate-600">Unassigned</span>
-                    )}
-                  </td>
+                  {/* No. of Ctns — rowspan for consecutive box groups */}
+                  {(() => {
+                    const ginfo = lineGroupInfo[idx];
+                    if (!ginfo.showCtn) return null;
+                    return (
+                      <td
+                        rowSpan={ginfo.span > 1 ? ginfo.span : undefined}
+                        className="px-2 py-1.5 text-center align-middle"
+                      >
+                        {ln.box_no > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${col!.badge}`}>
+                              {boxLabel(ln.box_no)}
+                            </span>
+                            <input
+                              type="number" min="0" step="1"
+                              value={boxData[ln.box_no]?.ctns ?? 1}
+                              onChange={(e) =>
+                                setBoxData((p) => ({
+                                  ...p,
+                                  [ln.box_no]: { ...(p[ln.box_no] ?? { ctns: 1 }), ctns: Number(e.target.value) || 0 },
+                                }))
+                              }
+                              className="w-14 rounded border border-slate-200 bg-white px-1 py-0.5 text-center text-xs font-bold focus:border-indigo-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500 tabular-nums">{ln.no_of_ctns || "—"}</span>
+                        )}
+                      </td>
+                    );
+                  })()}
 
                   <td className="px-2 py-1.5 text-right text-xs text-slate-500 tabular-nums">{ln.total_weight_kg.toFixed(2)}</td>
 
@@ -737,7 +772,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               <td colSpan={7} className="px-2 py-2 text-right text-slate-500">Total</td>
               <td className="px-2 py-2 text-right tabular-nums">{lines.reduce((s, l) => s + l.qty, 0)}</td>
               <td />{/* Pcs/Ctn — no total */}
-              <td />
+              <td className="px-2 py-2 text-center tabular-nums font-bold">{totCtns || "—"}</td>
               <td className="px-2 py-2 text-right tabular-nums">{totWeight.toFixed(2)}</td>
               {mode === "invoice" && <td />}
               {mode === "invoice" && <td className="px-2 py-2 text-right tabular-nums">{fmt2(subtotal)}</td>}
@@ -758,7 +793,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">📦 Box Summary</h3>
-            <p className="text-xs text-slate-400">Enter carton count and CBM per box — warehouse fills these in</p>
+            <p className="text-xs text-slate-400">Carton counts are entered in the table above</p>
           </div>
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -776,13 +811,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                   </div>
                   <span className="text-xs text-slate-500">{boxLines.length} item{boxLines.length !== 1 ? "s" : ""}</span>
 
-                  <div className="flex items-center gap-1.5">
-                    <label className="text-xs font-medium text-slate-500">CTNs</label>
-                    <input type="number" min="0" step="1" value={meta.ctns}
-                      onChange={(e) => setBoxData((p) => ({ ...p, [boxNo]: { ...p[boxNo] ?? { ctns: 1 }, ctns: Number(e.target.value) || 0 } }))}
-                      className="w-16 rounded border border-slate-200 px-2 py-1 text-center text-xs font-semibold focus:border-indigo-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800" />
-                  </div>
-
+                  <span className="text-xs font-semibold text-slate-600 tabular-nums">{meta.ctns} CTN{meta.ctns !== 1 ? "s" : ""}</span>
                   <span className="text-xs text-slate-400">CBM: {fmt5(boxCBM)}</span>
                   <span className="text-xs text-slate-500 tabular-nums">{boxWeight.toFixed(2)} kg</span>
 
