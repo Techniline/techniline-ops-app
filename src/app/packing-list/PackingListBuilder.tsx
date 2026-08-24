@@ -193,6 +193,51 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
+  // Per-user draft persistence
+  const [userId, setUserId] = useState<string | null>(null);
+  const draftLoadedRef = useRef(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+    });
+  }, []);
+
+  function draftKey(uid: string) {
+    const id = editId ?? searchParams.get("edit");
+    return id ? `packing-draft-edit-${id}-${uid}` : `packing-draft-new-${uid}`;
+  }
+
+  // Restore draft on mount for new lists (only once, after userId is known)
+  useEffect(() => {
+    if (!userId || draftLoadedRef.current) return;
+    const id = editId ?? searchParams.get("edit");
+    if (id) return; // editing an existing list — load from server, not localStorage
+    const raw = localStorage.getItem(draftKey(userId));
+    if (!raw) return;
+    try {
+      const d = JSON.parse(raw) as { company?: PackingCompany; mode?: PackingMode; invoiceNo?: string; listDate?: string; consigneeName?: string; consigneeAddress?: string; notes?: string; shippingLabel?: string; lines?: PackingLine[]; boxData?: Record<number, BoxMeta> };
+      if (d.company) setCompany(d.company);
+      if (d.mode) setMode(d.mode);
+      if (d.invoiceNo != null) setInvoiceNo(d.invoiceNo);
+      if (d.listDate) setListDate(d.listDate);
+      if (d.consigneeName != null) setConsigneeName(d.consigneeName);
+      if (d.consigneeAddress != null) setConsigneeAddress(d.consigneeAddress);
+      if (d.notes != null) setNotes(d.notes);
+      if (d.shippingLabel != null) setShippingLabel(d.shippingLabel);
+      if (d.lines?.length) setLines(d.lines);
+      if (d.boxData) setBoxData(d.boxData);
+    } catch { /* corrupt draft — ignore */ }
+    draftLoadedRef.current = true;
+  }, [userId, editId, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save draft whenever any form state changes
+  useEffect(() => {
+    if (!userId) return;
+    const payload = JSON.stringify({ company, mode, invoiceNo, listDate, consigneeName, consigneeAddress, notes, shippingLabel, lines, boxData });
+    try { localStorage.setItem(draftKey(userId), payload); } catch { /* storage full */ }
+  }, [userId, company, mode, invoiceNo, listDate, consigneeName, consigneeAddress, notes, shippingLabel, lines, boxData]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load existing list
   useEffect(() => {
     const id = editId ?? searchParams.get("edit");
@@ -512,6 +557,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       });
       const json = await res.json() as { ok: boolean; id?: string; error?: string };
       if (!json.ok) throw new Error(json.error);
+      if (userId) { try { localStorage.removeItem(draftKey(userId)); } catch { /* ignore */ } }
       router.push(`/packing-list/${json.id ?? id}`);
     } catch (e) { setSaveErr(e instanceof Error ? e.message : "Save failed."); }
     finally { setSaving(false); }
@@ -534,7 +580,10 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             {importing ? <><span className="animate-spin inline-block">⏳</span> Parsing…</> : <>📄 Import from PDF</>}
           </button>
           <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect} />
-          <button type="button" onClick={() => router.push("/packing-list")}
+          <button type="button" onClick={() => {
+              if (userId) { try { localStorage.removeItem(draftKey(userId)); } catch { /* ignore */ } }
+              router.push("/packing-list");
+            }}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">Cancel</button>
           <button type="button" onClick={() => save("draft")} disabled={saving}
             className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">

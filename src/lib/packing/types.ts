@@ -82,12 +82,18 @@ export interface PackingLine {
 
 export const COMPANY_INFO: Record<PackingCompany, {
   name: string;
+  logo: string;
+  addressBar: string;
   address: string[];
   tel: string;
   fax: string;
+  email: string;
+  web: string;
 }> = {
   techniline: {
     name: "Techniline Electronic L.L.C",
+    logo: "/logo-techniline.png",
+    addressBar: "Unit #9, Al Shoala Building, Block E, Near DCC, Makani 31990 94438, PO Box 21566, Dubai, UAE  |  t +971 4 238 4000  |  f +971 4 236 9780  |  e sales@techniline.org  |  www.techniline.org",
     address: [
       "Post Box #21566",
       "Unit #9 - Ground Floor, Al Shoala Building, Block E, Street No.17",
@@ -96,16 +102,22 @@ export const COMPANY_INFO: Record<PackingCompany, {
     ],
     tel: "+971 4 2384000",
     fax: "+971 4 2394799",
+    email: "sales@techniline.org",
+    web: "www.techniline.org",
   },
   soundline: {
     name: "Soundline Electronics LLC",
+    logo: "/logo-soundline.png",
+    addressBar: "Shop No. 7-8, Al Musailla, Near Naif Park, P.O Box: 21566, Deira, Dubai, U.A.E  |  T: +971-4 223 1890/229 6659  |  F: +971 4 229 6643  |  E: slmain@techniline.org  |  www.techniline.org",
     address: [
       "P.O Box: 21566",
-      "Shop No. 7-8, Al Musalla, Near Naif Park",
+      "Shop No. 7-8, Al Musailla, Near Naif Park",
       "Deira, Dubai, U.A.E",
     ],
     tel: "+971-4 223 1890 / 229 6659",
     fax: "+971 4 229 6643",
+    email: "slmain@techniline.org",
+    web: "www.techniline.org",
   },
 };
 
