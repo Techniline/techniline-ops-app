@@ -257,7 +257,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   }
 
   function updateLine(lineKey: string, field: keyof PackingLine, raw: string) {
-    const numFields = new Set<keyof PackingLine>(["qty", "unit_price"]);
+    const numFields = new Set<keyof PackingLine>(["qty", "unit_price", "no_of_ctns"]);
     setLines((prev) => {
       // Find the line being edited — needed for split parent lookup
       const editedLine = prev.find((l) => l.key === lineKey);
@@ -321,11 +321,9 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
   // Box assignment
   function assignToBox(boxNo: number) {
-    const selectedLines = lines.filter((l) => selectedKeys.has(l.key));
-    const defaultCtns = selectedLines.reduce((s, l) => s + l.no_of_ctns, 0) || 1;
     setLines((prev) => prev.map((l) => selectedKeys.has(l.key) ? { ...l, box_no: boxNo } : l));
     setSelectedKeys(new Set());
-    setBoxData((prev) => ({ ...prev, [boxNo]: prev[boxNo] ?? { ctns: defaultCtns } }));
+    setBoxData((prev) => ({ ...prev, [boxNo]: prev[boxNo] ?? { ctns: 1 } }));
   }
 
   function assignToNewBox() {
@@ -727,7 +725,13 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-500 tabular-nums">{ln.no_of_ctns || "—"}</span>
+                          <input
+                            type="number" min="0" step="1"
+                            value={ln.no_of_ctns || ""}
+                            placeholder="auto"
+                            onChange={(e) => updateLine(ln.key, "no_of_ctns", e.target.value)}
+                            className="w-14 rounded border border-slate-200 bg-white px-1 py-0.5 text-center text-xs focus:border-indigo-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+                          />
                         )}
                       </td>
                     );
