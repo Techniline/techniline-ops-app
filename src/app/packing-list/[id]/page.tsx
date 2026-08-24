@@ -263,12 +263,22 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Signature row */}
-        <div className="mt-8 grid grid-cols-2 gap-6 text-sm">
-          <div className="border-t-2 border-slate-400 pt-2 dark:border-slate-500">
-            <p className="text-slate-500">Stamp &amp; Signature (Customer)</p>
+        <div className="mt-10 grid grid-cols-2 gap-12">
+          {/* Left — Customer */}
+          <div>
+            <div className="h-16" />
+            <div className="border-t-2 border-slate-700 pt-3 dark:border-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-700 dark:text-slate-300">Stamp &amp; Signature</p>
+              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory (Customer)</p>
+            </div>
           </div>
-          <div className="border-t-2 border-slate-400 pt-2 text-right dark:border-slate-500">
-            <p className="font-bold tracking-wide text-slate-700 uppercase dark:text-slate-200">{company.name.toUpperCase()}</p>
+          {/* Right — Company */}
+          <div className="text-right">
+            <div className="h-16" />
+            <div className="border-t-2 border-slate-700 pt-3 dark:border-slate-400">
+              <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-800 dark:text-slate-100">{company.name.toUpperCase()}</p>
+              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory</p>
+            </div>
           </div>
         </div>
 
