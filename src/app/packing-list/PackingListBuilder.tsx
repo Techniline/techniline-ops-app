@@ -540,17 +540,40 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       line.model_no = item.model_no; line.brand = item.brand; line.description = item.description;
       line.qty = item.qty; line.unit_price = item.unit_price; line.amount = item.qty * item.unit_price;
       try {
+        // Try exact match first, then closest match
         const catRes = await fetch(`/api/packing/catalog?q=${encodeURIComponent(item.model_no)}`, { headers: { Authorization: `Bearer ${token}` } });
         const catJson = await catRes.json() as { ok: boolean; items: SkuCatalogRow[] };
-        const sku = catJson.items?.find((s) => s.model_no.toLowerCase() === item.model_no.toLowerCase()) ?? catJson.items?.[0] ?? null;
-        if (sku) {
-          line.hs_code = sku.hs_code ?? ""; line.country_of_origin = sku.country_of_origin;
-          line._unit_weight_kg = sku.unit_weight_kg; line._unit_cbm = sku.unit_cbm;
-          line._carton_qty = sku.carton_qty; line._carton_weight_kg = sku.carton_weight_kg; line._carton_cbm = sku.carton_cbm;
-          const phys = computePhysical(line.qty, sku);
+        const exactSku = catJson.items?.find((s) => s.model_no.toLowerCase() === item.model_no.toLowerCase()) ?? null;
+
+        if (exactSku) {
+          // Link existing catalog SKU
+          line._sku_id = exactSku.id;
+          line.hs_code = exactSku.hs_code ?? ""; line.country_of_origin = exactSku.country_of_origin;
+          line._unit_weight_kg = exactSku.unit_weight_kg; line._unit_cbm = exactSku.unit_cbm;
+          line._carton_qty = exactSku.carton_qty; line._carton_weight_kg = exactSku.carton_weight_kg; line._carton_cbm = exactSku.carton_cbm;
+          const phys = computePhysical(line.qty, exactSku);
           line.no_of_ctns = phys.no_of_ctns; line.tot_cbm = phys.tot_cbm; line.total_weight_kg = phys.total_weight_kg;
-          if (!line.brand && sku.brand) line.brand = sku.brand;
-          if (!line.description && sku.description) line.description = sku.description;
+          if (!line.brand && exactSku.brand) line.brand = exactSku.brand;
+          if (!line.description && exactSku.description) line.description = exactSku.description;
+        } else {
+          // No catalog match — auto-create a new SKU entry with the available info
+          const createRes = await fetch("/api/packing/catalog", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              model_no: item.model_no,
+              brand: item.brand || null,
+              description: item.description || null,
+              country_of_origin: "China",
+              hs_code: null, unit_weight_kg: null, unit_cbm: null,
+              carton_qty: null, carton_weight_kg: null, carton_cbm: null,
+              notes: "Auto-created from document import",
+            }),
+          });
+          const createJson = await createRes.json() as { ok: boolean; item?: SkuCatalogRow };
+          if (createJson.ok && createJson.item) {
+            line._sku_id = createJson.item.id;
+          }
         }
       } catch { /* non-fatal */ }
       newLines.push(line);
