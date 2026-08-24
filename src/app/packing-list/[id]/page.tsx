@@ -274,12 +274,18 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           {/* Left — Customer */}
           <div>
             <div className="h-16" />
-            <div className="border-t-2 border-slate-700 dark:border-slate-400" />
+            <div className="pt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-700 dark:text-slate-300">Stamp &amp; Signature</p>
+              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory (Customer)</p>
+            </div>
           </div>
           {/* Right — Company */}
-          <div>
+          <div className="text-right">
             <div className="h-16" />
-            <div className="border-t-2 border-slate-700 dark:border-slate-400" />
+            <div className="pt-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-800 dark:text-slate-100">{company.name.toUpperCase()}</p>
+              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory</p>
+            </div>
           </div>
         </div>
 
