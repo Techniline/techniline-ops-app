@@ -29,10 +29,17 @@ function fmt5(n: number | null | undefined) {
 /** Reusable letterhead header — logo + address bar, centred */
 function LetterHead({ company }: { company: typeof COMPANY_INFO[PackingCompany] }) {
   return (
-    <div className="mb-0 border-b-2 border-slate-400 pb-3 text-center dark:border-slate-500">
+    <div className="mb-0 pb-1 text-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={company.logo} alt={company.name} className="mx-auto mb-2 h-16 w-auto object-contain print:h-14" />
-      <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">{company.addressBar}</p>
+      <img
+        src={company.logo}
+        alt={company.name}
+        className="mx-auto mb-2 max-h-24 w-full max-w-full object-contain print:max-h-20"
+        style={{ height: "auto" }}
+      />
+      <div className="border-t border-slate-400 pt-1 dark:border-slate-500">
+        <p className="text-[9.5px] leading-snug text-slate-500 dark:text-slate-400">{company.addressBar}</p>
+      </div>
     </div>
   );
 }
@@ -267,18 +274,12 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           {/* Left — Customer */}
           <div>
             <div className="h-16" />
-            <div className="border-t-2 border-slate-700 pt-3 dark:border-slate-400">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-700 dark:text-slate-300">Stamp &amp; Signature</p>
-              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory (Customer)</p>
-            </div>
+            <div className="border-t-2 border-slate-700 dark:border-slate-400" />
           </div>
           {/* Right — Company */}
-          <div className="text-right">
+          <div>
             <div className="h-16" />
-            <div className="border-t-2 border-slate-700 pt-3 dark:border-slate-400">
-              <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-800 dark:text-slate-100">{company.name.toUpperCase()}</p>
-              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Authorised Signatory</p>
-            </div>
+            <div className="border-t-2 border-slate-700 dark:border-slate-400" />
           </div>
         </div>
 
