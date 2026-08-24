@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { extractText } from "unpdf";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -41,35 +40,9 @@ function cleanModelNo(raw: string): string {
   return raw.replace(STRIP_PREFIXES, "").trim();
 }
 
-export async function POST(request: Request): Promise<Response> {
-  if (!(await getUser(request))) {
-    return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-  }
+const PROMPT = `You are parsing a trade document (Quotation, Proforma Invoice, Commercial Invoice, Packing List, or Tax Invoice).
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json({ ok: false, error: "ANTHROPIC_API_KEY not configured on this server." }, { status: 500 });
-  }
-
-  let pdfText = "";
-  try {
-    const form = await request.formData();
-    const file = form.get("file") as File | null;
-    if (!file || file.type !== "application/pdf") {
-      return Response.json({ ok: false, error: "Please upload a PDF file." }, { status: 400 });
-    }
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const { text } = await extractText(buf, { mergePages: true });
-    pdfText = Array.isArray(text) ? text.join("\n") : (text as string);
-  } catch {
-    return Response.json({ ok: false, error: "Could not read PDF. Check the file is not encrypted." }, { status: 400 });
-  }
-
-  const client = new Anthropic({ apiKey });
-
-  const prompt = `Extract all line items from this document (Quotation, Proforma Invoice, or Tax Invoice).
-
-Return ONLY a valid JSON object — no markdown, no explanation:
+Extract all line items and return ONLY a valid JSON object — no markdown, no explanation:
 {
   "customer_name": "...",
   "doc_no": "...",
@@ -80,22 +53,48 @@ Return ONLY a valid JSON object — no markdown, no explanation:
 }
 
 Rules:
-- model_no: use the MANUFACTURER model number. Strip internal warehouse prefixes: if model starts with JBA, TLE, TLC, or SND remove those letters (e.g. JBAX32 → X32, TLEHPX2000 → HPX2000).
+- model_no: use the MANUFACTURER model number. Strip internal warehouse prefixes — if a model starts with JBA, TLE, TLC, or SND remove those letters (e.g. JBAX32 → X32, TLEHPX2000 → HPX2000).
 - brand: manufacturer / brand name (Behringer, Wharfedale, Midas, etc.)
-- description: product description
+- description: full product description
 - qty: quantity as a plain number (not a string)
 - unit_price: unit price as a plain number, 0 if not shown
-- doc_no: the document/invoice/quotation number
-- doc_date: date in YYYY-MM-DD, or empty string
+- doc_no: the document / invoice / quotation number
+- doc_date: date in YYYY-MM-DD format, or empty string if not found
+- Include EVERY line item in the document, even if qty or price is missing (use 0).
+- Do NOT include subtotals, totals, shipping, tax, or discount rows.`;
 
-Document text:
-${pdfText}`;
+export async function POST(request: Request): Promise<Response> {
+  if (!(await getUser(request))) {
+    return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return Response.json({ ok: false, error: "PDF import requires ANTHROPIC_API_KEY — ask your admin to add it in Vercel → Environment Variables." }, { status: 500 });
+  }
+
+  let pdfBase64 = "";
+  try {
+    const form = await request.formData();
+    const file = form.get("file") as File | null;
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+      return Response.json({ ok: false, error: "Please upload a PDF file." }, { status: 400 });
+    }
+    const buf = await file.arrayBuffer();
+    pdfBase64 = Buffer.from(buf).toString("base64");
+  } catch {
+    return Response.json({ ok: false, error: "Could not read the uploaded file." }, { status: 400 });
+  }
+
+  const client = new Anthropic({ apiKey });
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const docBlock: any = { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } };
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: [docBlock, { type: "text", text: PROMPT }] }],
     });
 
     const raw = (msg.content[0] as { type: string; text: string }).text.trim();
@@ -111,7 +110,7 @@ ${pdfText}`;
     };
 
     const items: ParsedItem[] = (parsed.items ?? [])
-      .filter((i) => i.model_no && i.qty > 0)
+      .filter((i) => i.model_no && (i.qty ?? 0) > 0)
       .map((i) => ({
         model_no: cleanModelNo(i.model_no),
         brand: i.brand ?? "",
