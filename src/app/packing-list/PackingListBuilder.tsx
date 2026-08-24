@@ -786,25 +786,27 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
                   {/* Actions */}
                   <td className="px-2 py-1.5">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <button type="button" title="Move up" onClick={() => moveLine(ln.key, "up")} disabled={idx === 0}
-                        className="rounded p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▲</button>
-                      <button type="button" title="Move down" onClick={() => moveLine(ln.key, "down")} disabled={idx === lines.length - 1}
-                        className="rounded p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▼</button>
-                      <button type="button" title="Split manually into 2 rows" onClick={() => splitLine(ln.key)}
-                        className="rounded p-0.5 text-slate-300 hover:text-indigo-500 text-xs">✂</button>
+                    <div className="flex flex-col items-center gap-1">
+                      {/* Reorder */}
+                      <div className="flex gap-0.5">
+                        <button type="button" title="Move up" onClick={() => moveLine(ln.key, "up")} disabled={idx === 0}
+                          className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-20">▲</button>
+                        <button type="button" title="Move down" onClick={() => moveLine(ln.key, "down")} disabled={idx === lines.length - 1}
+                          className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-20">▼</button>
+                      </div>
+                      {/* Split to individual boxes */}
                       <button type="button"
-                        title={ln._carton_qty && ln._carton_qty > 0 && ln.qty > ln._carton_qty ? `Auto-split by carton (${ln._carton_qty} pcs each)` : "Auto-split (needs carton qty from catalog)"}
-                        disabled={!ln._carton_qty || ln._carton_qty <= 0 || ln.qty <= ln._carton_qty}
-                        onClick={() => autoSplitLine(ln.key)}
-                        className="rounded p-0.5 text-slate-300 hover:text-violet-500 disabled:opacity-20 text-xs">⊡</button>
-                      <button type="button"
-                        title={ln._carton_qty && ln._carton_qty > 0 ? `Split into individual boxes (${Math.ceil(ln.qty / ln._carton_qty)} boxes of ${ln._carton_qty})` : "Split to boxes (needs carton qty from catalog)"}
+                        title={ln._carton_qty && ln._carton_qty > 0 ? `Each carton gets its own box — creates ${Math.ceil(ln.qty / ln._carton_qty)} boxes` : "Needs carton qty from catalog"}
                         disabled={!ln._carton_qty || ln._carton_qty <= 0}
                         onClick={() => splitToBoxes(ln.key)}
-                        className="rounded p-0.5 text-slate-300 hover:text-emerald-500 disabled:opacity-20 text-xs">⊞</button>
-                      <button type="button" title="Remove line" onClick={() => setLines((p) => p.filter((x) => x.key !== ln.key))}
-                        className="rounded p-0.5 text-slate-300 hover:text-red-500 text-xs">✕</button>
+                        className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-30 dark:bg-emerald-900/30 dark:text-emerald-400 whitespace-nowrap">
+                        📦 1 per box
+                      </button>
+                      {/* Remove */}
+                      <button type="button" onClick={() => setLines((p) => p.filter((x) => x.key !== ln.key))}
+                        className="rounded bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 whitespace-nowrap">
+                        ✕ Remove
+                      </button>
                     </div>
                   </td>
                 </tr>
