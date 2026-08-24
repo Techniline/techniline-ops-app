@@ -22,7 +22,7 @@ function svcClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-/** GET /api/packing/catalog?q=&brand= — search SKU catalog */
+/** GET /api/packing/catalog?q=&brand=&brands=1 — search SKU catalog or return distinct brand list */
 export async function GET(request: Request): Promise<Response> {
   if (!(await getUser(request))) {
     return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
@@ -30,6 +30,20 @@ export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
   const brand = (searchParams.get("brand") ?? "").trim();
+
+  // brands=1 — return distinct brand names only
+  if (searchParams.get("brands") === "1") {
+    const svc = svcClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (svc.from("packing_sku_catalog" as any) as any)
+      .select("brand")
+      .not("brand", "is", null)
+      .order("brand", { ascending: true })
+      .limit(500);
+    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+    const brands = [...new Set((data as { brand: string }[]).map((r) => r.brand).filter(Boolean))].sort();
+    return Response.json({ ok: true, brands });
+  }
 
   const svc = svcClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

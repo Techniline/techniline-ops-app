@@ -184,6 +184,19 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   const [skuModal, setSkuModal] = useState<{ initial: Partial<SkuCatalogRow>; lineKey: string } | null>(null);
   const suggestRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Brand autocomplete
+  const [allBrands, setAllBrands] = useState<string[]>([]);
+  const [brandSuggestKey, setBrandSuggestKey] = useState<string | null>(null);
+  const [brandQuery, setBrandQuery] = useState("");
+
+  useEffect(() => {
+    getToken().then((token) =>
+      fetch("/api/packing/catalog?brands=1", { headers: { Authorization: `Bearer ${token}` } })
+    ).then((r) => r.json()).then((j: { ok: boolean; brands?: string[] }) => {
+      if (j.ok && j.brands) setAllBrands(j.brands);
+    }).catch(() => {});
+  }, []);
+
   // PDF import
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -808,7 +821,36 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                     )}
                   </td>
 
-                  <td className="px-2 py-1.5"><input className={`w-24 ${cellInp}`} value={ln.brand} onChange={(e) => updateLine(ln.key, "brand", e.target.value)} /></td>
+                  {/* Brand + autocomplete from catalog */}
+                  <td className="relative px-2 py-1.5">
+                    <input
+                      className={`w-24 ${cellInp}`}
+                      value={ln.brand}
+                      placeholder="Brand"
+                      onChange={(e) => {
+                        updateLine(ln.key, "brand", e.target.value);
+                        setBrandQuery(e.target.value);
+                        setBrandSuggestKey(ln.key);
+                      }}
+                      onFocus={() => { setBrandSuggestKey(ln.key); setBrandQuery(ln.brand); }}
+                      onBlur={() => setTimeout(() => setBrandSuggestKey(null), 200)}
+                    />
+                    {brandSuggestKey === ln.key && (() => {
+                      const q = brandQuery.toLowerCase();
+                      const filtered = allBrands.filter((b) => b.toLowerCase().includes(q) && b.toLowerCase() !== q);
+                      return filtered.length > 0 ? (
+                        <div className="absolute left-2 top-full z-20 mt-0.5 w-48 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                          {filtered.slice(0, 8).map((b) => (
+                            <button key={b} type="button"
+                              onMouseDown={() => { updateLine(ln.key, "brand", b); setBrandSuggestKey(null); }}
+                              className="flex w-full items-center px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700">
+                              {b}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+                  </td>
                   <td className="px-2 py-1.5"><input className={`w-52 ${cellInp}`} value={ln.description} onChange={(e) => updateLine(ln.key, "description", e.target.value)} /></td>
                   <td className="px-2 py-1.5"><input className={`w-16 ${cellInp}`} value={ln.country_of_origin} onChange={(e) => updateLine(ln.key, "country_of_origin", e.target.value)} /></td>
                   <td className="px-2 py-1.5">
