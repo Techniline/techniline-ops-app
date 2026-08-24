@@ -22,7 +22,7 @@ function newLine(): PackingLine {
     model_no: "", brand: "", description: "", hs_code: "", country_of_origin: "China",
     qty: 1, no_of_ctns: 1, tot_cbm: 0, total_weight_kg: 0, unit_price: 0, amount: 0,
     box_no: 0,
-    _unit_weight_kg: null, _unit_cbm: null, _carton_qty: null,
+    _sku_id: null, _unit_weight_kg: null, _unit_cbm: null, _carton_qty: null,
     _carton_weight_kg: null, _carton_cbm: null,
   };
 }
@@ -193,6 +193,45 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
+  // Inline catalog field edits — tracks which line keys have unsaved changes
+  const [catalogDirty, setCatalogDirty] = useState<Record<string, Set<string>>>({});
+  const [catalogSaving, setCatalogSaving] = useState<Set<string>>(new Set());
+  const [catalogSaveErr, setCatalogSaveErr] = useState<Record<string, string>>({});
+
+  async function saveCatalogFields(lineKey: string) {
+    const ln = lines.find((l) => l.key === lineKey);
+    if (!ln?._sku_id) return;
+    const dirty = catalogDirty[lineKey];
+    if (!dirty?.size) return;
+    setCatalogSaving((prev) => new Set([...prev, lineKey]));
+    setCatalogSaveErr((prev) => { const n = { ...prev }; delete n[lineKey]; return n; });
+    try {
+      const token = await getToken();
+      const patch: Record<string, unknown> = {};
+      if (dirty.has("carton_qty")) patch.carton_qty = ln._carton_qty;
+      if (dirty.has("hs_code")) patch.hs_code = ln.hs_code || null;
+      const res = await fetch(`/api/packing/catalog/${ln._sku_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(patch),
+      });
+      const json = await res.json() as { ok: boolean; error?: string };
+      if (!json.ok) throw new Error(json.error ?? "Save failed");
+      setCatalogDirty((prev) => { const n = { ...prev }; delete n[lineKey]; return n; });
+    } catch (e) {
+      setCatalogSaveErr((prev) => ({ ...prev, [lineKey]: e instanceof Error ? e.message : "Save failed" }));
+    } finally {
+      setCatalogSaving((prev) => { const n = new Set(prev); n.delete(lineKey); return n; });
+    }
+  }
+
+  function markCatalogDirty(lineKey: string, field: string) {
+    setCatalogDirty((prev) => ({
+      ...prev,
+      [lineKey]: new Set([...(prev[lineKey] ?? []), field]),
+    }));
+  }
+
   // Per-user draft persistence
   const [userId, setUserId] = useState<string | null>(null);
   const draftLoadedRef = useRef(false);
@@ -295,10 +334,13 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
         ...ln, model_no: sku.model_no, brand: sku.brand ?? "", description: sku.description ?? "",
         hs_code: sku.hs_code ?? "", country_of_origin: sku.country_of_origin,
         ...phys, amount: ln.qty * ln.unit_price,
+        _sku_id: sku.id,
         _unit_weight_kg: sku.unit_weight_kg, _unit_cbm: sku.unit_cbm,
         _carton_qty: sku.carton_qty, _carton_weight_kg: sku.carton_weight_kg, _carton_cbm: sku.carton_cbm,
       };
     }));
+    // Clear any pending catalog saves for this line since we just reloaded from catalog
+    setCatalogDirty((prev) => { const n = { ...prev }; delete n[lineKey]; return n; });
   }
 
   function updateLine(lineKey: string, field: keyof PackingLine, raw: string) {
@@ -769,17 +811,67 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                   <td className="px-2 py-1.5"><input className={`w-24 ${cellInp}`} value={ln.brand} onChange={(e) => updateLine(ln.key, "brand", e.target.value)} /></td>
                   <td className="px-2 py-1.5"><input className={`w-52 ${cellInp}`} value={ln.description} onChange={(e) => updateLine(ln.key, "description", e.target.value)} /></td>
                   <td className="px-2 py-1.5"><input className={`w-16 ${cellInp}`} value={ln.country_of_origin} onChange={(e) => updateLine(ln.key, "country_of_origin", e.target.value)} /></td>
-                  <td className="px-2 py-1.5"><input className={`w-20 ${cellInp} font-mono`} value={ln.hs_code} onChange={(e) => updateLine(ln.key, "hs_code", e.target.value)} /></td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1">
+                      <input
+                        className={`w-20 ${cellInp} font-mono ${catalogDirty[ln.key]?.has("hs_code") ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-500" : ""}`}
+                        value={ln.hs_code}
+                        onChange={(e) => {
+                          updateLine(ln.key, "hs_code", e.target.value);
+                          if (ln._sku_id) markCatalogDirty(ln.key, "hs_code");
+                        }}
+                      />
+                      {ln._sku_id && catalogDirty[ln.key]?.has("hs_code") && (
+                        <button type="button" title="Save HS Code to catalog"
+                          disabled={catalogSaving.has(ln.key)}
+                          onClick={() => saveCatalogFields(ln.key)}
+                          className="text-amber-500 hover:text-amber-700 disabled:opacity-40 text-sm leading-none">
+                          {catalogSaving.has(ln.key) ? "…" : "💾"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-2 py-1.5">
                     <input type="number" min="1" step="1" className={`w-14 ${cellInp} text-right`} value={ln.qty}
                       onChange={(e) => updateLine(ln.key, "qty", e.target.value)} />
                   </td>
 
-                  {/* Pcs per carton — read-only, builder only, not printed */}
-                  <td className="px-2 py-1.5 text-right text-xs tabular-nums">
-                    {ln._carton_qty != null
-                      ? <span className="text-slate-500">{ln._carton_qty}</span>
-                      : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                  {/* Pcs per carton — editable, builder only, not printed */}
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1 justify-end">
+                      <input
+                        type="number" min="1" step="1"
+                        value={ln._carton_qty ?? ""}
+                        placeholder="—"
+                        title={ln._sku_id ? "Enter to save to catalog" : "Link a catalog SKU first to save"}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          setLines((prev) => prev.map((l) => {
+                            if (l.key !== ln.key) return l;
+                            const sku = { unit_weight_kg: l._unit_weight_kg, unit_cbm: l._unit_cbm, carton_qty: val, carton_weight_kg: l._carton_weight_kg, carton_cbm: l._carton_cbm };
+                            const phys = computePhysical(l.qty, sku);
+                            return { ...l, _carton_qty: val, ...phys };
+                          }));
+                          if (ln._sku_id) markCatalogDirty(ln.key, "carton_qty");
+                        }}
+                        className={`w-14 rounded border px-1 py-0.5 text-right text-xs tabular-nums focus:outline-none focus:border-indigo-400 ${
+                          catalogDirty[ln.key]?.has("carton_qty")
+                            ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-500"
+                            : "border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800"
+                        }`}
+                      />
+                      {ln._sku_id && catalogDirty[ln.key]?.has("carton_qty") && (
+                        <button type="button" title="Save Pcs/Ctn to catalog"
+                          disabled={catalogSaving.has(ln.key)}
+                          onClick={() => saveCatalogFields(ln.key)}
+                          className="text-amber-500 hover:text-amber-700 disabled:opacity-40 text-sm leading-none">
+                          {catalogSaving.has(ln.key) ? "…" : "💾"}
+                        </button>
+                      )}
+                    </div>
+                    {catalogSaveErr[ln.key] && (
+                      <p className="mt-0.5 text-[10px] text-red-500">{catalogSaveErr[ln.key]}</p>
+                    )}
                   </td>
 
                   {/* No. of Ctns — rowspan for consecutive box groups */}

@@ -70,6 +70,7 @@ export interface PackingLine {
   amount: number; // qty × unit_price
   box_no: number; // physical carton assignment; shared box_no = merged into one carton
   // source catalog data (for recalc)
+  _sku_id: string | null;
   _unit_weight_kg: number | null;
   _unit_cbm: number | null;
   _carton_qty: number | null;
