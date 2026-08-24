@@ -804,17 +804,21 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                       onChange={(e) => { updateLine(ln.key, "model_no", e.target.value); searchSku(e.target.value, ln.key); }}
                       onFocus={() => { if (ln.model_no) searchSku(ln.model_no, ln.key); }}
                       onBlur={() => setTimeout(() => setSuggestions([]), 200)} />
-                    {activeLineKey === ln.key && suggestions.length > 0 && (
+                    {activeLineKey === ln.key && (suggestions.length > 0 || ln.model_no.trim()) && (
                       <div className="absolute left-2 top-full z-20 mt-0.5 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
                         {suggestions.map((s) => (
                           <button key={s.id} type="button" onMouseDown={() => applySku(s, ln.key)}
                             className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700">
                             <span className="mt-0.5 font-mono text-xs text-indigo-600">{s.model_no}</span>
+                            <span className="text-xs text-slate-400">{s.brand}</span>
                             <span className="flex-1 text-xs text-slate-500 line-clamp-1">{s.description}</span>
                           </button>
                         ))}
-                        <button type="button" onMouseDown={() => { setSuggestions([]); setSkuModal({ initial: { model_no: ln.model_no }, lineKey: ln.key }); }}
-                          className="w-full border-t border-slate-100 px-3 py-2 text-left text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-slate-700">
+                        {suggestions.length === 0 && (
+                          <p className="px-3 py-2 text-xs text-slate-400">No catalog match for &quot;{ln.model_no}&quot;</p>
+                        )}
+                        <button type="button" onMouseDown={() => { setSuggestions([]); setSkuModal({ initial: { model_no: ln.model_no, brand: ln.brand || undefined, description: ln.description || undefined, hs_code: ln.hs_code || undefined, country_of_origin: ln.country_of_origin || "China" }, lineKey: ln.key }); }}
+                          className="w-full border-t border-slate-100 px-3 py-2 text-left text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-slate-700 dark:hover:bg-indigo-900/20">
                           + Add &quot;{ln.model_no}&quot; to catalog
                         </button>
                       </div>
@@ -977,6 +981,32 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                         <button type="button" title="Move down" onClick={() => moveLine(ln.key, "down")} disabled={idx === lines.length - 1}
                           className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-20">▼</button>
                       </div>
+                      {/* Add / edit in catalog */}
+                      <button type="button"
+                        title={ln._sku_id ? "Edit this SKU in the catalog (add missing details)" : "Add this product to the catalog"}
+                        onClick={() => setSkuModal({
+                          lineKey: ln.key,
+                          initial: {
+                            id: ln._sku_id ?? undefined,
+                            model_no: ln.model_no,
+                            brand: ln.brand || undefined,
+                            description: ln.description || undefined,
+                            hs_code: ln.hs_code || undefined,
+                            country_of_origin: ln.country_of_origin || "China",
+                            unit_weight_kg: ln._unit_weight_kg,
+                            unit_cbm: ln._unit_cbm,
+                            carton_qty: ln._carton_qty,
+                            carton_weight_kg: ln._carton_weight_kg,
+                            carton_cbm: ln._carton_cbm,
+                          },
+                        })}
+                        className={`rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
+                          ln._sku_id
+                            ? "bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-900/30 dark:text-sky-400"
+                            : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400"
+                        }`}>
+                        {ln._sku_id ? "✏️ Edit SKU" : "➕ Add SKU"}
+                      </button>
                       {/* Split to individual boxes */}
                       <button type="button"
                         title={ln._carton_qty && ln._carton_qty > 0 ? `Each carton gets its own box — creates ${Math.ceil(ln.qty / ln._carton_qty)} boxes` : "Needs carton qty from catalog"}

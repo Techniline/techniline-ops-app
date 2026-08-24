@@ -54,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
     .limit(500);
 
   if (q) {
-    query = query.or(`model_no.ilike.%${q}%,description.ilike.%${q}%`);
+    query = query.or(`model_no.ilike.%${q}%,description.ilike.%${q}%,brand.ilike.%${q}%`);
   }
   if (brand) {
     query = query.eq("brand", brand);
