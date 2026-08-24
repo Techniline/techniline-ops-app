@@ -26,13 +26,13 @@ function fmt5(n: number | null | undefined) {
   return Number(n).toFixed(5).replace(/\.?0+$/, "");
 }
 
-/** Reusable letterhead header — logo + address bar */
+/** Reusable letterhead header — logo + address bar, centred */
 function LetterHead({ company }: { company: typeof COMPANY_INFO[PackingCompany] }) {
   return (
-    <div className="mb-0 border-b border-slate-300 pb-2 dark:border-slate-600">
+    <div className="mb-0 border-b-2 border-slate-400 pb-3 text-center dark:border-slate-500">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={company.logo} alt={company.name} className="mb-1 h-14 w-auto object-contain print:h-12" />
-      <p className="text-[10px] text-slate-500 dark:text-slate-400">{company.addressBar}</p>
+      <img src={company.logo} alt={company.name} className="mx-auto mb-2 h-16 w-auto object-contain print:h-14" />
+      <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">{company.addressBar}</p>
     </div>
   );
 }
@@ -109,8 +109,8 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
     : "";
 
   // Table cell classes
-  const th = "border border-slate-400 px-2 py-1.5 text-center text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 dark:border-slate-600";
-  const td = "border border-slate-300 px-2 py-1.5 text-[11px] dark:border-slate-700";
+  const th = "border border-slate-400 px-1.5 py-1.5 text-center text-[10px] font-semibold bg-slate-50 align-middle dark:bg-slate-800 dark:border-slate-600";
+  const td = "border border-slate-300 px-1.5 py-1 text-[10px] align-middle dark:border-slate-700";
 
   return (
     <>
@@ -135,9 +135,9 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
         <LetterHead company={company} />
 
         {/* Document title */}
-        <div className="mt-4 mb-3">
-          <h1 className="text-lg font-extrabold tracking-[0.2em] text-slate-800 dark:text-slate-100 underline underline-offset-4">
-            P A C K I N G&nbsp; L I S T{isInvoice ? " / Tax Invoice" : ""}
+        <div className="mt-3 mb-3 text-center">
+          <h1 className="inline-block text-sm font-extrabold tracking-[0.25em] text-slate-800 uppercase underline underline-offset-4 dark:text-slate-100">
+            Packing List{isInvoice ? " / Tax Invoice" : ""}
           </h1>
         </div>
 
@@ -163,11 +163,23 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        {/* Main table */}
-        <table className="w-full border-collapse">
+        {/* Main table — fixed layout with proportional column widths */}
+        <table className="w-full border-collapse table-fixed text-[10px]">
+          <colgroup>
+            <col style={{ width: "3.5%" }} />  {/* SL */}
+            <col style={{ width: "9%" }} />     {/* Brand */}
+            <col style={{ width: "11%" }} />    {/* Model No */}
+            <col style={{ width: "28%" }} />    {/* Description */}
+            <col style={{ width: "9%" }} />     {/* Country */}
+            <col style={{ width: "9%" }} />     {/* HS Code */}
+            <col style={{ width: "5%" }} />     {/* Qty */}
+            <col style={{ width: "8%" }} />     {/* Ctns / Amount */}
+            <col style={{ width: "9%" }} />     {/* CBM */}
+            <col style={{ width: "8.5%" }} />   {/* Weight */}
+          </colgroup>
           <thead>
             <tr>
-              <th className={`${th} w-8`}>SL</th>
+              <th className={th}>SL</th>
               <th className={`${th} text-left`}>Brand</th>
               <th className={`${th} text-left`}>Model No</th>
               <th className={`${th} text-left`}>Description</th>
@@ -186,20 +198,20 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
             {renderItems.map((item) => (
               <tr key={item.id}>
                 <td className={`${td} text-center`}>{item.sl_no}</td>
-                <td className={td}>{item.brand}</td>
-                <td className={`${td} font-mono`}>{item.model_no}</td>
-                <td className={td}>{item.description}</td>
+                <td className={`${td} break-words`}>{item.brand}</td>
+                <td className={`${td} font-mono break-all`}>{item.model_no}</td>
+                <td className={`${td} break-words`}>{item.description}</td>
                 <td className={`${td} text-center`}>{item.country_of_origin}</td>
                 <td className={`${td} text-center font-mono`}>{item.hs_code}</td>
-                <td className={`${td} text-center`}>{item.qty}</td>
+                <td className={`${td} text-center tabular-nums`}>{item.qty}</td>
                 {isInvoice
-                  ? <td className={`${td} text-right`}>{item.amount != null ? fmt2(item.amount) : "—"}</td>
+                  ? <td className={`${td} text-right tabular-nums`}>{item.amount != null ? fmt2(item.amount) : "—"}</td>
                   : item._showCtn
-                    ? <td className={`${td} text-center align-middle`} rowSpan={item._rowspan > 1 ? item._rowspan : undefined}>
+                    ? <td className={`${td} text-center`} rowSpan={item._rowspan > 1 ? item._rowspan : undefined}>
                         {(item.box_no ?? 0) > 0 && (
-                          <div className="text-[9px] font-semibold text-slate-500 leading-tight">{boxLabel(item.box_no!)}</div>
+                          <div className="text-[8px] font-semibold text-slate-500 leading-tight">{boxLabel(item.box_no!)}</div>
                         )}
-                        <div className="font-bold">{item.no_of_ctns ?? "—"}</div>
+                        <div className="font-bold tabular-nums">{item.no_of_ctns ?? "—"}</div>
                       </td>
                     : null
                 }
@@ -298,12 +310,12 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           {/* Letterhead repeated */}
           <LetterHead company={company} />
 
-          <div className="mt-4 mb-4 flex items-baseline gap-4">
-            <h2 className="text-base font-extrabold tracking-[0.15em] text-slate-800 uppercase underline underline-offset-4 dark:text-slate-100">
+          <div className="mt-3 mb-4 text-center">
+            <h2 className="inline-block text-sm font-extrabold tracking-[0.25em] text-slate-800 uppercase underline underline-offset-4 dark:text-slate-100">
               Box Breakdown
             </h2>
             {shippingLabel && (
-              <span className="text-sm font-semibold text-slate-500">— Shipping Label: <strong>{shippingLabel.toUpperCase()}</strong></span>
+              <p className="mt-0.5 text-xs font-semibold text-slate-500">Shipping Label: <strong>{shippingLabel.toUpperCase()}</strong></p>
             )}
           </div>
 
@@ -323,10 +335,19 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
                     <span className="text-xs text-slate-600 dark:text-slate-400">Weight: {boxWeight.toFixed(2)} kg</span>
                   </div>
                   {/* Items in this box */}
-                  <table className="w-full border-collapse">
+                  <table className="w-full border-collapse table-fixed text-[10px]">
+                    <colgroup>
+                      <col style={{ width: "4%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "14%" }} />
+                      <col style={{ width: "46%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th className={`${th} w-8`}>#</th>
+                        <th className={th}>#</th>
                         <th className={`${th} text-left`}>Brand</th>
                         <th className={`${th} text-left`}>Model No</th>
                         <th className={`${th} text-left`}>Description</th>
@@ -339,9 +360,9 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
                       {boxItems.map((item, i) => (
                         <tr key={item.id}>
                           <td className={`${td} text-center`}>{i + 1}</td>
-                          <td className={td}>{item.brand}</td>
-                          <td className={`${td} font-mono`}>{item.model_no}</td>
-                          <td className={td}>{item.description}</td>
+                          <td className={`${td} break-words`}>{item.brand}</td>
+                          <td className={`${td} font-mono break-all`}>{item.model_no}</td>
+                          <td className={`${td} break-words`}>{item.description}</td>
                           <td className={`${td} text-center tabular-nums`}>{item.qty}</td>
                           <td className={`${td} text-center tabular-nums`}>{fmt5(item.tot_cbm)}</td>
                           <td className={`${td} text-center tabular-nums`}>{item.total_weight_kg?.toFixed(2) ?? "—"}</td>
