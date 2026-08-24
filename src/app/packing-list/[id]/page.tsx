@@ -142,6 +142,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
               ))}
               {list.list_date && <p className="mt-2 text-slate-600 dark:text-slate-400">Date &nbsp;&nbsp;{listDateFmt}</p>}
               {list.invoice_no && <p className="text-slate-600 dark:text-slate-400">Invoice No. &nbsp;&nbsp;{list.invoice_no}</p>}
+              {shippingLabel && <p className="text-slate-600 dark:text-slate-400">Shipping Label &nbsp;&nbsp;<span className="font-semibold text-slate-800 dark:text-slate-100">{shippingLabel.toUpperCase()}</span></p>}
             </div>
           </div>
 
@@ -178,8 +179,11 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
                     {isInvoice
                       ? <td className="border border-slate-200 px-2 py-1.5 text-right text-xs dark:border-slate-700">{item.amount != null ? fmt2(item.amount) : "—"}</td>
                       : item._showCtn
-                        ? <td className="border border-slate-200 px-2 py-1.5 text-center text-xs dark:border-slate-700" rowSpan={item._rowspan > 1 ? item._rowspan : undefined}>
-                            {item.no_of_ctns ?? "—"}
+                        ? <td className="border border-slate-200 px-2 py-1.5 text-center text-xs align-middle dark:border-slate-700" rowSpan={item._rowspan > 1 ? item._rowspan : undefined}>
+                            {(item.box_no ?? 0) > 0 && (
+                              <div className="mb-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">{boxLabel(item.box_no!)}</div>
+                            )}
+                            <div className="font-bold">{item.no_of_ctns ?? "—"}</div>
                           </td>
                         : null
                     }
@@ -232,6 +236,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           <div className="mt-6 space-y-1 text-xs text-slate-500">
             <p>Weight (KG):— {totWeight.toFixed(2)}</p>
             <p>Total Cartons:— {totCtns}</p>
+            {shippingLabel && <p>Shipping Label:— {shippingLabel.toUpperCase()} ({totCtns} cartons: {assignedBoxNos.map((n) => boxLabel(n)).join(", ")})</p>}
             {countries && <p>Country of Origin:— {countries}</p>}
           </div>
 
