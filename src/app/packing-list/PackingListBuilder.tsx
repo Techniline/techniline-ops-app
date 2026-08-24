@@ -366,6 +366,41 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
     });
   }
 
+  // Split a row by carton_qty and assign each chunk to its own new sequential box
+  function splitToBoxes(key: string) {
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.key === key);
+      if (idx === -1) return prev;
+      const o = prev[idx];
+      const cq = o._carton_qty;
+      if (!cq || cq <= 0) return prev;
+      const sku = { unit_weight_kg: o._unit_weight_kg, unit_cbm: o._unit_cbm, carton_qty: o._carton_qty, carton_weight_kg: o._carton_weight_kg, carton_cbm: o._carton_cbm };
+      const usedBoxNos = prev.map((l) => l.box_no).filter((b) => b > 0);
+      let nextBox = usedBoxNos.length > 0 ? Math.max(...usedBoxNos) + 1 : 1;
+      const chunks: PackingLine[] = [];
+      let remaining = o.qty;
+      while (remaining > 0) {
+        const chunkQty = Math.min(cq, remaining);
+        const phys = computePhysical(chunkQty, sku);
+        chunks.push({ ...o, key: Math.random().toString(36).slice(2), qty: chunkQty, ...phys, amount: chunkQty * o.unit_price, box_no: nextBox++, _parent_key: undefined, _split_from_qty: undefined });
+        remaining -= chunkQty;
+      }
+      const next = [...prev];
+      next.splice(idx, 1, ...chunks);
+      return next;
+    });
+    // Update boxData for newly created boxes (CTN=1 each)
+    setLines((prev) => {
+      const newBoxNos = prev.map((l) => l.box_no).filter((b) => b > 0);
+      setBoxData((bd) => {
+        const updated = { ...bd };
+        for (const b of newBoxNos) { if (!updated[b]) updated[b] = { ctns: 1 }; }
+        return updated;
+      });
+      return prev;
+    });
+  }
+
   function boxLabel(boxNo: number): string {
     const lbl = shippingLabel.trim().toUpperCase();
     return lbl ? `${lbl}-${String(boxNo).padStart(2, "0")}` : `Box ${boxNo}`;
@@ -763,6 +798,11 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                         disabled={!ln._carton_qty || ln._carton_qty <= 0 || ln.qty <= ln._carton_qty}
                         onClick={() => autoSplitLine(ln.key)}
                         className="rounded p-0.5 text-slate-300 hover:text-violet-500 disabled:opacity-20 text-xs">⊡</button>
+                      <button type="button"
+                        title={ln._carton_qty && ln._carton_qty > 0 ? `Split into individual boxes (${Math.ceil(ln.qty / ln._carton_qty)} boxes of ${ln._carton_qty})` : "Split to boxes (needs carton qty from catalog)"}
+                        disabled={!ln._carton_qty || ln._carton_qty <= 0}
+                        onClick={() => splitToBoxes(ln.key)}
+                        className="rounded p-0.5 text-slate-300 hover:text-emerald-500 disabled:opacity-20 text-xs">⊞</button>
                       <button type="button" title="Remove line" onClick={() => setLines((p) => p.filter((x) => x.key !== ln.key))}
                         className="rounded p-0.5 text-slate-300 hover:text-red-500 text-xs">✕</button>
                     </div>
