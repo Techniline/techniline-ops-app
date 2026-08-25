@@ -167,12 +167,30 @@ export async function POST(request: Request): Promise<Response> {
       existingRows.map((r) => [(r.model_no as string).toLowerCase(), r])
     );
 
+    // --- Deduplicate import records by model_no (last row wins — most likely to be most complete) ---
+    const dedupedMap = new Map<string, Record<string, unknown>>();
+    for (const rec of records) {
+      const key = (rec.model_no as string).toLowerCase();
+      const prev = dedupedMap.get(key);
+      if (!prev) {
+        dedupedMap.set(key, rec);
+      } else {
+        // Merge: keep non-null values from both, later row wins on conflict
+        const merged = { ...prev };
+        for (const [k, v] of Object.entries(rec)) {
+          if (v != null && v !== "") merged[k] = v;
+        }
+        dedupedMap.set(key, merged);
+      }
+    }
+    const dedupedRecords = Array.from(dedupedMap.values());
+
     // --- Split import records into inserts and updates ---
     const toInsert: Record<string, unknown>[] = [];
     const toUpdate: { id: string; patch: Record<string, unknown> }[] = [];
     let alreadyComplete = 0;
 
-    for (const rec of records) {
+    for (const rec of dedupedRecords) {
       const existing = existingMap.get((rec.model_no as string).toLowerCase());
       if (existing) {
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -222,7 +240,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json({
       ok: true,
-      total: records.length,
+      total: dedupedRecords.length,
       inserted,
       updated,
       skipped: alreadyComplete,
