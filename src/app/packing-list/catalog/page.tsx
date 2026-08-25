@@ -27,7 +27,8 @@ function SkuForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.model_no?.trim()) { setErr("Model No is required."); return; }
+    const cleanModel = (form.model_no ?? "").replace(/[^A-Za-z0-9]/g, "");
+    if (!cleanModel) { setErr("Model No is required."); return; }
     setSaving(true); setErr(null);
     try {
       const token = await getToken();
@@ -36,9 +37,9 @@ function SkuForm({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, model_no: cleanModel }),
       });
-      const json = (await res.json()) as { ok: boolean; item?: SkuCatalogRow; error?: string };
+      const json = (await res.json()) as { ok: boolean; item?: SkuCatalogRow; merged?: boolean; error?: string };
       if (!json.ok) throw new Error(json.error ?? "Failed");
       onSave(json.item!);
     } catch (e2) {
@@ -74,7 +75,7 @@ function SkuForm({
         <form onSubmit={submit} className="grid grid-cols-2 gap-4 p-6">
           <div>
             <label className={lbl}>Model No *</label>
-            <input className={inp} value={form.model_no ?? ""} onChange={(e) => set("model_no", e.target.value)} placeholder="e.g. AH-8031" />
+            <input className={inp} value={form.model_no ?? ""} onChange={(e) => set("model_no", e.target.value.replace(/[^A-Za-z0-9]/g, ""))} placeholder="e.g. AH8031" />
           </div>
           <div>
             <label className={lbl}>Brand</label>

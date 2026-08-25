@@ -42,10 +42,10 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
   const hasModelCol = keys.some((k) => norm(k) === "model" || norm(k) === "modelno");
   let modelNo: string;
   if (hasModelCol) {
-    modelNo = String(get("modelno", "model") ?? "").trim();
+    modelNo = String(get("modelno", "model") ?? "").trim().replace(/[^A-Za-z0-9]/g, "");
     if (!modelNo) return null;
   } else {
-    modelNo = String(get("itemcode", "sku", "code", "partno", "part") ?? "").trim();
+    modelNo = String(get("itemcode", "sku", "code", "partno", "part") ?? "").trim().replace(/[^A-Za-z0-9]/g, "");
     if (!modelNo) return null;
   }
 
