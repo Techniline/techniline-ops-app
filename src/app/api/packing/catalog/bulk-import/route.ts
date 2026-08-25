@@ -23,14 +23,11 @@ function svcClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-/** Normalise a header string for flexible column matching */
 function norm(s: unknown): string {
   return String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/** Map a parsed row object to a catalog record */
 function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Record<string, unknown> | null {
-  // Build a normalised key→value map
   const keys = Object.keys(raw);
   const get = (...candidates: string[]): unknown => {
     for (const c of candidates) {
@@ -40,29 +37,50 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
     return null;
   };
 
-  const modelNo = String(get("itemcode", "modelno", "sku", "model", "code", "partno", "part") ?? "").trim();
-  if (!modelNo) return null;
+  // If a dedicated MODEL/MODELNO column exists, use it exclusively as model_no.
+  // If it's empty on this row, it's a category/header row — skip.
+  const hasModelCol = keys.some((k) => norm(k) === "model" || norm(k) === "modelno");
+  let modelNo: string;
+  if (hasModelCol) {
+    modelNo = String(get("modelno", "model") ?? "").trim();
+    if (!modelNo) return null;
+  } else {
+    modelNo = String(get("itemcode", "sku", "code", "partno", "part") ?? "").trim();
+    if (!modelNo) return null;
+  }
 
-  const ctnL = Number(get("mastercartonlength", "length", "l", "cartonlength")) || null;
-  const ctnW = Number(get("mastercartonwidth", "width", "w", "cartonwidth")) || null;
-  const ctnH = Number(get("mastercartonheight", "height", "h", "cartonheight")) || null;
+  const ctnL = Number(get("mastercartonlength", "cartonlength", "cartondimensionl", "length")) || null;
+  const ctnW = Number(get("mastercartonwidth", "cartonwidth", "cartondimensionw", "width")) || null;
+  const ctnH = Number(get("mastercartonheight", "cartonheight", "cartondimensionh", "height")) || null;
 
-  // Volume: prefer explicit column; compute from dims if absent (cm → m³)
-  let cartonCbm = Number(get("mastercartonvolume", "cartonvolume", "volume", "cbm", "mastercartonvolumem3")) || null;
+  // Unit CBM — check specific unit-level column names before the generic "cbm" fallback
+  // "CUBE CBM/UNIT" normalises to "cubecbmunit" which contains "cbmunit"
+  const unitCbm = Number(get("volumeperpc", "unitcbm", "unitvolume", "volumeperpiece", "cbmunit", "cubecbm", "unitvolumem3")) || null;
+
+  // Carton CBM — carton-level columns only, then dim calculation
+  let cartonCbm = Number(get("mastercartonvolume", "cartonvolume", "mastercartonvolumem3", "mastercbm", "cartoncbm")) || null;
   if (!cartonCbm && ctnL && ctnW && ctnH) {
     cartonCbm = Math.round((ctnL * ctnW * ctnH) / 1_000_000 * 100000) / 100000;
   }
+  // If no carton CBM but we have unit CBM, treat unit CBM as carton CBM (1 per carton items)
+  if (!cartonCbm && unitCbm) cartonCbm = unitCbm;
 
-  const rawHs = get("hscode", "hs", "hscode", "harmonizedcode");
+  // Gross weight per carton — "G.W./CTN" normalises to "gwctn" which contains "gw"
+  const cartonWeight = Number(get("mastercartonweight", "mastercartongw", "grossweightctn", "gwctn", "gw", "grossweight", "cartonweight", "cartonweightkg")) || null;
+
+  // Unit / net weight — "N.W./CTN" normalises to "nwctn" which contains "nw"
+  const unitWeight = Number(get("unitweightkg", "unitweight", "netweight", "nw", "nwkg")) || null;
+
+  const cartonQty = Number(get("mastercartonpackagingqty", "packagingqty", "pcspercarton", "qtypercarton", "cartonqty", "masterpackqty", "pcs")) || null;
+
+  const rawHs = get("hscode", "hs", "harmonizedcode", "hstariff", "hsncode");
   const hsCode = rawHs != null ? String(rawHs).replace(/\.0$/, "").trim() || null : null;
 
-  const cartonQty = Number(get("mastercartonpackagingqty", "packagingqty", "pcspercarton", "pcs", "qty", "cartonqty", "masterpackqty")) || null;
-  const cartonWeight = Number(get("mastercartonweight", "cartonweight", "gw", "grossweight", "mastercartonweightkg", "mastercartongw")) || null;
+  // Description — also try "Product Type" (normalises to "producttype" which contains "producttype")
+  const description = String(
+    get("description", "desc", "productdescription", "productname", "name", "producttype", "type") ?? ""
+  ).trim() || null;
 
-  const unitCbm = Number(get("volumeperpc", "unitcbm", "unitvolume", "volumeperpiece")) || null;
-  const unitWeight = Number(get("unitweightkg", "unitweight", "netweight", "nw")) || null;
-
-  const description = String(get("description", "desc", "productname", "name", "productdescription") ?? "").trim() || null;
   const country = String(get("countryoforigin", "country", "origin", "madeincountry") ?? "China").trim() || "China";
 
   return {
@@ -84,93 +102,137 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
 
 /**
  * POST /api/packing/catalog/bulk-import
- * Accepts multipart/form-data with:
- *   file  — .xlsx, .xls, or .csv
- *   brand — brand name to apply to all rows (optional; falls back to a "Brand" column in the file)
- *
- * Upserts on model_no (case-insensitive via ilike). Returns counts.
+ * Accepts multipart/form-data: file (.xlsx/.xls/.csv) + brand string
+ * Strategy: fetch all existing catalog records once, compare in memory,
+ * then batch-insert new rows and per-record update existing (null fields only).
  */
 export async function POST(request: Request): Promise<Response> {
-  const user = await getUser(request);
-  if (!user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-
-  let fileBuffer: Buffer;
-  let fileName: string;
-  let brand = "";
   try {
-    const form = await request.formData();
-    const file = form.get("file") as File | null;
-    if (!file) return Response.json({ ok: false, error: "No file uploaded." }, { status: 400 });
-    fileName = file.name.toLowerCase();
-    brand = String(form.get("brand") ?? "").trim();
-    fileBuffer = Buffer.from(await file.arrayBuffer());
-  } catch {
-    return Response.json({ ok: false, error: "Could not read uploaded file." }, { status: 400 });
-  }
+    const user = await getUser(request);
+    if (!user) return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
 
-  // Parse to rows
-  let rows: Record<string, unknown>[];
-  try {
-    const wb = XLSX.read(fileBuffer, { type: "buffer", cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: false });
-  } catch {
-    return Response.json({ ok: false, error: "Could not parse file. Make sure it is a valid .xlsx, .xls, or .csv." }, { status: 400 });
-  }
-
-  if (!rows.length) return Response.json({ ok: false, error: "File is empty or has no data rows." }, { status: 400 });
-
-  // Map rows to catalog records
-  const records = rows.map((r) => mapRow(r, brand, user.id)).filter((r): r is Record<string, unknown> => r !== null);
-  if (!records.length) return Response.json({ ok: false, error: "No valid rows found. Make sure the file has a model number column." }, { status: 400 });
-
-  // Upsert in batches of 100 on model_no (case-insensitive match via DB)
-  const svc = svcClient();
-  let inserted = 0;
-  let updated = 0;
-  let errors = 0;
-
-  const BATCH = 100;
-  for (let i = 0; i < records.length; i += BATCH) {
-    const batch = records.slice(i, i + BATCH);
+    // --- Parse form data ---
+    let fileBuffer: Buffer;
+    let brand = "";
     try {
-      // For each record, check if it already exists (case-insensitive model_no)
-      for (const rec of batch) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing } = await (svc.from("packing_sku_catalog" as any) as any)
-          .select("id")
-          .ilike("model_no", rec.model_no as string)
-          .maybeSingle();
-
-        if (existing?.id) {
-          // Update — only fill in fields that are currently null
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: current } = await (svc.from("packing_sku_catalog" as any) as any)
-            .select("*").eq("id", existing.id).single();
-
-          const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-          for (const [k, v] of Object.entries(rec)) {
-            if (["source", "created_by", "updated_at", "model_no"].includes(k)) continue;
-            if (v != null && v !== "" && (current[k] == null || current[k] === "")) {
-              patch[k] = v;
-            }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (svc.from("packing_sku_catalog" as any) as any).update(patch).eq("id", existing.id);
-          updated++;
-        } else {
-          // Insert new
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (svc.from("packing_sku_catalog" as any) as any).insert(rec);
-          if (error) errors++;
-          else inserted++;
-        }
-      }
+      const form = await request.formData();
+      const file = form.get("file") as File | null;
+      if (!file) return Response.json({ ok: false, error: "No file uploaded." }, { status: 400 });
+      brand = String(form.get("brand") ?? "").trim();
+      fileBuffer = Buffer.from(await file.arrayBuffer());
     } catch {
-      errors += batch.length;
+      return Response.json({ ok: false, error: "Could not read uploaded file." }, { status: 400 });
     }
-  }
 
-  void fileName;
-  return Response.json({ ok: true, total: records.length, inserted, updated, errors });
+    // --- Parse spreadsheet ---
+    let rows: Record<string, unknown>[];
+    try {
+      const wb = XLSX.read(fileBuffer, { type: "buffer", cellDates: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: false });
+    } catch {
+      return Response.json({ ok: false, error: "Could not parse file. Make sure it is a valid .xlsx, .xls, or .csv." }, { status: 400 });
+    }
+
+    if (!rows.length) return Response.json({ ok: false, error: "File is empty or has no data rows." }, { status: 400 });
+
+    const records = rows
+      .map((r) => mapRow(r, brand, user.id))
+      .filter((r): r is Record<string, unknown> => r !== null);
+
+    if (!records.length) {
+      return Response.json({ ok: false, error: "No valid rows found. Check that the file has model number and data columns." }, { status: 400 });
+    }
+
+    const svc = svcClient();
+
+    // --- Fetch ALL existing catalog records in batches (bypass PostgREST 1000-row cap) ---
+    const existingRows: Record<string, unknown>[] = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (svc.from("packing_sku_catalog" as any) as any)
+        .select("id, model_no, brand, description, hs_code, country_of_origin, unit_weight_kg, unit_cbm, carton_qty, carton_weight_kg, carton_cbm")
+        .order("model_no", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error || !data || data.length === 0) break;
+      existingRows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    // Build lowercase model_no → record lookup
+    const existingMap = new Map<string, Record<string, unknown>>(
+      existingRows.map((r) => [(r.model_no as string).toLowerCase(), r])
+    );
+
+    // --- Split import records into inserts and updates ---
+    const toInsert: Record<string, unknown>[] = [];
+    const toUpdate: { id: string; patch: Record<string, unknown> }[] = [];
+    let alreadyComplete = 0;
+
+    for (const rec of records) {
+      const existing = existingMap.get((rec.model_no as string).toLowerCase());
+      if (existing) {
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const [k, v] of Object.entries(rec)) {
+          if (["source", "created_by", "updated_at", "model_no"].includes(k)) continue;
+          if (v != null && v !== "" && (existing[k] == null || existing[k] === "")) {
+            patch[k] = v;
+          }
+        }
+        if (Object.keys(patch).length > 1) {
+          toUpdate.push({ id: existing.id as string, patch });
+        } else {
+          alreadyComplete++;
+        }
+      } else {
+        toInsert.push(rec);
+      }
+    }
+
+    let inserted = 0, updated = 0, errors = 0;
+
+    // --- Batch insert new records (100 at a time) ---
+    const INSERT_BATCH = 100;
+    for (let i = 0; i < toInsert.length; i += INSERT_BATCH) {
+      const batch = toInsert.slice(i, i + INSERT_BATCH);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (svc.from("packing_sku_catalog" as any) as any).insert(batch);
+        if (error) errors += batch.length;
+        else inserted += batch.length;
+      } catch {
+        errors += batch.length;
+      }
+    }
+
+    // --- Update existing records (null-fill only) ---
+    for (const { id, patch } of toUpdate) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (svc.from("packing_sku_catalog" as any) as any).update(patch).eq("id", id);
+        if (error) errors++;
+        else updated++;
+      } catch {
+        errors++;
+      }
+    }
+
+    return Response.json({
+      ok: true,
+      total: records.length,
+      inserted,
+      updated,
+      skipped: alreadyComplete,
+      errors,
+    });
+  } catch (err) {
+    // Top-level catch — always return JSON so the client can parse the error
+    return Response.json(
+      { ok: false, error: err instanceof Error ? err.message : "Internal server error" },
+      { status: 500 }
+    );
+  }
 }
