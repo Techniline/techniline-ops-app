@@ -169,6 +169,24 @@ export default function PackingCatalogPage() {
   const [stockResult, setStockResult] = useState<{ total: number; matched: number; updated: number; errors: number } | null>(null);
   const [stockErr, setStockErr] = useState<string | null>(null);
 
+  // Normalize model numbers
+  const [normalizing, setNormalizing] = useState(false);
+  const [normalizeResult, setNormalizeResult] = useState<{ total: number; renamed: number; merged: number; errors: number } | null>(null);
+
+  async function handleNormalize() {
+    if (!confirm(`This will strip hyphens, spaces and other special characters from all ${items.length.toLocaleString()} model numbers, and merge any duplicates. Continue?`)) return;
+    setNormalizing(true); setNormalizeResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/packing/catalog/normalize-model-nos", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json() as { ok: boolean; total?: number; renamed?: number; merged?: number; errors?: number; error?: string };
+      if (!json.ok) throw new Error(json.error ?? "Failed");
+      setNormalizeResult({ total: json.total ?? 0, renamed: json.renamed ?? 0, merged: json.merged ?? 0, errors: json.errors ?? 0 });
+      void load();
+    } catch (err) { alert(err instanceof Error ? err.message : "Failed"); }
+    finally { setNormalizing(false); }
+  }
+
   async function handleStockImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -319,6 +337,14 @@ export default function PackingCatalogPage() {
           <input ref={stockImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleStockImport} />
 
           <button
+            type="button" onClick={handleNormalize} disabled={normalizing || loading}
+            style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 10px rgba(234,179,8,0.14)" }}
+            className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-xs font-bold text-amber-600 hover:border-amber-300 hover:bg-amber-50 disabled:opacity-50"
+            title="Strip hyphens, spaces and special characters from all model numbers"
+          >
+            {normalizing ? "⏳ Fixing…" : "✦ Fix Model Nos"}
+          </button>
+          <button
             type="button" onClick={load} disabled={loading}
             style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 10px rgba(139,92,246,0.10)" }}
             className="rounded-xl border border-violet-100 bg-white px-4 py-2 text-xs font-bold text-violet-400 hover:border-violet-200 hover:text-violet-600 disabled:opacity-50"
@@ -372,6 +398,16 @@ export default function PackingCatalogPage() {
           <div className="flex items-center justify-between rounded-xl border border-red-100 bg-white px-4 py-3 text-sm text-red-600" style={{ boxShadow: "0 2px 12px rgba(239,68,68,0.08)" }}>
             <span>Stock List failed: {stockErr}</span>
             <button type="button" onClick={() => setStockErr(null)} className="ml-4 font-bold text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
+        {normalizeResult && (
+          <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800" style={{ boxShadow: "0 2px 12px rgba(234,179,8,0.10)" }}>
+            <span>
+              Model Nos cleaned — <strong>{normalizeResult.renamed}</strong> renamed, <strong>{normalizeResult.merged}</strong> duplicates merged
+              {normalizeResult.errors > 0 && <>, <strong className="text-red-600">{normalizeResult.errors}</strong> errors</>}
+              {" "}(of {normalizeResult.total} total SKUs)
+            </span>
+            <button type="button" onClick={() => setNormalizeResult(null)} className="ml-4 font-bold text-amber-400 hover:text-amber-600">✕</button>
           </div>
         )}
         {error && (
