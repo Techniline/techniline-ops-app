@@ -96,8 +96,32 @@ export default function PackingCatalogPage() {
   const importRef = useRef<HTMLInputElement>(null);
   const [importBrand, setImportBrand] = useState("");
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ inserted: number; updated: number; errors: number; total: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ inserted: number; updated: number; skipped: number; errors: number; total: number } | null>(null);
   const [importErr, setImportErr] = useState<string | null>(null);
+
+  // Stock List import (description/brand fill)
+  const stockImportRef = useRef<HTMLInputElement>(null);
+  const [stockImporting, setStockImporting] = useState(false);
+  const [stockResult, setStockResult] = useState<{ total: number; matched: number; updated: number; errors: number } | null>(null);
+  const [stockErr, setStockErr] = useState<string | null>(null);
+
+  async function handleStockImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setStockImporting(true); setStockResult(null); setStockErr(null);
+    try {
+      const token = await getToken();
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/packing/catalog/stock-import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json() as { ok: boolean; total?: number; matched?: number; updated?: number; errors?: number; error?: string };
+      if (!json.ok) throw new Error(json.error ?? "Import failed");
+      setStockResult({ total: json.total ?? 0, matched: json.matched ?? 0, updated: json.updated ?? 0, errors: json.errors ?? 0 });
+      void load();
+    } catch (err) { setStockErr(err instanceof Error ? err.message : "Import failed"); }
+    finally { setStockImporting(false); }
+  }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -110,9 +134,9 @@ export default function PackingCatalogPage() {
       fd.append("file", file);
       fd.append("brand", importBrand.trim());
       const res = await fetch("/api/packing/catalog/bulk-import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
-      const json = await res.json() as { ok: boolean; inserted?: number; updated?: number; errors?: number; total?: number; error?: string };
+      const json = await res.json() as { ok: boolean; inserted?: number; updated?: number; skipped?: number; errors?: number; total?: number; error?: string };
       if (!json.ok) throw new Error(json.error ?? "Import failed");
-      setImportResult({ inserted: json.inserted ?? 0, updated: json.updated ?? 0, errors: json.errors ?? 0, total: json.total ?? 0 });
+      setImportResult({ inserted: json.inserted ?? 0, updated: json.updated ?? 0, skipped: json.skipped ?? 0, errors: json.errors ?? 0, total: json.total ?? 0 });
       void load();
     } catch (err) { setImportErr(err instanceof Error ? err.message : "Import failed"); }
     finally { setImporting(false); }
@@ -187,6 +211,12 @@ export default function PackingCatalogPage() {
             {importing ? "⏳ Importing…" : "⬆ Import XLSX / CSV"}
           </button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
+          <button type="button" onClick={() => stockImportRef.current?.click()} disabled={stockImporting}
+            className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-60 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-400"
+            title="Upload Stock List xlsx to fill in missing descriptions and brands by matching ItemCode to catalog Model No">
+            {stockImporting ? "⏳ Matching…" : "📋 Stock List"}
+          </button>
+          <input ref={stockImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleStockImport} />
           <button type="button" onClick={load} disabled={loading}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 disabled:opacity-50">
             Refresh
@@ -203,8 +233,12 @@ export default function PackingCatalogPage() {
         <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
           <span>
             Import complete — <strong>{importResult.inserted}</strong> inserted, <strong>{importResult.updated}</strong> updated
+            {importResult.skipped > 0 && <>, <strong>{importResult.skipped}</strong> already complete</>}
             {importResult.errors > 0 && <>, <strong className="text-red-600">{importResult.errors}</strong> errors</>}
             {" "}(of {importResult.total} rows)
+            {importResult.inserted === 0 && importResult.updated === 0 && importResult.skipped > 0 && (
+              <span className="ml-2 text-emerald-600"> — all SKUs already had this data</span>
+            )}
           </span>
           <button type="button" onClick={() => setImportResult(null)} className="ml-4 text-emerald-600 hover:text-emerald-800">✕</button>
         </div>
@@ -213,6 +247,22 @@ export default function PackingCatalogPage() {
         <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
           <span>Import failed: {importErr}</span>
           <button type="button" onClick={() => setImportErr(null)} className="ml-4 text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+      {stockResult && (
+        <div className="flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300">
+          <span>
+            Stock List match — <strong>{stockResult.updated}</strong> descriptions/brands filled
+            {stockResult.errors > 0 && <>, <strong className="text-red-600">{stockResult.errors}</strong> errors</>}
+            {" "}(<strong>{stockResult.matched}</strong> matched of {stockResult.total} catalog SKUs)
+          </span>
+          <button type="button" onClick={() => setStockResult(null)} className="ml-4 text-violet-500 hover:text-violet-700">✕</button>
+        </div>
+      )}
+      {stockErr && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <span>Stock List import failed: {stockErr}</span>
+          <button type="button" onClick={() => setStockErr(null)} className="ml-4 text-red-500 hover:text-red-700">✕</button>
         </div>
       )}
 
