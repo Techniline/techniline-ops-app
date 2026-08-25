@@ -171,7 +171,7 @@ export default function PackingCatalogPage() {
 
   // Normalize model numbers
   const [normalizing, setNormalizing] = useState(false);
-  const [normalizeResult, setNormalizeResult] = useState<{ total: number; renamed: number; merged: number; errors: number } | null>(null);
+  const [normalizeResult, setNormalizeResult] = useState<{ total: number; renamed: number; merged: number; errors: number; failedIds?: string[] } | null>(null);
 
   async function handleNormalize() {
     if (!confirm(`This will strip hyphens, spaces and other special characters from all ${items.length.toLocaleString()} model numbers, and merge any duplicates. Continue?`)) return;
@@ -179,9 +179,9 @@ export default function PackingCatalogPage() {
     try {
       const token = await getToken();
       const res = await fetch("/api/packing/catalog/normalize-model-nos", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json() as { ok: boolean; total?: number; renamed?: number; merged?: number; errors?: number; error?: string };
+      const json = await res.json() as { ok: boolean; total?: number; renamed?: number; merged?: number; errors?: number; failedIds?: string[]; error?: string };
       if (!json.ok) throw new Error(json.error ?? "Failed");
-      setNormalizeResult({ total: json.total ?? 0, renamed: json.renamed ?? 0, merged: json.merged ?? 0, errors: json.errors ?? 0 });
+      setNormalizeResult({ total: json.total ?? 0, renamed: json.renamed ?? 0, merged: json.merged ?? 0, errors: json.errors ?? 0, failedIds: json.failedIds });
       void load();
     } catch (err) { alert(err instanceof Error ? err.message : "Failed"); }
     finally { setNormalizing(false); }
