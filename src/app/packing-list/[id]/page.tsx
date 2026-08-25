@@ -405,7 +405,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
       {/* Print styles */}
       <style>{`
         @media print {
-          @page { size: A4; margin: 12mm 14mm; }
+          @page { size: A4; margin: 12mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; font-family: Arial, sans-serif; color: #64748b; } }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11px; }
           .print\\:hidden { display: none !important; }
           #print-page-2 { page-break-before: always; }
