@@ -22,6 +22,25 @@ function svcClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+/** Fetch all rows from a paginated Supabase query in batches of 1000. */
+async function fetchAll(
+  svc: ReturnType<typeof svcClient>,
+  buildQuery: (from: number, to: number) => Promise<{ data: unknown[] | null; error: { message: string } | null }>
+): Promise<{ rows: unknown[]; error: string | null }> {
+  const BATCH = 1000;
+  const rows: unknown[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery(from, from + BATCH - 1);
+    if (error) return { rows: [], error: error.message };
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < BATCH) break;
+    from += BATCH;
+  }
+  return { rows, error: null };
+}
+
 /** GET /api/packing/catalog?q=&brand=&brands=1 — search SKU catalog or return distinct brand list */
 export async function GET(request: Request): Promise<Response> {
   if (!(await getUser(request))) {
@@ -31,38 +50,38 @@ export async function GET(request: Request): Promise<Response> {
   const q = (searchParams.get("q") ?? "").trim();
   const brand = (searchParams.get("brand") ?? "").trim();
 
-  // brands=1 — return distinct brand names only
+  const svc = svcClient();
+
+  // brands=1 — return distinct brand names only (paginate to get all)
   if (searchParams.get("brands") === "1") {
-    const svc = svcClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (svc.from("packing_sku_catalog" as any) as any)
-      .select("brand")
-      .not("brand", "is", null)
-      .order("brand", { ascending: true })
-      .limit(100000);
-    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-    const brands = [...new Set((data as { brand: string }[]).map((r) => r.brand).filter(Boolean))].sort();
+    const { rows, error } = await fetchAll(svc, (from, to) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (svc.from("packing_sku_catalog" as any) as any)
+        .select("brand")
+        .not("brand", "is", null)
+        .order("brand", { ascending: true })
+        .range(from, to) as Promise<{ data: unknown[] | null; error: { message: string } | null }>
+    );
+    if (error) return Response.json({ ok: false, error }, { status: 500 });
+    const brands = [...new Set((rows as { brand: string }[]).map((r) => r.brand).filter(Boolean))].sort();
     return Response.json({ ok: true, brands });
   }
 
-  const svc = svcClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (svc.from("packing_sku_catalog" as any) as any)
-    .select("*")
-    .order("brand", { ascending: true })
-    .order("model_no", { ascending: true })
-    .limit(100000);
+  // Full catalog fetch — paginate through all rows
+  const { rows, error } = await fetchAll(svc, (from, to) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let bq = (svc.from("packing_sku_catalog" as any) as any)
+      .select("*")
+      .order("brand", { ascending: true })
+      .order("model_no", { ascending: true })
+      .range(from, to);
+    if (q) bq = bq.or(`model_no.ilike.%${q}%,description.ilike.%${q}%,brand.ilike.%${q}%`);
+    if (brand) bq = bq.eq("brand", brand);
+    return bq as Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+  });
 
-  if (q) {
-    query = query.or(`model_no.ilike.%${q}%,description.ilike.%${q}%,brand.ilike.%${q}%`);
-  }
-  if (brand) {
-    query = query.eq("brand", brand);
-  }
-
-  const { data, error } = await query;
-  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-  return Response.json({ ok: true, items: data ?? [] });
+  if (error) return Response.json({ ok: false, error }, { status: 500 });
+  return Response.json({ ok: true, items: rows });
 }
 
 /** POST /api/packing/catalog — create a new SKU */
