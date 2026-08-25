@@ -471,31 +471,23 @@ export default function PackingCatalogPage() {
                         <span className="font-mono text-xs font-bold text-violet-600">{item.model_no}</span>
                       </td>
                       <td className="px-5 py-3">
-                        {item.brand
-                          ? <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700">{item.brand}</span>
-                          : <span className="text-xs text-slate-200">—</span>}
+                        {item.brand && <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700">{item.brand}</span>}
                       </td>
                       <td className="max-w-xs px-5 py-3">
-                        <span className={`block truncate text-sm ${item.description ? "text-slate-700" : "text-slate-200"}`}>
-                          {item.description ?? "—"}
-                        </span>
+                        {item.description && <span className="block truncate text-sm text-slate-700">{item.description}</span>}
                       </td>
                       <td className="px-5 py-3 text-xs text-slate-500">{item.country_of_origin}</td>
                       <td className="px-5 py-3">
-                        <span className="font-mono text-xs text-slate-400">{item.hs_code ?? <span className="text-slate-200">—</span>}</span>
+                        {item.hs_code && <span className="font-mono text-xs text-slate-400">{item.hs_code}</span>}
                       </td>
                       <td className="px-5 py-3 text-right text-xs">
-                        {item.unit_weight_kg != null
-                          ? <span className="font-mono text-slate-700">{item.unit_weight_kg}</span>
-                          : <span className="font-bold text-amber-400">—</span>}
+                        {item.unit_weight_kg != null && <span className="font-mono text-slate-700">{item.unit_weight_kg}</span>}
                       </td>
                       <td className="px-5 py-3 text-right text-xs">
-                        {item.unit_cbm != null
-                          ? <span className="font-mono text-slate-700">{item.unit_cbm}</span>
-                          : <span className="font-bold text-amber-400">—</span>}
+                        {item.unit_cbm != null && <span className="font-mono text-slate-700">{item.unit_cbm}</span>}
                       </td>
-                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_qty ?? <span className="text-slate-200">—</span>}</td>
-                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_cbm ?? <span className="text-slate-200">—</span>}</td>
+                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_qty ?? ""}</td>
+                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_cbm ?? ""}</td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
