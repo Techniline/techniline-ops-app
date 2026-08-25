@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { supabase } from "@/lib/supabaseClient";
 import type { SkuCatalogRow } from "@/lib/packing/types";
@@ -92,6 +92,32 @@ export default function PackingCatalogPage() {
   const [modal, setModal] = useState<Partial<SkuCatalogRow> | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  // Bulk import
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importBrand, setImportBrand] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ inserted: number; updated: number; errors: number; total: number } | null>(null);
+  const [importErr, setImportErr] = useState<string | null>(null);
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImporting(true); setImportResult(null); setImportErr(null);
+    try {
+      const token = await getToken();
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("brand", importBrand.trim());
+      const res = await fetch("/api/packing/catalog/bulk-import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json() as { ok: boolean; inserted?: number; updated?: number; errors?: number; total?: number; error?: string };
+      if (!json.ok) throw new Error(json.error ?? "Import failed");
+      setImportResult({ inserted: json.inserted ?? 0, updated: json.updated ?? 0, errors: json.errors ?? 0, total: json.total ?? 0 });
+      void load();
+    } catch (err) { setImportErr(err instanceof Error ? err.message : "Import failed"); }
+    finally { setImporting(false); }
+  }
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -147,7 +173,20 @@ export default function PackingCatalogPage() {
           <Link href="/packing-list" className="text-sm text-slate-500 hover:text-slate-700">← Packing Lists</Link>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">SKU Catalog</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Bulk import */}
+          <input
+            className={`w-32 ${inputCls} text-xs`}
+            placeholder="Brand (optional)"
+            value={importBrand}
+            onChange={(e) => setImportBrand(e.target.value)}
+            title="Brand name to apply to all rows in the imported file (if the file doesn't have a Brand column)"
+          />
+          <button type="button" onClick={() => importRef.current?.click()} disabled={importing}
+            className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
+            {importing ? "⏳ Importing…" : "⬆ Import XLSX / CSV"}
+          </button>
+          <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
           <button type="button" onClick={load} disabled={loading}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 disabled:opacity-50">
             Refresh
@@ -158,6 +197,24 @@ export default function PackingCatalogPage() {
           </button>
         </div>
       </div>
+
+      {/* Import result / error */}
+      {importResult && (
+        <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+          <span>
+            Import complete — <strong>{importResult.inserted}</strong> inserted, <strong>{importResult.updated}</strong> updated
+            {importResult.errors > 0 && <>, <strong className="text-red-600">{importResult.errors}</strong> errors</>}
+            {" "}(of {importResult.total} rows)
+          </span>
+          <button type="button" onClick={() => setImportResult(null)} className="ml-4 text-emerald-600 hover:text-emerald-800">✕</button>
+        </div>
+      )}
+      {importErr && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <span>Import failed: {importErr}</span>
+          <button type="button" onClick={() => setImportErr(null)} className="ml-4 text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="flex gap-4 text-xs text-slate-500">
