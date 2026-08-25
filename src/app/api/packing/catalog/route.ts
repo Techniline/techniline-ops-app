@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
       .select("brand")
       .not("brand", "is", null)
       .order("brand", { ascending: true })
-      .limit(500);
+      .limit(5000);
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
     const brands = [...new Set((data as { brand: string }[]).map((r) => r.brand).filter(Boolean))].sort();
     return Response.json({ ok: true, brands });
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
     .select("*")
     .order("brand", { ascending: true })
     .order("model_no", { ascending: true })
-    .limit(500);
+    .limit(5000);
 
   if (q) {
     query = query.or(`model_no.ilike.%${q}%,description.ilike.%${q}%,brand.ilike.%${q}%`);
