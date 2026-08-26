@@ -119,6 +119,87 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
   const th = "border border-slate-400 px-1.5 py-1.5 text-center text-[10px] font-semibold bg-slate-50 align-middle dark:bg-slate-800 dark:border-slate-600";
   const td = "border border-slate-300 px-1.5 py-1 text-[10px] align-middle dark:border-slate-700";
 
+  async function handleExcelExport() {
+    if (!list) return;
+    const XLSX = await import("xlsx");
+    const rows: (string | number | null)[][] = [];
+
+    // Header
+    rows.push([company.name]);
+    rows.push([company.addressBar]);
+    rows.push([]);
+    rows.push([isInvoice ? "PACKING LIST / TAX INVOICE" : "PACKING LIST"]);
+    rows.push([]);
+    rows.push(["Shipper:", company.name, "", "Consignee:", list.consignee_name ?? ""]);
+    if (list.consignee_address) rows.push(["", company.address[0] ?? "", "", "", list.consignee_address.split("\n")[0] ?? ""]);
+    rows.push(["Date:", listDateFmt, "", "Invoice No:", list.invoice_no ?? ""]);
+    if (shippingLabel) rows.push(["Shipping Label:", shippingLabel.toUpperCase()]);
+    rows.push([]);
+
+    // Column headers
+    const headers = ["SL", "Brand", "Model No", "Description", "Country of Origin", "HS Code", "Qty"];
+    if (isInvoice) {
+      headers.push("Amount (AED)");
+    } else {
+      headers.push("No. of Ctns");
+    }
+    headers.push("Tot. CBM", "Total Weight (kg)");
+    if (isInvoice) headers.push("Unit Price (AED)");
+    rows.push(headers);
+
+    // Data rows
+    items.forEach((item) => {
+      const row: (string | number | null)[] = [
+        item.sl_no,
+        item.brand ?? "",
+        item.model_no,
+        item.description ?? "",
+        item.country_of_origin ?? "",
+        item.hs_code ?? "",
+        item.qty,
+        isInvoice ? (item.amount ?? null) : (item.no_of_ctns ?? null),
+        item.tot_cbm ?? null,
+        item.total_weight_kg ?? null,
+      ];
+      if (isInvoice) row.push(item.unit_price ?? null);
+      rows.push(row);
+    });
+
+    // Totals
+    const totalQty = items.reduce((s, i) => s + i.qty, 0);
+    const totRow: (string | number | null)[] = ["", "", "", "", "", "Total:", totalQty];
+    totRow.push(isInvoice ? subtotal : totCtns);
+    totRow.push(Math.round(totCBM * 100000) / 100000, Math.round(totWeight * 100) / 100);
+    rows.push(totRow);
+
+    if (isInvoice) {
+      rows.push([]);
+      rows.push(["", "", "", "", "", "", "", "Subtotal", "", "", subtotal]);
+      rows.push(["", "", "", "", "", "", "", "VAT 5%", "", "", vat]);
+      rows.push(["", "", "", "", "", "", "", "Grand Total", "", "", grandTotal]);
+    }
+
+    // Summary
+    rows.push([]);
+    rows.push(["Weight (KG):", Math.round(totWeight * 100) / 100]);
+    rows.push(["Total Cartons:", totCtns]);
+    if (countries) rows.push(["Country of Origin:", countries]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 36 }, { wch: 14 }, { wch: 12 },
+      { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Packing List");
+
+    const safeInvNo = (list.invoice_no ?? id).replace(/[^A-Za-z0-9_-]/g, "_");
+    XLSX.writeFile(wb, `PackingList_${safeInvNo}_${list.list_date ?? "draft"}.xlsx`);
+  }
+
   return (
     <>
       {/* Screen toolbar */}
@@ -129,6 +210,10 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700">
           Edit
         </Link>
+        <button type="button" onClick={handleExcelExport}
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+          Export Excel
+        </button>
         <button type="button" onClick={() => window.print()}
           className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
           Print / Export PDF
