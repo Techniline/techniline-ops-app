@@ -153,7 +153,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* ── PAGE 1 ── */}
-      <div className="mx-auto max-w-5xl bg-white p-8 print:p-0 print:max-w-none dark:bg-slate-900" id="print-page-1">
+      <div className="mx-auto max-w-5xl bg-white p-8 print:p-0 print:max-w-none print:mx-0 dark:bg-slate-900" id="print-page-1">
 
         {/* Letterhead */}
         <LetterHead company={company} />
@@ -339,7 +339,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
 
       {/* ── PAGE 2 — Box Breakdown (printed only when boxes exist) ── */}
       {assignedBoxNos.length > 0 && (
-        <div className="mx-auto max-w-5xl bg-white px-8 pb-8 print:p-0 print:max-w-none print:mt-0 mt-8 border-t-4 border-dashed border-slate-300 pt-8 print:border-0 dark:bg-slate-900" id="print-page-2">
+        <div className="mx-auto max-w-5xl bg-white px-8 pb-8 print:p-0 print:max-w-none print:mx-0 print:mt-0 mt-8 border-t-4 border-dashed border-slate-300 pt-8 print:border-0 dark:bg-slate-900" id="print-page-2">
 
           {/* Letterhead repeated */}
           <LetterHead company={company} />
@@ -422,10 +422,37 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
       {/* Print styles */}
       <style>{`
         @media print {
-          @page { size: A4; margin: 12mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; font-family: Arial, sans-serif; color: #64748b; } }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11px; }
+          @page {
+            size: A4 portrait;
+            margin: 10mm 10mm 10mm 10mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-size: 10px;
+          }
+          * { box-sizing: border-box !important; }
           .print\\:hidden { display: none !important; }
+          #print-page-1, #print-page-2 {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 4mm 0 !important;
+            overflow: hidden !important;
+            page-break-inside: avoid;
+          }
           #print-page-2 { page-break-before: always; }
+          table {
+            width: 100% !important;
+            table-layout: fixed !important;
+          }
+          td, th {
+            overflow: hidden !important;
+          }
+          img { max-width: 100% !important; height: auto !important; }
         }
       `}</style>
     </>
