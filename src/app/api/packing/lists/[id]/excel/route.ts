@@ -67,6 +67,24 @@ function fmt5(n: number | null | undefined) {
   return Number(n).toFixed(5).replace(/\.?0+$/, "");
 }
 
+/**
+ * Returns the fractional column index at which to place the left edge of a
+ * centred image, given column widths (in Excel character units) and the desired
+ * image pixel width.  1 character unit ≈ 7.59 screen pixels (96 dpi).
+ */
+function centerImgCol(colWidthChars: number[], imgPx: number): number {
+  const PX = 7.59;
+  const totalPx = colWidthChars.reduce((s, w) => s + w * PX, 0);
+  const startPx = Math.max(0, (totalPx - imgPx) / 2);
+  let cum = 0;
+  for (let i = 0; i < colWidthChars.length; i++) {
+    const w = colWidthChars[i] * PX;
+    if (cum + w >= startPx) return i + (startPx - cum) / w;
+    cum += w;
+  }
+  return 0;
+}
+
 // Shared border style for table cells
 const BORDER: Partial<ExcelJS.Borders> = {
   top: { style: "thin", color: { argb: "FF94A3B8" } },
@@ -155,22 +173,17 @@ export async function GET(
   wb.creator = "Techniline Ops";
   const ws = wb.addWorksheet("Packing List", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1 } });
 
-  // 10 data columns + column A used for labels → define widths
-  ws.columns = [
-    { width: 5 },   // A: SL
-    { width: 12 },  // B: Brand
-    { width: 14 },  // C: Model No
-    { width: 32 },  // D: Description
-    { width: 12 },  // E: Country
-    { width: 12 },  // F: HS Code
-    { width: 7 },   // G: Qty
-    { width: 12 },  // H: Ctns / Amount
-    { width: 12 },  // I: Tot CBM
-    { width: 14 },  // J: Total Weight
-  ];
+  // 10 data columns — widths in Excel character units
+  const COL_WIDTHS = [5, 12, 16, 36, 13, 13, 7, 13, 13, 15];
+  ws.columns = COL_WIDTHS.map((w) => ({ width: w }));
 
   const LAST_COL = "J";
   const NCOLS = 10;
+
+  // Logo height: 93.75pt × (96/72) ≈ 125px
+  const LOGO_H = 125;
+  // Image width: 60 % of the sheet block so it stays within columns and is easy to centre
+  const LOGO_W = Math.round(COL_WIDTHS.reduce((s, w) => s + w * 7.59, 0) * 0.60);
 
   let rowIdx = 1;
 
@@ -182,9 +195,8 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     logoImgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
     ws.addImage(logoImgId, {
-      tl: { col: 0, row: 0 },
-      // span full width, fill the 93.75pt row (Excel EMUs: height in pixels ≈ pts * 96/72)
-      ext: { width: 750, height: 125 },
+      tl: { col: centerImgCol(COL_WIDTHS, LOGO_W), row: 0.1 },
+      ext: { width: LOGO_W, height: LOGO_H },
       editAs: "oneCell",
     });
     ws.getRow(rowIdx).height = 93.75;
@@ -424,23 +436,16 @@ export async function GET(
   if (assignedBoxNos.length > 0) {
     const ws2 = wb.addWorksheet("Box Breakdown", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1 } });
     const BB_COLS = 7;
-    ws2.columns = [
-      { width: 5 },   // A: #
-      { width: 12 },  // B: Brand
-      { width: 14 },  // C: Model No
-      { width: 40 },  // D: Description
-      { width: 7 },   // E: Qty
-      { width: 12 },  // F: Tot CBM
-      { width: 14 },  // G: Weight Kgs
-    ];
+    const BB_COL_WIDTHS = [5, 12, 14, 40, 7, 12, 14];
+    ws2.columns = BB_COL_WIDTHS.map((w) => ({ width: w }));
 
     let r2 = 1;
 
     // Logo (reuse same image id)
     if (logoImgId !== null) {
       ws2.addImage(logoImgId, {
-        tl: { col: 0, row: 0 },
-        ext: { width: 750, height: 125 },
+        tl: { col: centerImgCol(BB_COL_WIDTHS, LOGO_W), row: 0.1 },
+        ext: { width: LOGO_W, height: LOGO_H },
         editAs: "oneCell",
       });
       ws2.getRow(r2).height = 93.75;
