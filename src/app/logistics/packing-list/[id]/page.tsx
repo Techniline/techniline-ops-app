@@ -123,9 +123,9 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
     <>
       {/* Screen toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 print:hidden dark:border-slate-700 dark:bg-slate-900">
-        <Link href="/packing-list" className="text-sm text-slate-500 hover:text-slate-700">← All Lists</Link>
+        <Link href="/logistics/packing-list" className="text-sm text-slate-500 hover:text-slate-700">← All Lists</Link>
         <div className="flex-1" />
-        <Link href={`/packing-list/new?edit=${id}`}
+        <Link href={`/logistics/packing-list/new?edit=${id}`}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700">
           Edit
         </Link>

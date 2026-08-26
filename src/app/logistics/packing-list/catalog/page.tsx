@@ -357,7 +357,7 @@ export default function PackingCatalogPage() {
       <div className="mb-8 flex flex-wrap items-start justify-between gap-6">
         <div>
           <Link
-            href="/packing-list"
+            href="/logistics/packing-list"
             className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-violet-400 hover:text-violet-600"
           >
             ← Packing Lists

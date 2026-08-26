@@ -76,14 +76,14 @@ export default function PackingListPage() {
         </div>
         <div className="flex gap-3">
           <Link
-            href="/packing-list/catalog"
+            href="/logistics/packing-list/catalog"
             style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 10px rgba(139,92,246,0.14), 0 1px 2px rgba(0,0,0,0.06)" }}
             className="rounded-xl border border-violet-100 bg-white px-5 py-2.5 text-sm font-semibold text-violet-700 transition-all hover:border-violet-200 hover:shadow-lg hover:shadow-violet-100"
           >
             SKU Catalog
           </Link>
           <Link
-            href="/packing-list/new"
+            href="/logistics/packing-list/new"
             style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), 0 5px 18px rgba(124,58,237,0.50), 0 0 0 1px rgba(109,40,217,0.25)" }}
             className="rounded-xl bg-gradient-to-b from-violet-500 to-violet-700 px-6 py-2.5 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-violet-800 hover:shadow-2xl hover:shadow-violet-300"
           >
@@ -172,7 +172,7 @@ export default function PackingListPage() {
           </p>
           {lists.length === 0 && (
             <Link
-              href="/packing-list/new"
+              href="/logistics/packing-list/new"
               style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), 0 5px 18px rgba(124,58,237,0.45)" }}
               className="rounded-xl bg-gradient-to-b from-violet-500 to-violet-700 px-6 py-2.5 text-sm font-bold text-white"
             >
@@ -235,14 +235,14 @@ export default function PackingListPage() {
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <Link
-                        href={`/packing-list/${l.id}`}
+                        href={`/logistics/packing-list/${l.id}`}
                         style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(109,40,217,0.14), 0 1px 2px rgba(0,0,0,0.05)" }}
                         className="rounded-lg border border-violet-100 bg-white px-4 py-1.5 text-xs font-bold text-violet-600 transition-all hover:border-violet-200 hover:shadow-md hover:shadow-violet-100"
                       >
                         View
                       </Link>
                       <Link
-                        href={`/packing-list/new?edit=${l.id}`}
+                        href={`/logistics/packing-list/new?edit=${l.id}`}
                         style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(109,40,217,0.14), 0 1px 2px rgba(0,0,0,0.05)" }}
                         className="rounded-lg border border-violet-100 bg-white px-4 py-1.5 text-xs font-bold text-violet-600 transition-all hover:border-violet-200 hover:shadow-md hover:shadow-violet-100"
                       >

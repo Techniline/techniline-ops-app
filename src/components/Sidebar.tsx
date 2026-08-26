@@ -186,7 +186,6 @@ export function Sidebar({
           icon: CargoIcon,
           show: canViewStockReservation(profile),
         },
-        { href: "/packing-list", label: "Packing List", icon: CargoIcon, show: true },
       ],
     },
     {
@@ -231,6 +230,7 @@ export function Sidebar({
         { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon, show: can("prt") },
         { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon, show: can("reports") },
         { href: "/logistics/masters", label: "Master Data", icon: ResellerIcon, show: can("masters") },
+        { href: "/logistics/packing-list", label: "Packing List", icon: CargoIcon, show: true },
       ],
     },
   ];

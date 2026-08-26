@@ -636,7 +636,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
       const json = await res.json() as { ok: boolean; id?: string; error?: string };
       if (!json.ok) throw new Error(json.error);
       if (userId) { try { localStorage.removeItem(draftKey(userId)); } catch { /* ignore */ } }
-      router.push(`/packing-list/${json.id ?? id}`);
+      router.push(`/logistics/packing-list/${json.id ?? id}`);
     } catch (e) { setSaveErr(e instanceof Error ? e.message : "Save failed."); }
     finally { setSaving(false); }
   }
@@ -660,7 +660,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
           <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect} />
           <button type="button" onClick={() => {
               if (userId) { try { localStorage.removeItem(draftKey(userId)); } catch { /* ignore */ } }
-              router.push("/packing-list");
+              router.push("/logistics/packing-list");
             }}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">Cancel</button>
           <button type="button" onClick={() => save("draft")} disabled={saving}
