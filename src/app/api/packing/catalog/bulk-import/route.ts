@@ -80,6 +80,11 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
     ? Math.round(cartonCbm / cartonQty * 1_000_000) / 1_000_000
     : null);
 
+  // Derive unit weight from carton GW ÷ MC Qty when no net weight column exists (e.g. Alesis)
+  const unitWeightFinal = unitWeight ?? (cartonWeight && cartonQty && cartonQty > 0
+    ? Math.round(cartonWeight / cartonQty * 100) / 100
+    : null);
+
   const rawHs = get("hscode", "hs", "harmonizedcode", "hstariff", "hsncode");
   const hsCode = rawHs != null ? String(rawHs).replace(/\.0$/, "").trim() || null : null;
 
@@ -96,7 +101,7 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
     description,
     hs_code: hsCode,
     country_of_origin: country,
-    unit_weight_kg: unitWeight,
+    unit_weight_kg: unitWeightFinal,
     unit_cbm: unitCbmFinal,
     carton_qty: cartonQty,
     carton_weight_kg: cartonWeight,
@@ -169,9 +174,14 @@ export async function POST(request: Request): Promise<Response> {
       from += PAGE;
     }
 
-    // Build lowercase model_no → record lookup
+    // Build normalised model_no → record lookup.
+    // Strip non-alphanumeric chars from DB keys too, so records the Fix Model Nos
+    // step missed (still have hyphens/spaces) still match the normalised import key.
     const existingMap = new Map<string, Record<string, unknown>>(
-      existingRows.map((r) => [(r.model_no as string).toLowerCase(), r])
+      existingRows.map((r) => [
+        (r.model_no as string).replace(/[^A-Za-z0-9]/g, "").toLowerCase(),
+        r,
+      ])
     );
 
     // --- Deduplicate import records by model_no (last row wins — most likely to be most complete) ---
@@ -220,12 +230,14 @@ export async function POST(request: Request): Promise<Response> {
     let inserted = 0, updated = 0, errors = 0;
 
     // --- Batch insert new records (100 at a time) ---
+    // Use upsert with ignoreDuplicates so a single conflict doesn't wipe out the whole batch.
     const INSERT_BATCH = 100;
     for (let i = 0; i < toInsert.length; i += INSERT_BATCH) {
       const batch = toInsert.slice(i, i + INSERT_BATCH);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (svc.from("packing_sku_catalog" as any) as any).insert(batch);
+        const { error } = await (svc.from("packing_sku_catalog" as any) as any)
+          .upsert(batch, { onConflict: "model_no", ignoreDuplicates: true });
         if (error) errors += batch.length;
         else inserted += batch.length;
       } catch {
