@@ -58,20 +58,27 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
   const unitCbm = Number(get("volumeperpc", "unitcbm", "unitvolume", "volumeperpiece", "cbmunit", "cubecbm", "unitvolumem3")) || null;
 
   // Carton CBM — carton-level columns only, then dim calculation
-  let cartonCbm = Number(get("mastercartonvolume", "cartonvolume", "mastercartonvolumem3", "mastercbm", "cartoncbm")) || null;
+  // "Volume" (Alesis) normalises to "volume"
+  let cartonCbm = Number(get("mastercartonvolume", "cartonvolume", "mastercartonvolumem3", "mastercbm", "cartoncbm", "volume")) || null;
   if (!cartonCbm && ctnL && ctnW && ctnH) {
     cartonCbm = Math.round((ctnL * ctnW * ctnH) / 1_000_000 * 100000) / 100000;
   }
   // If no carton CBM but we have unit CBM, treat unit CBM as carton CBM (1 per carton items)
   if (!cartonCbm && unitCbm) cartonCbm = unitCbm;
 
-  // Gross weight per carton — "G.W./CTN" normalises to "gwctn" which contains "gw"
+  // Gross weight per carton — "G.W./CTN" normalises to "gwctn"; plain "GW" (Alesis) normalises to "gw"
   const cartonWeight = Number(get("mastercartonweight", "mastercartongw", "grossweightctn", "gwctn", "gw", "grossweight", "cartonweight", "cartonweightkg")) || null;
 
   // Unit / net weight — "N.W./CTN" normalises to "nwctn" which contains "nw"
   const unitWeight = Number(get("unitweightkg", "unitweight", "netweight", "nw", "nwkg")) || null;
 
-  const cartonQty = Number(get("mastercartonpackagingqty", "packagingqty", "pcspercarton", "qtypercarton", "cartonqty", "masterpackqty", "pcs")) || null;
+  // "MC Qty" (Alesis) normalises to "mcqty"
+  const cartonQty = Number(get("mastercartonpackagingqty", "packagingqty", "pcspercarton", "qtypercarton", "cartonqty", "masterpackqty", "mcqty", "pcs")) || null;
+
+  // Derive unit CBM from carton CBM ÷ qty when no explicit unit column exists (e.g. Alesis)
+  const unitCbmFinal = unitCbm ?? (cartonCbm && cartonQty && cartonQty > 0
+    ? Math.round(cartonCbm / cartonQty * 1_000_000) / 1_000_000
+    : null);
 
   const rawHs = get("hscode", "hs", "harmonizedcode", "hstariff", "hsncode");
   const hsCode = rawHs != null ? String(rawHs).replace(/\.0$/, "").trim() || null : null;
@@ -90,7 +97,7 @@ function mapRow(raw: Record<string, unknown>, brand: string, userId: string): Re
     hs_code: hsCode,
     country_of_origin: country,
     unit_weight_kg: unitWeight,
-    unit_cbm: unitCbm,
+    unit_cbm: unitCbmFinal,
     carton_qty: cartonQty,
     carton_weight_kg: cartonWeight,
     carton_cbm: cartonCbm,
