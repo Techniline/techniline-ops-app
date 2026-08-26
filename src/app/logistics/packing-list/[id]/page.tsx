@@ -430,10 +430,13 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
             margin: 0 !important;
             padding: 0 !important;
             width: 100% !important;
+            background: white !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             font-size: 10px;
           }
+          /* Reset AppShell wrapper backgrounds so they don't bleed below content */
+          body > div, body > div > *, main { background: white !important; }
           * { box-sizing: border-box !important; }
           .print\\:hidden { display: none !important; }
           #print-page-1, #print-page-2 {
