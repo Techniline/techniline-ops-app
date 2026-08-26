@@ -176,18 +176,18 @@ export async function GET(
 
   // ── Logo ────────────────────────────────────────────────────────────────
   const logoPath = path.join(process.cwd(), "public", company.logo);
+  let logoImgId: number | null = null;
   if (fs.existsSync(logoPath)) {
     const logoBuffer = fs.readFileSync(logoPath);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const imgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
-    ws.addImage(imgId, {
-      tl: { col: 0, row: rowIdx - 1 },
-      ext: { width: 280, height: 72 },
+    logoImgId = wb.addImage({ buffer: logoBuffer as any, extension: "png" });
+    ws.addImage(logoImgId, {
+      tl: { col: 0, row: 0 },
+      // span full width, fill the 93.75pt row (Excel EMUs: height in pixels ≈ pts * 96/72)
+      ext: { width: 750, height: 125 },
       editAs: "oneCell",
     });
-    // Tall row for logo
-    ws.getRow(rowIdx).height = 58;
-    // Merge across all columns to center logo area
+    ws.getRow(rowIdx).height = 93.75;
     ws.mergeCells(`A${rowIdx}:${LAST_COL}${rowIdx}`);
     rowIdx++;
   }
@@ -417,6 +417,141 @@ export async function GET(
   sig2.font = { size: 8, bold: true };
   sig2.alignment = { horizontal: "right", vertical: "bottom", wrapText: true };
   ws.getRow(rowIdx).height = 28;
+
+  // ── Box Breakdown sheet (only when boxes are assigned) ───────────────────
+  const assignedBoxNos = [...new Set(items.map(i => i.box_no).filter((b): b is number => (b ?? 0) > 0))].sort((a, b) => a - b);
+
+  if (assignedBoxNos.length > 0) {
+    const ws2 = wb.addWorksheet("Box Breakdown", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1 } });
+    const BB_COLS = 7;
+    ws2.columns = [
+      { width: 5 },   // A: #
+      { width: 12 },  // B: Brand
+      { width: 14 },  // C: Model No
+      { width: 40 },  // D: Description
+      { width: 7 },   // E: Qty
+      { width: 12 },  // F: Tot CBM
+      { width: 14 },  // G: Weight Kgs
+    ];
+
+    let r2 = 1;
+
+    // Logo (reuse same image id)
+    if (logoImgId !== null) {
+      ws2.addImage(logoImgId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 750, height: 125 },
+        editAs: "oneCell",
+      });
+      ws2.getRow(r2).height = 93.75;
+      ws2.mergeCells(r2, 1, r2, BB_COLS);
+      r2++;
+    }
+
+    // Address bar
+    ws2.mergeCells(r2, 1, r2, BB_COLS);
+    const a2 = ws2.getCell(r2, 1);
+    a2.value = company.addressBar;
+    a2.font = { size: 7, color: { argb: "FF64748B" } };
+    a2.alignment = { horizontal: "center", wrapText: true };
+    ws2.getRow(r2).height = 22;
+    r2++;
+
+    // Border line
+    for (let c = 1; c <= BB_COLS; c++) ws2.getCell(r2, c).border = { top: { style: "thin", color: { argb: "FF94A3B8" } } };
+    ws2.getRow(r2).height = 4;
+    r2++;
+
+    // Title
+    ws2.mergeCells(r2, 1, r2, BB_COLS);
+    const t2 = ws2.getCell(r2, 1);
+    t2.value = "BOX BREAKDOWN";
+    t2.font = { bold: true, size: 11, underline: true };
+    t2.alignment = { horizontal: "center" };
+    ws2.getRow(r2).height = 18;
+    r2++;
+
+    if (shippingLabel) {
+      ws2.mergeCells(r2, 1, r2, BB_COLS);
+      const sl2 = ws2.getCell(r2, 1);
+      sl2.value = `Shipping Label: ${shippingLabel.toUpperCase()}`;
+      sl2.font = { bold: true, size: 9 };
+      sl2.alignment = { horizontal: "center" };
+      ws2.getRow(r2).height = 14;
+      r2++;
+    }
+
+    ws2.getRow(r2).height = 6;
+    r2++;
+
+    // Per-box sections
+    for (const boxNo of assignedBoxNos) {
+      const boxItems = items.filter(i => (i.box_no ?? 0) === boxNo);
+      const boxCtns = boxItems.reduce((s, i) => s + (i.no_of_ctns ?? 0), 0);
+      const boxCBM  = boxItems.reduce((s, i) => s + (i.tot_cbm ?? 0), 0);
+      const boxWeight = boxItems.reduce((s, i) => s + (i.total_weight_kg ?? 0), 0);
+      const lbl = boxLabel(boxNo);
+
+      // Box header
+      ws2.mergeCells(r2, 1, r2, BB_COLS);
+      const bh = ws2.getCell(r2, 1);
+      bh.value = `${lbl}   ${boxCtns} carton${boxCtns !== 1 ? "s" : ""}   CBM: ${fmt5(boxCBM)}   Weight: ${boxWeight.toFixed(2)} kg`;
+      bh.font = { bold: true, size: 9 };
+      bh.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+      bh.border = BORDER_HEADER;
+      ws2.getRow(r2).height = 15;
+      r2++;
+
+      // Column headers for this box's table
+      const bbHeaders = ["#", "Brand", "Model No", "Description", "Qty", "Tot. CBM", "Weight Kgs"];
+      bbHeaders.forEach((v, ci) => {
+        const cell = ws2.getCell(r2, ci + 1);
+        cell.value = v;
+        cell.font = { bold: true, size: 8, color: { argb: "FF1E293B" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+        cell.alignment = { horizontal: ci < 4 ? "left" : "center", vertical: "middle" };
+        cell.border = BORDER_HEADER;
+      });
+      ws2.getRow(r2).height = 14;
+      r2++;
+
+      // Items
+      boxItems.forEach((item, i) => {
+        const rowData: { col: number; value: ExcelJS.CellValue; align: ExcelJS.Alignment["horizontal"]; mono?: boolean }[] = [
+          { col: 1, value: i + 1, align: "center" },
+          { col: 2, value: item.brand ?? "", align: "left" },
+          { col: 3, value: item.model_no, align: "left", mono: true },
+          { col: 4, value: item.description ?? "", align: "left" },
+          { col: 5, value: item.qty, align: "center" },
+          { col: 6, value: fmt5(item.tot_cbm), align: "center" },
+          { col: 7, value: item.total_weight_kg != null ? Number(item.total_weight_kg).toFixed(2) : "", align: "center" },
+        ];
+        rowData.forEach(({ col, value, align, mono }) => {
+          const cell = ws2.getCell(r2, col);
+          cell.value = value;
+          cell.font = { size: 8, name: mono ? "Courier New" : undefined };
+          cell.alignment = { horizontal: align, vertical: "middle", wrapText: col === 4 };
+          cell.border = BORDER;
+        });
+        ws2.getRow(r2).height = 13;
+        r2++;
+      });
+
+      ws2.getRow(r2).height = 5;
+      r2++;
+    }
+
+    // Summary footer
+    ws2.getRow(r2).height = 4;
+    r2++;
+    const bbSummary = `Total Boxes: ${assignedBoxNos.length}   Total Cartons: ${totCtns}   Total CBM: ${fmt5(totCBM)}   Total Weight: ${totWeight.toFixed(2)} kg`;
+    ws2.mergeCells(r2, 1, r2, BB_COLS);
+    const bsFoot = ws2.getCell(r2, 1);
+    bsFoot.value = bbSummary;
+    bsFoot.font = { bold: true, size: 8.5 };
+    for (let c = 1; c <= BB_COLS; c++) ws2.getCell(r2, c).border = { top: { style: "thin", color: { argb: "FF94A3B8" } } };
+    ws2.getRow(r2).height = 14;
+  }
 
   // ── Serialize and return ──────────────────────────────────────────────────
   const buffer = await wb.xlsx.writeBuffer();
