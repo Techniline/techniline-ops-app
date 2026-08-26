@@ -171,10 +171,21 @@ export async function GET(
   // ── Build workbook ──────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook();
   wb.creator = "Techniline Ops";
-  const ws = wb.addWorksheet("Packing List", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1 } });
+  const ws = wb.addWorksheet("Packing List", {
+    pageSetup: {
+      paperSize: 9,           // A4
+      orientation: "portrait",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,         // unlimited pages tall
+      horizontalCentered: true,
+    },
+  });
+  ws.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
 
   // 10 data columns — widths in Excel character units
-  const COL_WIDTHS = [5, 12, 16, 36, 13, 13, 7, 13, 13, 15];
+  // Total ~104 chars → fits A4 with 0.25" margins at ~90% scale
+  const COL_WIDTHS = [4, 10, 12, 26, 10, 10, 6, 10, 10, 12];
   ws.columns = COL_WIDTHS.map((w) => ({ width: w }));
 
   const LAST_COL = "J";
@@ -434,9 +445,20 @@ export async function GET(
   const assignedBoxNos = [...new Set(items.map(i => i.box_no).filter((b): b is number => (b ?? 0) > 0))].sort((a, b) => a - b);
 
   if (assignedBoxNos.length > 0) {
-    const ws2 = wb.addWorksheet("Box Breakdown", { pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1 } });
+    const ws2 = wb.addWorksheet("Box Breakdown", {
+      pageSetup: {
+        paperSize: 9,
+        orientation: "portrait",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        horizontalCentered: true,
+      },
+    });
+    ws2.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
     const BB_COLS = 7;
-    const BB_COL_WIDTHS = [5, 12, 14, 40, 7, 12, 14];
+    // Total ~94 chars → fits A4 with 0.25" margins at ~97% scale
+    const BB_COL_WIDTHS = [4, 10, 12, 36, 6, 10, 12];
     ws2.columns = BB_COL_WIDTHS.map((w) => ({ width: w }));
 
     let r2 = 1;
