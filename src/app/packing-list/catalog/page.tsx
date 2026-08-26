@@ -147,6 +147,35 @@ function SkuForm({
   );
 }
 
+const COLUMNS = [
+  { id: "model_no",    label: "Model No",    align: "left"  as const, defaultWidth: 160 },
+  { id: "brand",       label: "Brand",        align: "left"  as const, defaultWidth: 100 },
+  { id: "description", label: "Description",  align: "left"  as const, defaultWidth: 220 },
+  { id: "country",     label: "Country",      align: "left"  as const, defaultWidth:  90 },
+  { id: "hs_code",     label: "HS Code",      align: "left"  as const, defaultWidth: 100 },
+  { id: "unit_weight", label: "Unit Wt",      align: "right" as const, defaultWidth:  80 },
+  { id: "unit_cbm",    label: "Unit CBM",     align: "right" as const, defaultWidth:  90 },
+  { id: "carton_qty",  label: "Ctn Qty",      align: "right" as const, defaultWidth:  75 },
+  { id: "carton_cbm",  label: "Ctn CBM",      align: "right" as const, defaultWidth:  90 },
+] as const;
+type ColId = typeof COLUMNS[number]["id"];
+const LS_ORDER  = "catalog-col-order";
+const LS_WIDTHS = "catalog-col-widths";
+
+function renderCell(colId: ColId, item: SkuCatalogRow) {
+  switch (colId) {
+    case "model_no":    return <span className="font-mono text-xs font-bold text-violet-600">{item.model_no}</span>;
+    case "brand":       return item.brand ? <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700">{item.brand}</span> : null;
+    case "description": return item.description ? <span className="block truncate text-sm text-slate-700" style={{ maxWidth: "100%" }}>{item.description}</span> : null;
+    case "country":     return <span className="text-xs text-slate-500">{item.country_of_origin}</span>;
+    case "hs_code":     return item.hs_code ? <span className="font-mono text-xs text-slate-400">{item.hs_code}</span> : null;
+    case "unit_weight": return item.unit_weight_kg != null ? <span className="font-mono text-slate-700">{item.unit_weight_kg}</span> : null;
+    case "unit_cbm":    return item.unit_cbm != null ? <span className="font-mono text-slate-700">{item.unit_cbm}</span> : null;
+    case "carton_qty":  return item.carton_qty != null ? <span className="font-mono text-slate-500">{item.carton_qty}</span> : null;
+    case "carton_cbm":  return item.carton_cbm != null ? <span className="font-mono text-slate-500">{item.carton_cbm}</span> : null;
+  }
+}
+
 export default function PackingCatalogPage() {
   const [items, setItems] = useState<SkuCatalogRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -168,6 +197,55 @@ export default function PackingCatalogPage() {
   const [stockImporting, setStockImporting] = useState(false);
   const [stockResult, setStockResult] = useState<{ total: number; matched: number; updated: number; errors: number } | null>(null);
   const [stockErr, setStockErr] = useState<string | null>(null);
+
+  // Column order & widths (persisted to localStorage)
+  const [colOrder, setColOrder] = useState<ColId[]>(COLUMNS.map(c => c.id));
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const resizingRef = useRef<{ colId: string; startX: number; startW: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem(LS_ORDER) ?? "null") as ColId[] | null;
+      if (Array.isArray(savedOrder) && savedOrder.length === COLUMNS.length) setColOrder(savedOrder);
+      const savedWidths = JSON.parse(localStorage.getItem(LS_WIDTHS) ?? "null") as Record<string, number> | null;
+      if (savedWidths && typeof savedWidths === "object") setColWidths(savedWidths);
+    } catch { /* ignore */ }
+  }, []);
+
+  function startResize(e: React.MouseEvent, colId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const col = COLUMNS.find(c => c.id === colId)!;
+    const startW = colWidths[colId] ?? col.defaultWidth;
+    resizingRef.current = { colId, startX: e.clientX, startW };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colId: cid, startX, startW: sw } = resizingRef.current;
+      setColWidths(p => ({ ...p, [cid]: Math.max(50, sw + ev.clientX - startX) }));
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      setColWidths(p => { localStorage.setItem(LS_WIDTHS, JSON.stringify(p)); return p; });
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function handleDrop(targetColId: ColId) {
+    if (!dragCol || dragCol === targetColId) { setDragCol(null); setDragOver(null); return; }
+    setColOrder(prev => {
+      const next = prev.filter(id => id !== dragCol);
+      const targetIdx = next.indexOf(targetColId);
+      next.splice(targetIdx, 0, dragCol as ColId);
+      localStorage.setItem(LS_ORDER, JSON.stringify(next));
+      return next;
+    });
+    setDragCol(null); setDragOver(null);
+  }
 
   // Normalize model numbers
   const [normalizing, setNormalizing] = useState(false);
@@ -480,19 +558,52 @@ export default function PackingCatalogPage() {
           className="overflow-hidden rounded-2xl border border-violet-100 bg-white"
         >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm" style={{ fontVariantNumeric: "tabular-nums" }}>
+            <table className="text-sm" style={{ fontVariantNumeric: "tabular-nums", tableLayout: "fixed", width: "max-content", minWidth: "100%" }}>
+              <colgroup>
+                {colOrder.map(colId => {
+                  const col = COLUMNS.find(c => c.id === colId)!;
+                  return <col key={colId} style={{ width: colWidths[colId] ?? col.defaultWidth }} />;
+                })}
+                <col style={{ width: 110 }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-violet-50 bg-gradient-to-r from-violet-50/80 to-purple-50/80">
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-widest text-violet-400">Model No</th>
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-widest text-violet-400">Brand</th>
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-widest text-violet-400">Description</th>
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-widest text-violet-400">Country</th>
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-widest text-violet-400">HS Code</th>
-                  <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-widest text-violet-400">Unit Wt</th>
-                  <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-widest text-violet-400">Unit CBM</th>
-                  <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-widest text-violet-400">Ctn Qty</th>
-                  <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-widest text-violet-400">Ctn CBM</th>
-                  <th className="px-5 py-4" />
+                  {colOrder.map(colId => {
+                    const col = COLUMNS.find(c => c.id === colId)!;
+                    const isDragging = dragCol === colId;
+                    const isOver = dragOver === colId;
+                    return (
+                      <th
+                        key={colId}
+                        draggable
+                        onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", colId); setDragCol(colId); }}
+                        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOver(colId); }}
+                        onDragLeave={() => setDragOver(null)}
+                        onDrop={() => handleDrop(colId)}
+                        onDragEnd={() => { setDragCol(null); setDragOver(null); }}
+                        className={`relative select-none py-4 pl-4 pr-2 text-xs font-black uppercase tracking-widest text-violet-400 ${col.align === "right" ? "text-right" : "text-left"}`}
+                        style={{
+                          cursor: "grab",
+                          opacity: isDragging ? 0.4 : 1,
+                          background: isOver ? "rgba(139,92,246,0.08)" : undefined,
+                          borderLeft: isOver ? "2px solid #7c3aed" : "2px solid transparent",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <span className="pointer-events-none truncate">{col.label}</span>
+                        {/* Resize handle */}
+                        <span
+                          onMouseDown={e => startResize(e, colId)}
+                          className="absolute right-0 top-0 flex h-full w-2 cursor-col-resize items-center justify-center opacity-0 hover:opacity-100"
+                          style={{ cursor: "col-resize" }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <span className="h-4 w-px rounded bg-violet-300" />
+                        </span>
+                      </th>
+                    );
+                  })}
+                  <th className="py-4 pl-2 pr-4" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-violet-50">
@@ -504,28 +615,15 @@ export default function PackingCatalogPage() {
                       className="group bg-white transition-colors hover:bg-violet-50/30"
                       style={{ borderLeft: `3px solid ${complete ? "#10b981" : "#fbbf24"}` }}
                     >
-                      <td className="px-5 py-3">
-                        <span className="font-mono text-xs font-bold text-violet-600">{item.model_no}</span>
-                      </td>
-                      <td className="px-5 py-3">
-                        {item.brand && <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700">{item.brand}</span>}
-                      </td>
-                      <td className="max-w-xs px-5 py-3">
-                        {item.description && <span className="block truncate text-sm text-slate-700">{item.description}</span>}
-                      </td>
-                      <td className="px-5 py-3 text-xs text-slate-500">{item.country_of_origin}</td>
-                      <td className="px-5 py-3">
-                        {item.hs_code && <span className="font-mono text-xs text-slate-400">{item.hs_code}</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right text-xs">
-                        {item.unit_weight_kg != null && <span className="font-mono text-slate-700">{item.unit_weight_kg}</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right text-xs">
-                        {item.unit_cbm != null && <span className="font-mono text-slate-700">{item.unit_cbm}</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_qty ?? ""}</td>
-                      <td className="px-5 py-3 text-right text-xs font-mono text-slate-500">{item.carton_cbm ?? ""}</td>
-                      <td className="px-5 py-3">
+                      {colOrder.map(colId => {
+                        const col = COLUMNS.find(c => c.id === colId)!;
+                        return (
+                          <td key={colId} className={`overflow-hidden py-3 pl-4 pr-2 text-xs ${col.align === "right" ? "text-right" : ""}`} style={{ maxWidth: 0 }}>
+                            {renderCell(colId, item)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-3 pl-2 pr-4">
                         <div className="flex items-center justify-end gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
                             type="button" onClick={() => setModal(item)}
@@ -548,7 +646,7 @@ export default function PackingCatalogPage() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-16 text-center">
+                    <td colSpan={colOrder.length + 1} className="py-16 text-center">
                       <p className="text-sm font-medium text-violet-300">
                         {items.length === 0 ? "No SKUs in catalog yet." : "No SKUs match your filters."}
                       </p>
