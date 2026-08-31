@@ -70,10 +70,16 @@ function UploadPanel({ onDone }: Omit<UploadPanelProps, "token">) {
       const res = await fetch("/api/stock-reservation/upload?action=preview", {
         method: "POST", headers: { Authorization: `Bearer ${tok}` }, body: form,
       });
-      const data = await res.json() as ParsedPreview & { ok: boolean; error?: string };
+      let data: ParsedPreview & { ok: boolean; error?: string };
+      try {
+        data = await res.json() as ParsedPreview & { ok: boolean; error?: string };
+      } catch {
+        setError(res.status === 504 || res.status === 524 ? "Upload timed out — the PDF is large, please retry." : `Server error (${res.status}). Please retry.`);
+        return;
+      }
       if (!data.ok) { setError(data.error ?? "Upload failed."); return; }
       setPreview(data); setEditedImpo(data.impo_number ?? ""); setStep("preview");
-    } catch { setError("Network error during upload."); }
+    } catch { setError("Network error — check your connection and retry."); }
     finally { setUploading(false); }
   }
 

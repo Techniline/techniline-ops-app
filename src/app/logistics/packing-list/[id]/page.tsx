@@ -67,7 +67,15 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
     });
   }, [id]);
 
-  if (loading) return <div className="flex h-64 items-center justify-center text-sm text-slate-400">Loading…</div>;
+  if (loading) return (
+    <div className="flex h-64 items-center justify-center gap-3 text-sm text-slate-400">
+      <svg className="h-5 w-5 animate-spin text-violet-400" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+      </svg>
+      Loading…
+    </div>
+  );
   if (error || !list) return <div className="p-6 text-sm text-red-600">{error ?? "Not found."}</div>;
 
   const company = COMPANY_INFO[list.company as PackingCompany];
@@ -136,24 +144,62 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
     <>
       {/* Screen toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 print:hidden dark:border-slate-700 dark:bg-slate-900">
-        <Link href="/logistics/packing-list" className="text-sm text-slate-500 hover:text-slate-700">← All Lists</Link>
-        <div className="flex-1" />
+        <Link href="/logistics/packing-list" className="flex items-center gap-1 text-sm text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200">
+          ← All Lists
+        </Link>
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+        {/* Document identity */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className="max-w-[200px] truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{list.consignee_name}</span>
+          {list.invoice_no && <span className="text-xs text-slate-400 dark:text-slate-500">{list.invoice_no}</span>}
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+            list.status === "final"
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+              : "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+          }`}>{list.status}</span>
+          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
+            {list.company === "techniline" ? "Techniline" : "Soundline"}
+          </span>
+          {isInvoice && (
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">Invoice</span>
+          )}
+          {listDateFmt && <span className="hidden text-xs text-slate-400 sm:inline">{listDateFmt}</span>}
+        </div>
         <Link href={`/logistics/packing-list/new?edit=${id}`}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700">
+          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
           Edit
         </Link>
         <button type="button" onClick={handleExcelExport}
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
           Export Excel
         </button>
         <button type="button" onClick={() => window.print()}
-          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
-          Print / Export PDF
+          className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-violet-700">
+          Print / PDF
         </button>
       </div>
 
+      {/* Stats strip — screen only */}
+      <div className="print:hidden border-b border-slate-100 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+        <div className="mx-auto max-w-5xl flex flex-wrap gap-5">
+          {[
+            { label: "Lines", value: items.length.toString() },
+            { label: "Qty", value: items.reduce((s, i) => s + i.qty, 0).toString() },
+            { label: "CBM", value: fmt5(totCBM) },
+            { label: "Weight", value: `${totWeight.toFixed(2)} kg` },
+            ...(totCtns > 0 ? [{ label: "Cartons", value: totCtns.toString() }] : []),
+            ...(assignedBoxNos.length > 0 ? [{ label: "Boxes", value: assignedBoxNos.length.toString() }] : []),
+          ].map(({ label, value }) => (
+            <div key={label} className="flex items-baseline gap-1.5">
+              <span className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{value}</span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── PAGE 1 ── */}
-      <div className="mx-auto max-w-5xl bg-white p-8 print:p-0 print:max-w-none print:mx-0 dark:bg-slate-900" id="print-page-1">
+      <div className="mx-auto max-w-5xl bg-white p-8 shadow-[0_4px_24px_rgba(0,0,0,0.07),0_1px_4px_rgba(0,0,0,0.04)] print:shadow-none print:p-0 print:max-w-none print:mx-0 dark:bg-slate-900 dark:shadow-none" id="print-page-1">
 
         {/* Letterhead */}
         <LetterHead company={company} />
@@ -220,7 +266,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
           </thead>
           <tbody>
             {renderItems.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className="transition-colors hover:bg-violet-50/40 dark:hover:bg-slate-800/40">
                 <td className={`${td} text-center`}>{item.sl_no}</td>
                 <td className={`${td} break-words`}>{item.brand}</td>
                 <td className={`${td} font-mono break-all`}>{item.model_no}</td>
@@ -339,7 +385,7 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
 
       {/* ── PAGE 2 — Box Breakdown (printed only when boxes exist) ── */}
       {assignedBoxNos.length > 0 && (
-        <div className="mx-auto max-w-5xl bg-white px-8 pb-8 print:p-0 print:max-w-none print:mx-0 print:mt-0 mt-8 border-t-4 border-dashed border-slate-300 pt-8 print:border-0 dark:bg-slate-900" id="print-page-2">
+        <div className="mx-auto max-w-5xl bg-white px-8 pb-8 shadow-[0_4px_24px_rgba(0,0,0,0.07),0_1px_4px_rgba(0,0,0,0.04)] print:shadow-none print:p-0 print:max-w-none print:mx-0 print:mt-0 mt-8 border-t-4 border-dashed border-slate-300 pt-8 print:border-0 dark:bg-slate-900 dark:shadow-none" id="print-page-2">
 
           {/* Letterhead repeated */}
           <LetterHead company={company} />
@@ -445,6 +491,8 @@ export default function PackingListView({ params }: { params: Promise<{ id: stri
             margin: 0 !important;
             padding: 4mm 0 !important;
             overflow: hidden !important;
+            box-shadow: none !important;
+            border: none !important;
             page-break-inside: avoid;
           }
           #print-page-2 { page-break-before: always; }

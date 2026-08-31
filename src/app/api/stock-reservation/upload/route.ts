@@ -7,7 +7,7 @@ import type { UploadConfirmPayload, UploadPreview, UploadPreviewLine } from "@/l
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // ── POST /api/stock-reservation/upload?action=preview|confirm ─────────────────
 
@@ -298,14 +298,10 @@ async function parsePurchaseOrderPdf(pdf: Uint8Array, fileName: string): Promise
 
         if (lines.length > 0) {
           await logAiUsage("stock-reservation-upload", AI_MODEL, response.usage);
-          // Use regex for header fields (IMPO number, vendor, date) as a cross-check
-          const doc = await getDocumentProxy(pdf);
-          const { text } = await extractText(doc, { mergePages: true });
-          const header = regexExtract((text ?? "").trim());
           return {
-            impo_number: raw.impo_number?.trim() || header.impo_number,
-            vendor:      raw.vendor?.trim() || header.vendor,
-            po_date:     raw.po_date?.trim() || header.po_date,
+            impo_number: raw.impo_number?.trim() || "IMPO/UNKNOWN",
+            vendor:      raw.vendor?.trim() || null,
+            po_date:     raw.po_date?.trim() || null,
             lines,
             file_name:   fileName,
           };
