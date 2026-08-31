@@ -15,6 +15,7 @@ import {
   canViewLogistics,
   canViewLogisticsPage,
   canViewLpTracker,
+  canViewPackingList,
   canViewSellerCentral,
   canViewSellerOrders,
   canViewSellerFinance,
@@ -186,6 +187,14 @@ export function Sidebar({
           icon: CargoIcon,
           show: canViewStockReservation(profile),
         },
+        {
+          href: "/logistics/packing-list",
+          label: "Packing List",
+          icon: CargoIcon,
+          // Show here only for users who have the packing_list capability but
+          // are NOT already seeing the full logistics sidebar (where it lives).
+          show: canViewPackingList(profile) && !canViewLogistics(profile),
+        },
       ],
     },
     {
@@ -206,7 +215,13 @@ export function Sidebar({
 
   const can = (page: LogisticsPage) => canViewLogisticsPage(profile, page);
   const logisticsSectionsRaw: NavSection[] = [
-    { heading: "Logistics", items: [{ href: "/logistics", label: "Dashboard", icon: DashboardIcon, show: can("dashboard") }] },
+    {
+      heading: "Logistics",
+      items: [
+        { href: "/logistics", label: "Dashboard", icon: DashboardIcon, show: can("dashboard") },
+        { href: "/logistics/packing-list", label: "Packing List", icon: CargoIcon, show: true },
+      ],
+    },
     {
       heading: "Channels",
       items: [
@@ -230,7 +245,6 @@ export function Sidebar({
         { href: "/logistics/prt", label: "Product Transfers (PRT)", icon: ActionsIcon, show: can("prt") },
         { href: "/logistics/reports", label: "Delivery Reports", icon: AnalyticsIcon, show: can("reports") },
         { href: "/logistics/masters", label: "Master Data", icon: ResellerIcon, show: can("masters") },
-        { href: "/logistics/packing-list", label: "Packing List", icon: CargoIcon, show: true },
       ],
     },
   ];

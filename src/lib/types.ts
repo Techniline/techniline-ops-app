@@ -21,7 +21,8 @@ export type Capability =
   | "stock_reservation_manager"
   | "consults"
   | "accounts"
-  | "noon";
+  | "noon"
+  | "packing_list";
 
 /** A row in `public.users`, derived from the generated types. */
 export type UserProfile = Tables<"users">;

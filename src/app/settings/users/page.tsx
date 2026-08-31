@@ -50,12 +50,13 @@ const CAP_LABELS: Record<string, string> = {
   stock_reservation: "Stock Reservation",
   stock_reservation_manager: "Stock Mgr",
   noon: "Noon",
+  packing_list: "Packing List",
 };
 
 const ALL_CAPS = Object.keys(CAP_LABELS);
 
 const CAP_SECTIONS: { heading: string; caps: string[] }[] = [
-  { heading: "Operations", caps: ["checklist", "finance", "accounts", "logistics", "consults", "noon"] },
+  { heading: "Operations", caps: ["checklist", "finance", "accounts", "logistics", "consults", "noon", "packing_list"] },
   { heading: "Seller / Amazon", caps: ["seller_central", "seller_orders", "seller_finance", "cocoblu"] },
   { heading: "Stock / LP", caps: ["stock_reservation", "stock_reservation_manager", "lp_tracker"] },
 ];
