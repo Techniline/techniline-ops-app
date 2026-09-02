@@ -477,7 +477,7 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
 
   // Add user
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const [addUserForm, setAddUserForm] = useState({ email: "", full_name: "", role: "user" });
+  const [addUserForm, setAddUserForm] = useState({ email: "", full_name: "", role: "user", uid: "" });
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [addUserSaving, setAddUserSaving] = useState(false);
 
@@ -500,7 +500,7 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
       const data = await res.json() as { ok: boolean; error?: string };
       if (!data.ok) { setAddUserError(data.error ?? "Failed."); return; }
       setAddUserOpen(false);
-      setAddUserForm({ email: "", full_name: "", role: "user" });
+      setAddUserForm({ email: "", full_name: "", role: "user", uid: "" });
       onRefresh();
     } catch { setAddUserError("Network error."); }
     finally { setAddUserSaving(false); }
@@ -813,6 +813,18 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
                   <option value="manager">Manager</option>
                   <option value="logistics">Logistics</option>
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Supabase UID <span className="font-normal normal-case text-slate-400">(optional — paste from Supabase Auth dashboard if email lookup fails)</span>
+                </label>
+                <input
+                  type="text"
+                  value={addUserForm.uid}
+                  onChange={(e) => setAddUserForm((f) => ({ ...f, uid: e.target.value.trim() }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
               </div>
               {addUserError && <p className="text-xs text-red-600">{addUserError}</p>}
               <div className="mt-2 flex justify-end gap-2">

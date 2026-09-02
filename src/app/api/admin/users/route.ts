@@ -41,7 +41,7 @@ export async function POST(request: Request): Promise<Response> {
   const admin = await authorizeAdmin(request);
   if (!admin) return Response.json({ ok: false, error: "Unauthorized." }, { status: 403 });
 
-  let body: { email?: string; full_name?: string; role?: string; avatar_initials?: string };
+  let body: { email?: string; full_name?: string; role?: string; avatar_initials?: string; uid?: string };
   try {
     body = await request.json() as typeof body;
   } catch {
@@ -55,13 +55,28 @@ export async function POST(request: Request): Promise<Response> {
   if (!email) return Response.json({ ok: false, error: "Email is required." }, { status: 400 });
   if (!fullName) return Response.json({ ok: false, error: "Full name is required." }, { status: 400 });
 
-  // Find the Supabase Auth user by email
-  const { data: listData, error: listErr } = await admin.svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (listErr) return Response.json({ ok: false, error: `Could not query auth users: ${listErr.message}` }, { status: 500 });
+  let authUid = body.uid?.trim() || null;
 
-  const authUser = (listData?.users ?? []).find((u) => u.email?.toLowerCase() === email);
-  if (!authUser) {
-    return Response.json({ ok: false, error: `No Supabase Auth user found with email ${email}. Create them in Supabase first.` }, { status: 404 });
+  if (!authUid) {
+    // Try to find the Supabase Auth user by email — paginate until found or exhausted
+    let found: { id: string } | null = null;
+    let page = 1;
+    while (!found) {
+      const { data: listData, error: listErr } = await admin.svc.auth.admin.listUsers({ page, perPage: 1000 });
+      if (listErr) return Response.json({ ok: false, error: `Could not query auth users: ${listErr.message}` }, { status: 500 });
+      const users = listData?.users ?? [];
+      const match = users.find((u) => u.email?.toLowerCase() === email);
+      if (match) { found = { id: match.id }; break; }
+      if (users.length < 1000) break; // last page
+      page++;
+    }
+    if (!found) {
+      return Response.json({
+        ok: false,
+        error: `No Supabase Auth user found with email ${email}. Paste their UID from the Supabase Auth dashboard into the UID field and try again.`,
+      }, { status: 404 });
+    }
+    authUid = found.id;
   }
 
   const avatarInitials = body.avatar_initials?.trim()
@@ -70,13 +85,13 @@ export async function POST(request: Request): Promise<Response> {
   const { error: upsertErr } = await admin.svc
     .from("users")
     .upsert(
-      { id: authUser.id, email, full_name: fullName, role, avatar_initials: avatarInitials, active: true },
+      { id: authUid, email, full_name: fullName, role, avatar_initials: avatarInitials, active: true },
       { onConflict: "id" }
     );
 
   if (upsertErr) return Response.json({ ok: false, error: `Could not create user: ${upsertErr.message}` }, { status: 500 });
 
-  return Response.json({ ok: true, id: authUser.id, email, full_name: fullName });
+  return Response.json({ ok: true, id: authUid, email, full_name: fullName });
 }
 
 /**
