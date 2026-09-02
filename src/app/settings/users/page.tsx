@@ -475,6 +475,62 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
   const [savingCaps, setSavingCaps] = useState(false);
   const [capsError, setCapsError] = useState<string | null>(null);
 
+  // Add user
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [addUserForm, setAddUserForm] = useState({ email: "", full_name: "", role: "user" });
+  const [addUserError, setAddUserError] = useState<string | null>(null);
+  const [addUserSaving, setAddUserSaving] = useState(false);
+
+  // Edit user profile
+  const [editUser, setEditUser] = useState<UserWithRoles | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: "", avatar_initials: "", role: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  async function handleAddUser(e: React.FormEvent) {
+    e.preventDefault();
+    setAddUserSaving(true); setAddUserError(null);
+    try {
+      const tok = await freshToken();
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: authHeaders(tok),
+        body: JSON.stringify(addUserForm),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (!data.ok) { setAddUserError(data.error ?? "Failed."); return; }
+      setAddUserOpen(false);
+      setAddUserForm({ email: "", full_name: "", role: "user" });
+      onRefresh();
+    } catch { setAddUserError("Network error."); }
+    finally { setAddUserSaving(false); }
+  }
+
+  function openEdit(user: UserWithRoles) {
+    setEditUser(user);
+    setEditForm({ full_name: user.full_name ?? "", avatar_initials: user.avatar_initials ?? "", role: user.role ?? "user" });
+    setEditError(null);
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editUser) return;
+    setEditSaving(true); setEditError(null);
+    try {
+      const tok = await freshToken();
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: authHeaders(tok),
+        body: JSON.stringify({ id: editUser.id, ...editForm }),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (!data.ok) { setEditError(data.error ?? "Failed."); return; }
+      setEditUser(null);
+      onRefresh();
+    } catch { setEditError("Network error."); }
+    finally { setEditSaving(false); }
+  }
+
   async function removeRole(userId: string, roleId: string) {
     const key = `${userId}:${roleId}`;
     setRemoving(key);
@@ -536,7 +592,19 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <>
+      {/* Add user button */}
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={() => { setAddUserOpen(true); setAddUserError(null); }}
+          className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+          Add User
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
           <tr>
@@ -561,7 +629,7 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 text-xs font-semibold text-white">
                         {initials}
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-slate-900 dark:text-slate-100">
                           {user.full_name ?? "—"}
                           {isSuperuser && (
@@ -572,6 +640,17 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
                         </p>
                         <p className="truncate text-xs text-slate-400">{user.email}</p>
                       </div>
+                      {!isSuperuser && (
+                        <button
+                          onClick={() => openEdit(user)}
+                          title="Edit display name / role"
+                          className="shrink-0 rounded-lg p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 11l6.364-6.364a2 2 0 012.828 2.828L11.828 13.828A2 2 0 0110.414 14H9v-1.414a2 2 0 01.586-1.414z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </td>
 
@@ -695,6 +774,108 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
         </tbody>
       </table>
     </div>
+
+      {/* ── Add User Modal ── */}
+      {addUserOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Add User</h2>
+            <p className="mb-4 text-xs text-slate-500">The user must already exist in Supabase Auth (create them there first). This links them to the portal.</p>
+            <form onSubmit={(e) => { void handleAddUser(e); }} className="flex flex-col gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
+                <input
+                  type="email" required autoFocus
+                  value={addUserForm.email}
+                  onChange={(e) => setAddUserForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="name@techniline.org"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Display Name</label>
+                <input
+                  type="text" required
+                  value={addUserForm.full_name}
+                  onChange={(e) => setAddUserForm((f) => ({ ...f, full_name: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="Full Name"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Role</label>
+                <select
+                  value={addUserForm.role}
+                  onChange={(e) => setAddUserForm((f) => ({ ...f, role: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="user">User</option>
+                  <option value="manager">Manager</option>
+                  <option value="logistics">Logistics</option>
+                </select>
+              </div>
+              {addUserError && <p className="text-xs text-red-600">{addUserError}</p>}
+              <div className="mt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setAddUserOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400">Cancel</button>
+                <button type="submit" disabled={addUserSaving} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {addUserSaving ? "Adding…" : "Add User"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit User Modal ── */}
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-slate-100">Edit User</h2>
+            <p className="mb-4 text-xs text-slate-400">{editUser.email}</p>
+            <form onSubmit={(e) => { void handleEditSave(e); }} className="flex flex-col gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Display Name</label>
+                <input
+                  type="text" required autoFocus
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Initials (2 chars)</label>
+                <input
+                  type="text" maxLength={2}
+                  value={editForm.avatar_initials}
+                  onChange={(e) => setEditForm((f) => ({ ...f, avatar_initials: e.target.value.toUpperCase().slice(0, 2) }))}
+                  className="w-20 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="AB"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Role</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="user">User</option>
+                  <option value="manager">Manager</option>
+                  <option value="logistics">Logistics</option>
+                </select>
+              </div>
+              {editError && <p className="text-xs text-red-600">{editError}</p>}
+              <div className="mt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setEditUser(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400">Cancel</button>
+                <button type="submit" disabled={editSaving} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {editSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

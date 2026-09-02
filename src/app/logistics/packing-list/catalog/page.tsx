@@ -251,6 +251,24 @@ export default function PackingCatalogPage() {
   const [normalizing, setNormalizing] = useState(false);
   const [normalizeResult, setNormalizeResult] = useState<{ total: number; renamed: number; merged: number; errors: number; failedIds?: string[] } | null>(null);
 
+  // Normalize unit weights
+  const [normalizingWeights, setNormalizingWeights] = useState(false);
+  const [weightNormResult, setWeightNormResult] = useState<{ scanned: number; fixed: number; errors: number; examples: string[] } | null>(null);
+
+  async function handleNormalizeWeights() {
+    if (!confirm("This will fix SKUs where unit_weight_kg ≥ carton_weight_kg by deriving the correct per-unit weight from carton_weight_kg ÷ carton_qty. Continue?")) return;
+    setNormalizingWeights(true); setWeightNormResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/packing/catalog/normalize-weights", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json() as { ok: boolean; scanned?: number; fixed?: number; errors?: number; examples?: string[]; error?: string };
+      if (!json.ok) throw new Error(json.error ?? "Failed");
+      setWeightNormResult({ scanned: json.scanned ?? 0, fixed: json.fixed ?? 0, errors: json.errors ?? 0, examples: json.examples ?? [] });
+      void load();
+    } catch (err) { alert(err instanceof Error ? err.message : "Failed"); }
+    finally { setNormalizingWeights(false); }
+  }
+
   async function handleNormalize() {
     if (!confirm(`This will strip hyphens, spaces and other special characters from all ${items.length.toLocaleString()} model numbers, and merge any duplicates. Continue?`)) return;
     setNormalizing(true); setNormalizeResult(null);
@@ -423,6 +441,14 @@ export default function PackingCatalogPage() {
             {normalizing ? "⏳ Fixing…" : "✦ Fix Model Nos"}
           </button>
           <button
+            type="button" onClick={handleNormalizeWeights} disabled={normalizingWeights || loading}
+            style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 10px rgba(234,179,8,0.14)" }}
+            className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-xs font-bold text-amber-600 hover:border-amber-300 hover:bg-amber-50 disabled:opacity-50"
+            title="Fix SKUs where unit weight ≥ carton weight — derives correct unit weight from carton weight ÷ carton qty"
+          >
+            {normalizingWeights ? "⏳ Fixing…" : "⚖ Fix Unit Weights"}
+          </button>
+          <button
             type="button" onClick={load} disabled={loading}
             style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 10px rgba(139,92,246,0.10)" }}
             className="rounded-xl border border-violet-100 bg-white px-4 py-2 text-xs font-bold text-violet-400 hover:border-violet-200 hover:text-violet-600 disabled:opacity-50"
@@ -486,6 +512,24 @@ export default function PackingCatalogPage() {
               {" "}(of {normalizeResult.total} total SKUs)
             </span>
             <button type="button" onClick={() => setNormalizeResult(null)} className="ml-4 font-bold text-amber-400 hover:text-amber-600">✕</button>
+          </div>
+        )}
+        {weightNormResult && (
+          <div className="rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800" style={{ boxShadow: "0 2px 12px rgba(234,179,8,0.10)" }}>
+            <div className="flex items-center justify-between">
+              <span>
+                Unit weights fixed — <strong>{weightNormResult.fixed}</strong> SKUs corrected
+                {weightNormResult.errors > 0 && <>, <strong className="text-red-600">{weightNormResult.errors}</strong> errors</>}
+                {" "}(scanned {weightNormResult.scanned} SKUs with carton data)
+              </span>
+              <button type="button" onClick={() => setWeightNormResult(null)} className="ml-4 font-bold text-amber-400 hover:text-amber-600">✕</button>
+            </div>
+            {weightNormResult.examples.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs text-amber-700">
+                {weightNormResult.examples.slice(0, 10).map((e, i) => <li key={i} className="font-mono">{e}</li>)}
+                {weightNormResult.examples.length > 10 && <li className="text-amber-400">…and {weightNormResult.examples.length - 10} more</li>}
+              </ul>
+            )}
           </div>
         )}
         {error && (
