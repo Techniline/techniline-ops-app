@@ -138,10 +138,10 @@ export function computePhysical(
   }
 
   let total_weight_kg = 0;
-  if (sku.unit_weight_kg && sku.unit_weight_kg > 0) {
-    total_weight_kg = qty * sku.unit_weight_kg;
-  } else if (sku.carton_weight_kg && sku.carton_weight_kg > 0) {
+  if (sku.carton_weight_kg && sku.carton_weight_kg > 0) {
     total_weight_kg = no_of_ctns * sku.carton_weight_kg;
+  } else if (sku.unit_weight_kg && sku.unit_weight_kg > 0) {
+    total_weight_kg = qty * sku.unit_weight_kg;
   }
 
   return {
