@@ -50,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const email = body.email?.trim().toLowerCase();
   const fullName = body.full_name?.trim();
-  const role = body.role?.trim() ?? "user";
+  const role = body.role?.trim() ?? "logistics";
 
   if (!email) return Response.json({ ok: false, error: "Email is required." }, { status: 400 });
   if (!fullName) return Response.json({ ok: false, error: "Full name is required." }, { status: 400 });

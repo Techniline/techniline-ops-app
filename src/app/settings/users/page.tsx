@@ -477,7 +477,7 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
 
   // Add user
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const [addUserForm, setAddUserForm] = useState({ email: "", full_name: "", role: "user", uid: "" });
+  const [addUserForm, setAddUserForm] = useState({ email: "", full_name: "", role: "logistics", uid: "" });
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [addUserSaving, setAddUserSaving] = useState(false);
 
@@ -809,9 +809,8 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
                   onChange={(e) => setAddUserForm((f) => ({ ...f, role: e.target.value }))}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 >
-                  <option value="user">User</option>
-                  <option value="manager">Manager</option>
                   <option value="logistics">Logistics</option>
+                  <option value="manager">Manager</option>
                 </select>
               </div>
               <div>
@@ -871,9 +870,8 @@ function UsersTab({ users, allRoles, onRefresh }: UsersTabProps) {
                   onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 >
-                  <option value="user">User</option>
-                  <option value="manager">Manager</option>
                   <option value="logistics">Logistics</option>
+                  <option value="manager">Manager</option>
                 </select>
               </div>
               {editError && <p className="text-xs text-red-600">{editError}</p>}
