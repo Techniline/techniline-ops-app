@@ -93,7 +93,7 @@ export async function POST(request: Request): Promise<Response> {
     const docBlock: any = { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } };
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: [docBlock, { type: "text", text: PROMPT }] }],
     });
 
