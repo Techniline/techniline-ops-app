@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
+import { getDocumentProxy } from "unpdf";
+import { extractText } from "unpdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,7 +75,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "PDF import requires ANTHROPIC_API_KEY — ask your admin to add it in Vercel → Environment Variables." }, { status: 500 });
   }
 
-  let pdfBase64 = "";
+  let pdfText = "";
   try {
     const form = await request.formData();
     const file = form.get("file") as File | null;
@@ -81,7 +83,10 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ ok: false, error: "Please upload a PDF file." }, { status: 400 });
     }
     const buf = await file.arrayBuffer();
-    pdfBase64 = Buffer.from(buf).toString("base64");
+    const doc = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(doc, { mergePages: true });
+    pdfText = (text ?? "").trim();
+    if (!pdfText) throw new Error("empty");
   } catch {
     return Response.json({ ok: false, error: "Could not read the uploaded file." }, { status: 400 });
   }
@@ -89,12 +94,10 @@ export async function POST(request: Request): Promise<Response> {
   const client = new Anthropic({ apiKey });
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const docBlock: any = { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } };
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 8192,
-      messages: [{ role: "user", content: [docBlock, { type: "text", text: PROMPT }] }],
+      messages: [{ role: "user", content: `${PROMPT}\n\nDocument text:\n${pdfText}` }],
     });
 
     const raw = (msg.content[0] as { type: string; text: string }).text.trim();
