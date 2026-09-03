@@ -1046,8 +1046,18 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                         className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-30 dark:bg-emerald-900/30 dark:text-emerald-400 whitespace-nowrap">
                         📦 1 per box
                       </button>
-                      {/* Remove */}
-                      <button type="button" onClick={() => setLines((p) => p.filter((x) => x.key !== ln.key))}
+                      {/* Remove — if this is a split child, restore its qty to the parent first */}
+                      <button type="button" onClick={() => setLines((p) => {
+                        const parentKey = ln._parent_key;
+                        return p
+                          .filter((x) => x.key !== ln.key)
+                          .map((x) => {
+                            if (!parentKey || x.key !== parentKey || ln.qty === 0) return x;
+                            const restoredQty = x.qty + ln.qty;
+                            const sku = { unit_weight_kg: x._unit_weight_kg, unit_cbm: x._unit_cbm, carton_qty: x._carton_qty, carton_weight_kg: x._carton_weight_kg, carton_cbm: x._carton_cbm };
+                            return { ...x, qty: restoredQty, ...computePhysical(restoredQty, sku), amount: restoredQty * x.unit_price };
+                          });
+                      })}
                         className="rounded bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 whitespace-nowrap">
                         ✕ Remove
                       </button>
