@@ -628,11 +628,19 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
         };
       });
       const payload = { company, mode, invoice_no: invoiceNo || null, list_date: listDate, consignee_name: consigneeName || null, consignee_address: consigneeAddress || null, notes: notes || null, status, shipping_label: shippingLabel.trim() || null, items };
-      const res = await fetch(id ? `/api/packing/lists/${id}` : "/api/packing/lists", {
+      let res = await fetch(id ? `/api/packing/lists/${id}` : "/api/packing/lists", {
         method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
+      // If the list was deleted, fall back to creating a new one
+      if (res.status === 404 && id) {
+        res = await fetch("/api/packing/lists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        });
+      }
       const json = await res.json() as { ok: boolean; id?: string; error?: string };
       if (!json.ok) throw new Error(json.error);
       if (userId) { try { localStorage.removeItem(draftKey(userId)); } catch { /* ignore */ } }
