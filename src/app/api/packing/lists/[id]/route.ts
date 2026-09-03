@@ -62,6 +62,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const svc = svcClient();
   const { company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, shipping_label, items } = body;
 
+  // Verify the packing list exists before updating — Supabase UPDATE silently matches 0 rows
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing } = await (svc.from("packing_lists" as any) as any).select("id").eq("id", id).maybeSingle();
+  if (!existing) return Response.json({ ok: false, error: "Packing list not found — it may have been deleted." }, { status: 404 });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateErr } = await (svc.from("packing_lists" as any) as any)
     .update({ company, mode, invoice_no, list_date, consignee_name, consignee_address, notes, status, shipping_label: shipping_label ?? null, updated_at: new Date().toISOString() })
