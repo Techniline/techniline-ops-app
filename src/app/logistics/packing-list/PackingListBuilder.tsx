@@ -1030,6 +1030,14 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                         }`}>
                         {ln._sku_id ? "✏️ Edit SKU" : "➕ Add SKU"}
                       </button>
+                      {/* Manual split — add a sibling row; editing its qty auto-adjusts the parent */}
+                      <button type="button"
+                        title="Split this line — a new row appears below; set its qty and the parent qty adjusts automatically"
+                        disabled={ln.qty <= 1}
+                        onClick={() => splitLine(ln.key)}
+                        className="rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-30 dark:bg-violet-900/30 dark:text-violet-400 whitespace-nowrap">
+                        ✂ Split
+                      </button>
                       {/* Split to individual boxes */}
                       <button type="button"
                         title={ln._carton_qty && ln._carton_qty > 0 ? `Each carton gets its own box — creates ${Math.ceil(ln.qty / ln._carton_qty)} boxes` : "Needs carton qty from catalog"}
