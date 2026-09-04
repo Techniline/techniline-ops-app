@@ -387,7 +387,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   }
 
   function updateLine(lineKey: string, field: keyof PackingLine, raw: string) {
-    const numFields = new Set<keyof PackingLine>(["qty", "unit_price", "no_of_ctns"]);
+    const numFields = new Set<keyof PackingLine>(["qty", "unit_price", "no_of_ctns", "tot_cbm"]);
     setLines((prev) => {
       // Find the line being edited — needed for split parent lookup
       const editedLine = prev.find((l) => l.key === lineKey);
@@ -822,7 +822,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
       {/* Line items table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-        <table className="w-full min-w-[1050px] text-sm">
+        <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/60">
               <th className="px-3 py-2 text-center w-8">
@@ -837,6 +837,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               <th className="px-2 py-2 text-right">Qty</th>
               <th className="px-2 py-2 text-right" title="Units per master carton (from catalog)">Pcs/Ctn</th>
               <th className="px-2 py-2 text-center">No. of Ctns</th>
+              <th className="px-2 py-2 text-right" title="Total CBM for the offered qty — auto-calculated from catalog; editable">CBM (m³)</th>
               <th className="px-2 py-2 text-right">Weight kg</th>
               {mode === "invoice" && <th className="px-2 py-2 text-right">Unit Price</th>}
               {mode === "invoice" && <th className="px-2 py-2 text-right">Amount</th>}
@@ -1020,6 +1021,24 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
                     );
                   })()}
 
+                  {/* CBM — auto-calculated, editable override */}
+                  <td className="px-2 py-1.5">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="number" step="any" min="0"
+                        value={ln.tot_cbm || ""}
+                        placeholder="0"
+                        title={ln._unit_cbm ? `Unit CBM: ${fmt5(ln._unit_cbm)} m³` : "Auto-calculated from catalog"}
+                        onChange={(e) => updateLine(ln.key, "tot_cbm", e.target.value)}
+                        className={`w-20 ${cellInp} text-right tabular-nums`}
+                      />
+                      {ln._unit_cbm && ln._unit_cbm > 0 && (
+                        <span className="text-[10px] text-slate-400 tabular-nums">
+                          unit: {fmt5(ln._unit_cbm)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-2 py-1.5 text-right text-xs text-slate-500 tabular-nums">{ln.total_weight_kg.toFixed(2)}</td>
 
                   {mode === "invoice" && (
@@ -1111,6 +1130,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
               <td className="px-2 py-2 text-right tabular-nums">{lines.reduce((s, l) => s + l.qty, 0)}</td>
               <td />{/* Pcs/Ctn — no total */}
               <td className="px-2 py-2 text-center tabular-nums font-bold">{totCtns || "—"}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{fmt5(totCBM)}</td>
               <td className="px-2 py-2 text-right tabular-nums">{totWeight.toFixed(2)}</td>
               {mode === "invoice" && <td />}
               {mode === "invoice" && <td className="px-2 py-2 text-right tabular-nums">{fmt2(subtotal)}</td>}
