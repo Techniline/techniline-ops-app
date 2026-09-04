@@ -131,8 +131,9 @@ export function computePhysical(
   const no_of_ctns = Math.ceil(qty / cq);
 
   let tot_cbm = 0;
-  if (sku.carton_cbm && sku.carton_cbm > 0) {
-    tot_cbm = no_of_ctns * sku.carton_cbm;
+  if (sku.carton_cbm && sku.carton_cbm > 0 && cq > 0) {
+    // Proportional to actual qty — a partial carton uses a fraction of the full carton CBM
+    tot_cbm = (qty / cq) * sku.carton_cbm;
   } else if (sku.unit_cbm && sku.unit_cbm > 0) {
     tot_cbm = qty * sku.unit_cbm;
   }

@@ -294,33 +294,57 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
   useEffect(() => {
     const id = editId ?? searchParams.get("edit");
     if (!id) return;
-    getToken().then((token) =>
-      fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-    ).then((r) => r.json()).then((json) => {
-      if (!json.ok) return;
-      const l = json.list;
-      setCompany(l.company); setMode(l.mode);
-      setInvoiceNo(l.invoice_no ?? ""); setListDate(l.list_date ?? TODAY);
-      setConsigneeName(l.consignee_name ?? ""); setConsigneeAddress(l.consignee_address ?? "");
-      setNotes(l.notes ?? ""); setShippingLabel(l.shipping_label ?? "");
+    (async () => {
+      try {
+        const token = await getToken();
+        const [listJson, catJson] = await Promise.all([
+          fetch(`/api/packing/lists/${id}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+          fetch("/api/packing/catalog", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+        ]);
+        if (!listJson.ok) return;
 
-      // Reconstruct boxData: for each box_no > 0, sum no_of_ctns (only primary > 0) and take first cbm > 0
-      const newBoxData: Record<number, BoxMeta> = {};
-      for (const item of json.items as Array<PackingLine & { box_no: number | null; no_of_ctns: number }>) {
-        const b = item.box_no ?? 0;
-        if (b === 0) continue;
-        if (!newBoxData[b]) newBoxData[b] = { ctns: 0 };
-        newBoxData[b].ctns += item.no_of_ctns ?? 0;
-      }
-      setBoxData(newBoxData);
+        // Build a catalog lookup by model_no so we can restore _* fields on each line
+        const catalogMap = new Map<string, SkuCatalogRow>();
+        if (catJson.ok && catJson.items) {
+          for (const sku of catJson.items as SkuCatalogRow[]) {
+            catalogMap.set(sku.model_no.toLowerCase(), sku);
+          }
+        }
 
-      setLines((json.items as PackingLine[]).map((item) => ({
-        ...newLine(),
-        ...item,
-        key: Math.random().toString(36).slice(2),
-        box_no: (item.box_no as unknown as number | null) ?? 0,
-      })));
-    }).catch(() => {});
+        const l = listJson.list;
+        setCompany(l.company); setMode(l.mode);
+        setInvoiceNo(l.invoice_no ?? ""); setListDate(l.list_date ?? TODAY);
+        setConsigneeName(l.consignee_name ?? ""); setConsigneeAddress(l.consignee_address ?? "");
+        setNotes(l.notes ?? ""); setShippingLabel(l.shipping_label ?? "");
+
+        // Reconstruct boxData: for each box_no > 0, sum no_of_ctns of primary row only
+        const newBoxData: Record<number, BoxMeta> = {};
+        for (const item of listJson.items as Array<PackingLine & { box_no: number | null; no_of_ctns: number }>) {
+          const b = item.box_no ?? 0;
+          if (b === 0) continue;
+          if (!newBoxData[b]) newBoxData[b] = { ctns: 0 };
+          newBoxData[b].ctns += item.no_of_ctns ?? 0;
+        }
+        setBoxData(newBoxData);
+
+        setLines((listJson.items as PackingLine[]).map((item) => {
+          const sku = catalogMap.get(item.model_no?.toLowerCase() ?? "");
+          return {
+            ...newLine(),
+            ...item,
+            key: Math.random().toString(36).slice(2),
+            box_no: (item.box_no as unknown as number | null) ?? 0,
+            // Re-link catalog metadata so Pcs/Ctn, weight and CBM recalculate correctly
+            _sku_id: sku?.id ?? null,
+            _unit_weight_kg: sku?.unit_weight_kg ?? null,
+            _unit_cbm: sku?.unit_cbm ?? null,
+            _carton_qty: sku?.carton_qty ?? null,
+            _carton_weight_kg: sku?.carton_weight_kg ?? null,
+            _carton_cbm: sku?.carton_cbm ?? null,
+          };
+        }));
+      } catch { /* ignore */ }
+    })();
   }, [editId, searchParams]);
 
   // SKU search
