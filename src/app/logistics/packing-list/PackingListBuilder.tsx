@@ -329,7 +329,7 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
 
         setLines((listJson.items as PackingLine[]).map((item) => {
           const sku = catalogMap.get(item.model_no?.toLowerCase() ?? "");
-          return {
+          const base: PackingLine = {
             ...newLine(),
             ...item,
             key: Math.random().toString(36).slice(2),
@@ -342,6 +342,12 @@ export default function PackingListBuilder({ editId }: { editId?: string }) {
             _carton_weight_kg: sku?.carton_weight_kg ?? null,
             _carton_cbm: sku?.carton_cbm ?? null,
           };
+          // Re-run computePhysical so existing records with stale CBM/weight are corrected
+          // on first open — saving the list will persist the corrected values to the DB
+          if (sku) {
+            return { ...base, ...computePhysical(base.qty, sku) };
+          }
+          return base;
         }));
       } catch { /* ignore */ }
     })();
