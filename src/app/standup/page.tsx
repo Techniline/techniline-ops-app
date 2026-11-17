@@ -1201,18 +1201,18 @@ export default function StandupPage() {
           <input
             type="date"
             value={date}
-            max={today}
+            max={manager ? undefined : today}
             onChange={(e) => setDate(e.target.value)}
             className="text-sm font-medium text-gray-800 outline-none bg-transparent"
           />
           <button
-            onClick={() => { if (!isToday) setDate(nextDay(date)); }}
-            disabled={isToday}
+            onClick={() => { if (manager || !isToday) setDate(nextDay(date)); }}
+            disabled={!manager && isToday}
             className="text-gray-400 hover:text-gray-700 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ›
           </button>
-          {!isToday && (
+          {date !== today && (
             <button
               onClick={() => setDate(today)}
               className="text-xs text-blue-600 font-medium hover:underline ml-1"
