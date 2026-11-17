@@ -117,6 +117,59 @@ export async function fetchOpenBlockers(userId: string): Promise<{ id: string; w
   return (data ?? []) as { id: string; what: string }[];
 }
 
+/** Build a combined meeting summary for all users (Vihan's share-in-meeting export). */
+export function buildMeetingSummary(logs: { log: StandupLog; name: string }[]): string {
+  const dateLine = logs[0] ? fmtDate(logs[0].log.log_date) : "";
+  const lines: string[] = [
+    `📋 *Morning Standup — ${dateLine}*`,
+    "",
+  ];
+
+  for (const { log, name } of logs) {
+    lines.push(`─────────────────`);
+    lines.push(`👤 *${name}*`);
+    lines.push("");
+
+    if (log.yesterday_items.some((i) => i.text)) {
+      lines.push("✅ *Yesterday*");
+      for (const item of log.yesterday_items.filter((i) => i.text)) {
+        const badge = item.status === "carried" ? " _(→ carried)_" : item.status === "done" ? "" : "";
+        lines.push(`• ${item.text}${badge}`);
+        if (item.detail) lines.push(`  _${item.detail}_`);
+      }
+      lines.push("");
+    }
+
+    if (log.today_items.some((i) => i.text)) {
+      lines.push("📋 *Today*");
+      for (const item of log.today_items.filter((i) => i.text)) {
+        const carried = item.status === "carried" ? " _(carried)_" : "";
+        lines.push(`• ${item.text}${carried}`);
+        if (item.detail) lines.push(`  _${item.detail}_`);
+      }
+      lines.push("");
+    }
+
+    if (log.blocker_items.some((i) => i.text)) {
+      lines.push("🚫 *Blockers*");
+      for (const item of log.blocker_items.filter((i) => i.text)) {
+        lines.push(`• ${item.text}`);
+        if (item.detail) lines.push(`  _${item.detail}_`);
+      }
+      lines.push("");
+    }
+
+    if (!log.yesterday_items.some((i) => i.text) &&
+        !log.today_items.some((i) => i.text) &&
+        !log.blocker_items.some((i) => i.text)) {
+      lines.push("_(no log submitted)_");
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
 /** Format a YYYY-MM-DD date for display, e.g. "Mon 17 Nov" */
 export function fmtDate(d: string): string {
   const dt = new Date(d + "T00:00:00");

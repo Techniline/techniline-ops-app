@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { isManager } from "@/lib/permissions";
 import {
@@ -15,6 +16,7 @@ import {
   fetchOpenBlockers,
   upsertStandupLog,
   buildWhatsAppText,
+  buildMeetingSummary,
   dubaiToday,
   fmtDate,
 } from "@/lib/standup";
@@ -646,6 +648,7 @@ function Section({
 function ManagerOverview({ date }: { date: string }) {
   const [logs, setLogs] = useState<Record<string, StandupLog>>({});
   const [loading, setLoading] = useState(true);
+  const [meetingCopied, setMeetingCopied] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -673,9 +676,26 @@ function ManagerOverview({ date }: { date: string }) {
 
   const hasAny = users.some((u) => logs[u.id]);
 
+  async function copyMeetingSummary() {
+    const entries = users.map((u) => ({
+      log: logs[u.id] ?? {
+        id: "", user_id: u.id, log_date: date,
+        yesterday_items: [], today_items: [], blocker_items: [],
+        created_at: "", updated_at: "",
+      },
+      name: u.name,
+    }));
+    const text = buildMeetingSummary(entries);
+    try {
+      await navigator.clipboard.writeText(text);
+      setMeetingCopied(true);
+      setTimeout(() => setMeetingCopied(false), 2500);
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className="space-y-6">
-      {/* KPI snapshot bar */}
+      {/* KPI snapshot bar + meeting export */}
       <div className="grid grid-cols-2 gap-4">
         {users.map((u) => {
           const log = logs[u.id];
@@ -699,6 +719,28 @@ function ManagerOverview({ date }: { date: string }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Meeting export card */}
+      <div className="rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-0.5 shadow-lg">
+        <div className="rounded-2xl bg-white/97 px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-bold text-gray-900">📤 Share in Meeting</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Copies the full combined standup for both Aaron and Maricel — ready to paste into WhatsApp, Teams, or the meeting chat.
+            </p>
+          </div>
+          <button
+            onClick={copyMeetingSummary}
+            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow ${
+              meetingCopied
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-md"
+            }`}
+          >
+            {meetingCopied ? "✓ Copied!" : "📋 Copy team standup"}
+          </button>
+        </div>
       </div>
 
       {!hasAny && (
@@ -755,15 +797,27 @@ export default function StandupPage() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {/* Page header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {manager ? "Standup Overview" : "Daily Standup"}
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {manager
-              ? "Aaron and Maricel's morning scrum logs"
-              : "Log your yesterday, today, and blockers"}
-          </p>
+        <div className="flex items-start gap-3">
+          <Link
+            href="/dashboard"
+            className="mt-1 flex items-center justify-center w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
+            title="Back to Dashboard"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {manager ? "Standup Overview" : "Daily Standup"}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {manager
+                ? "Aaron and Maricel's morning scrum logs"
+                : "Log your yesterday, today, and blockers"}
+            </p>
+          </div>
         </div>
 
         {/* Date navigator */}
