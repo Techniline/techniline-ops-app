@@ -953,21 +953,27 @@ function TeamsShareModal({
 function ManagerOverview({ date }: { date: string }) {
   const { profile } = useAuth();
   const [logs, setLogs] = useState<Record<string, StandupLog>>({});
+  const [vihanLog, setVihanLog] = useState<StandupLog | null>(null);
   const [loading, setLoading] = useState(true);
   const [meetingCopied, setMeetingCopied] = useState(false);
   const [showTeamsModal, setShowTeamsModal] = useState(false);
   const [teamsToken, setTeamsToken] = useState("");
 
   useEffect(() => {
+    if (!profile) return;
     setLoading(true);
-    fetchStandupsByDate(date)
-      .then((rows) => {
+    Promise.all([
+      fetchStandupsByDate(date),
+      fetchStandupLog(profile.id, date),
+    ])
+      .then(([rows, myLog]) => {
         const map: Record<string, StandupLog> = {};
         for (const row of rows) map[row.user_id] = row;
         setLogs(map);
+        setVihanLog(myLog);
       })
       .finally(() => setLoading(false));
-  }, [date]);
+  }, [date, profile]);
 
   // Grab Supabase session token for authenticated API calls
   useEffect(() => {
@@ -991,10 +997,10 @@ function ManagerOverview({ date }: { date: string }) {
     { id: MARICEL_ID, ...STANDUP_USERS[MARICEL_ID] },
   ];
 
-  const hasAny = users.some((u) => logs[u.id]);
+  const hasAny = users.some((u) => logs[u.id]) || !!vihanLog;
 
-  async function copyMeetingSummary() {
-    const entries = users.map((u) => ({
+  function buildAllEntries() {
+    const teamEntries = users.map((u) => ({
       log: logs[u.id] ?? {
         id: "", user_id: u.id, log_date: date,
         yesterday_items: [], today_items: [], blocker_items: [],
@@ -1002,7 +1008,19 @@ function ManagerOverview({ date }: { date: string }) {
       },
       name: u.name,
     }));
-    const text = buildMeetingSummary(entries);
+    const vihanEntry = {
+      log: vihanLog ?? {
+        id: "", user_id: profile?.id ?? "", log_date: date,
+        yesterday_items: [], today_items: [], blocker_items: [],
+        created_at: "", updated_at: "",
+      },
+      name: "Vihan",
+    };
+    return [...teamEntries, vihanEntry];
+  }
+
+  async function copyMeetingSummary() {
+    const text = buildMeetingSummary(buildAllEntries());
     try {
       await navigator.clipboard.writeText(text);
       setMeetingCopied(true);
@@ -1013,25 +1031,28 @@ function ManagerOverview({ date }: { date: string }) {
   return (
     <div className="space-y-6">
       {/* KPI snapshot bar + meeting export */}
-      <div className="grid grid-cols-2 gap-4">
-        {users.map((u) => {
-          const log = logs[u.id];
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          ...users.map((u) => ({ id: u.id, name: u.name, color: u.color, log: logs[u.id] ?? null })),
+          { id: profile?.id ?? "", name: "Vihan", color: "emerald", log: vihanLog },
+        ].map((u) => {
           const colorMap: Record<string, string> = {
-            blue:   "from-blue-500 to-indigo-600",
-            violet: "from-violet-500 to-purple-600",
+            blue:    "from-blue-500 to-indigo-600",
+            violet:  "from-violet-500 to-purple-600",
+            emerald: "from-emerald-500 to-teal-600",
           };
           return (
-            <div key={u.id} className={`rounded-xl bg-gradient-to-br ${colorMap[u.color]} p-0.5 shadow`}>
+            <div key={u.id} className={`rounded-xl bg-gradient-to-br ${colorMap[u.color] ?? "from-gray-500 to-gray-700"} p-0.5 shadow`}>
               <div className="rounded-xl bg-white/95 px-4 py-3 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold text-gray-900">{u.name}</p>
                   <p className="text-xs text-gray-500">
-                    {log
-                      ? `${log.today_items.filter((i) => i.text).length} today · ${log.blocker_items.filter((i) => i.text).length} blockers`
+                    {u.log
+                      ? `${u.log.today_items.filter((i) => i.text).length} today · ${u.log.blocker_items.filter((i) => i.text).length} blockers`
                       : "No log submitted"}
                   </p>
                 </div>
-                <div className={`w-2.5 h-2.5 rounded-full ${log ? "bg-emerald-400" : "bg-gray-300"}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${u.log ? "bg-emerald-400" : "bg-gray-300"}`} />
               </div>
             </div>
           );
@@ -1044,7 +1065,7 @@ function ManagerOverview({ date }: { date: string }) {
           <div>
             <p className="font-bold text-gray-900">📤 Share in Meeting</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              Share the full combined standup for both Aaron and Maricel.
+              Combined standup for Aaron, Maricel and Vihan.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1071,17 +1092,7 @@ function ManagerOverview({ date }: { date: string }) {
       {/* Teams channel picker modal */}
       {showTeamsModal && (
         <TeamsShareModal
-          summaryText={(() => {
-            const entries = users.map((u) => ({
-              log: logs[u.id] ?? {
-                id: "", user_id: u.id, log_date: date,
-                yesterday_items: [], today_items: [], blocker_items: [],
-                created_at: "", updated_at: "",
-              },
-              name: u.name,
-            }));
-            return buildMeetingSummary(entries);
-          })()}
+          summaryText={buildMeetingSummary(buildAllEntries())}
           token={teamsToken}
           onClose={() => setShowTeamsModal(false)}
         />
