@@ -953,7 +953,9 @@ function TeamsShareModal({
 function ManagerOverview({ date }: { date: string }) {
   const { profile } = useAuth();
   const [logs, setLogs] = useState<Record<string, StandupLog>>({});
+  const [prevLogs, setPrevLogs] = useState<Record<string, StandupLog | null>>({});
   const [vihanLog, setVihanLog] = useState<StandupLog | null>(null);
+  const [vihanPrevLog, setVihanPrevLog] = useState<StandupLog | null>(null);
   const [vihanTomorrowLog, setVihanTomorrowLog] = useState<StandupLog | null>(null);
   const [loading, setLoading] = useState(true);
   const [meetingCopied, setMeetingCopied] = useState(false);
@@ -967,13 +969,19 @@ function ManagerOverview({ date }: { date: string }) {
       fetchStandupsByDate(date),
       fetchStandupLog(profile.id, date),
       fetchStandupLog(profile.id, nextDay(date)),
+      // prev-day logs to backfill yesterday items
+      fetchPrevLog(AARON_ID, date),
+      fetchPrevLog(MARICEL_ID, date),
+      fetchPrevLog(profile.id, date),
     ])
-      .then(([rows, myLog, myTomorrowLog]) => {
+      .then(([rows, myLog, myTomorrowLog, aaronPrev, maricelPrev, vihanPrev]) => {
         const map: Record<string, StandupLog> = {};
         for (const row of rows) map[row.user_id] = row;
         setLogs(map);
         setVihanLog(myLog);
         setVihanTomorrowLog(myTomorrowLog);
+        setPrevLogs({ [AARON_ID]: aaronPrev, [MARICEL_ID]: maricelPrev });
+        setVihanPrevLog(vihanPrev);
       })
       .finally(() => setLoading(false));
   }, [date, profile]);
@@ -1002,25 +1010,29 @@ function ManagerOverview({ date }: { date: string }) {
 
   const hasAny = users.some((u) => logs[u.id]) || !!vihanLog;
 
+  /** If a log has no yesterday_items, backfill from the previous day's today_items. */
+  function withYesterday(log: StandupLog | null, userId: string, prev: StandupLog | null): StandupLog {
+    const base: StandupLog = log ?? {
+      id: "", user_id: userId, log_date: date,
+      yesterday_items: [], today_items: [], blocker_items: [],
+      created_at: "", updated_at: "",
+    };
+    if (base.yesterday_items.some((i) => i.text)) return base;
+    // Backfill from prev day's today list
+    const backfill = (prev?.today_items ?? []).filter((i) => i.text);
+    return { ...base, yesterday_items: backfill };
+  }
+
   function buildAllEntries() {
     const teamEntries = users.map((u) => ({
-      log: logs[u.id] ?? {
-        id: "", user_id: u.id, log_date: date,
-        yesterday_items: [], today_items: [], blocker_items: [],
-        created_at: "", updated_at: "",
-      },
+      log: withYesterday(logs[u.id] ?? null, u.id, prevLogs[u.id] ?? null),
       name: u.name,
     }));
     const vihanEntry = {
-      log: vihanLog ?? {
-        id: "", user_id: profile?.id ?? "", log_date: date,
-        yesterday_items: [], today_items: [], blocker_items: [],
-        created_at: "", updated_at: "",
-      },
+      log: withYesterday(vihanLog, profile?.id ?? "", vihanPrevLog),
       name: "Vihan",
     };
     const entries: { log: StandupLog; name: string }[] = [...teamEntries, vihanEntry];
-    // Include Vihan's tomorrow log if it exists
     if (vihanTomorrowLog && vihanTomorrowLog.today_items.some((i) => i.text)) {
       entries.push({ log: vihanTomorrowLog, name: "Vihan (Tomorrow)" });
     }
