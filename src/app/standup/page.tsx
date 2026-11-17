@@ -645,10 +645,195 @@ function Section({
 
 // ─── manager overview ─────────────────────────────────────────────────────────
 
+interface TeamsChannel {
+  teamId: string;
+  teamName: string;
+  channelId: string;
+  channelName: string;
+}
+
+function TeamsShareModal({
+  summaryText,
+  token,
+  onClose,
+}: {
+  summaryText: string;
+  token: string;
+  onClose: () => void;
+}) {
+  const [channels, setChannels] = useState<TeamsChannel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<TeamsChannel | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/standup/teams-channels", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.channels) setChannels(d.channels);
+        else setError(d.error ?? "Failed to load channels");
+      })
+      .catch(() => setError("Network error"))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  async function handleSend() {
+    if (!selected) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/standup/share-teams", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          teamId: selected.teamId,
+          channelId: selected.channelId,
+          channelName: `${selected.teamName} › ${selected.channelName}`,
+          summaryText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Failed to send");
+      else setSent(`${selected.teamName} › ${selected.channelName}`);
+    } catch {
+      setError("Network error");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const filtered = channels.filter((c) => {
+    const q = search.toLowerCase();
+    return !q || c.teamName.toLowerCase().includes(q) || c.channelName.toLowerCase().includes(q);
+  });
+
+  // Group by team
+  const byTeam: Record<string, TeamsChannel[]> = {};
+  for (const ch of filtered) {
+    if (!byTeam[ch.teamName]) byTeam[ch.teamName] = [];
+    byTeam[ch.teamName].push(ch);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-bold">Share to Teams</h3>
+            <p className="text-indigo-100 text-xs">Pick a channel to post the standup</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {sent ? (
+            <div className="text-center py-8 space-y-3">
+              <div className="text-4xl">✅</div>
+              <p className="font-semibold text-gray-900">Posted!</p>
+              <p className="text-sm text-gray-500">{sent}</p>
+              <button
+                onClick={onClose}
+                className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Search */}
+              <input
+                type="text"
+                placeholder="Search channels…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              />
+
+              {/* Channel list */}
+              <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                {loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin w-5 h-5 border-2 border-gray-200 border-t-indigo-500 rounded-full" />
+                    <span className="ml-2 text-sm text-gray-500">Loading channels…</span>
+                  </div>
+                )}
+                {!loading && error && (
+                  <div className="rounded-xl bg-red-50 border border-red-200 p-3">
+                    <p className="text-xs text-red-700 font-medium">⚠️ {error}</p>
+                    {error.includes("permission") && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Add <code>Team.ReadBasic.All</code>, <code>Channel.ReadBasic.All</code>, and <code>ChannelMessage.Send</code> as application permissions in your Azure app registration, then grant admin consent.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!loading && !error && Object.keys(byTeam).length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">No channels found.</p>
+                )}
+                {!loading && !error && Object.entries(byTeam).map(([teamName, chs]) => (
+                  <div key={teamName}>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">{teamName}</p>
+                    <div className="space-y-1">
+                      {chs.map((ch) => {
+                        const isSelected = selected?.channelId === ch.channelId && selected?.teamId === ch.teamId;
+                        return (
+                          <button
+                            key={ch.channelId}
+                            onClick={() => setSelected(ch)}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-all border ${
+                              isSelected
+                                ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+                                : "border-transparent hover:border-gray-200 hover:bg-gray-50 text-gray-700"
+                            }`}
+                          >
+                            # {ch.channelName}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {error && !loading && (
+                <p className="text-xs text-red-600">{error}</p>
+              )}
+
+              <button
+                onClick={handleSend}
+                disabled={!selected || sending}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  !selected || sending
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-md"
+                }`}
+              >
+                {sending ? "Sending…" : selected ? `Post to #${selected.channelName}` : "Select a channel"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManagerOverview({ date }: { date: string }) {
+  const { profile } = useAuth();
   const [logs, setLogs] = useState<Record<string, StandupLog>>({});
   const [loading, setLoading] = useState(true);
   const [meetingCopied, setMeetingCopied] = useState(false);
+  const [showTeamsModal, setShowTeamsModal] = useState(false);
+  const [teamsToken, setTeamsToken] = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -660,6 +845,15 @@ function ManagerOverview({ date }: { date: string }) {
       })
       .finally(() => setLoading(false));
   }, [date]);
+
+  // Grab Supabase session token for authenticated API calls
+  useEffect(() => {
+    import("@/lib/supabaseClient").then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data }) => {
+        setTeamsToken(data.session?.access_token ?? "");
+      });
+    });
+  }, [profile]);
 
   if (loading) {
     return (
@@ -723,25 +917,52 @@ function ManagerOverview({ date }: { date: string }) {
 
       {/* Meeting export card */}
       <div className="rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-0.5 shadow-lg">
-        <div className="rounded-2xl bg-white/97 px-5 py-4 flex items-center justify-between gap-4">
+        <div className="rounded-2xl bg-white/97 px-5 py-4 space-y-3">
           <div>
             <p className="font-bold text-gray-900">📤 Share in Meeting</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              Copies the full combined standup for both Aaron and Maricel — ready to paste into WhatsApp, Teams, or the meeting chat.
+              Share the full combined standup for both Aaron and Maricel.
             </p>
           </div>
-          <button
-            onClick={copyMeetingSummary}
-            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow ${
-              meetingCopied
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-md"
-            }`}
-          >
-            {meetingCopied ? "✓ Copied!" : "📋 Copy team standup"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copyMeetingSummary}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow ${
+                meetingCopied
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-900 text-white hover:bg-gray-700"
+              }`}
+            >
+              {meetingCopied ? "✓ Copied!" : "📋 Copy for WhatsApp"}
+            </button>
+            <button
+              onClick={() => setShowTeamsModal(true)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow hover:shadow-md transition-all"
+            >
+              🟣 Post to Teams channel
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Teams channel picker modal */}
+      {showTeamsModal && (
+        <TeamsShareModal
+          summaryText={(() => {
+            const entries = users.map((u) => ({
+              log: logs[u.id] ?? {
+                id: "", user_id: u.id, log_date: date,
+                yesterday_items: [], today_items: [], blocker_items: [],
+                created_at: "", updated_at: "",
+              },
+              name: u.name,
+            }));
+            return buildMeetingSummary(entries);
+          })()}
+          token={teamsToken}
+          onClose={() => setShowTeamsModal(false)}
+        />
+      )}
 
       {!hasAny && (
         <div className="text-center py-16 text-gray-400">
