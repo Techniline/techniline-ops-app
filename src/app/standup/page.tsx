@@ -645,11 +645,31 @@ function Section({
 
 // ─── manager overview ─────────────────────────────────────────────────────────
 
-interface TeamsChannel {
-  teamId: string;
-  teamName: string;
-  channelId: string;
-  channelName: string;
+interface SavedChannel {
+  id: string;
+  name: string;
+  team_id: string;
+  channel_id: string;
+}
+
+/** Parse a Teams channel URL to extract teamId + channelId.
+ *  Handles both the deep-link format and the web URL format.
+ *  Example: https://teams.microsoft.com/l/channel/19%3A...%40thread.tacv2/...?groupId=...&tenantId=...
+ */
+function parseTeamsUrl(url: string): { teamId: string; channelId: string } | null {
+  try {
+    const u = new URL(url);
+    // Deep link: /l/channel/{channelId}/{name}?groupId={teamId}
+    const dlMatch = u.pathname.match(/\/l\/channel\/([^/]+)/);
+    const teamId = u.searchParams.get("groupId");
+    if (dlMatch && teamId) {
+      return { teamId, channelId: decodeURIComponent(dlMatch[1]) };
+    }
+    // Web URL: /teams/{teamId}/channels/{channelId}
+    const webMatch = u.pathname.match(/\/teams\/([^/]+)\/channels\/([^/]+)/);
+    if (webMatch) return { teamId: webMatch[1], channelId: webMatch[2] };
+  } catch { /* ignore */ }
+  return null;
 }
 
 function TeamsShareModal({
@@ -661,66 +681,106 @@ function TeamsShareModal({
   token: string;
   onClose: () => void;
 }) {
-  const [channels, setChannels] = useState<TeamsChannel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<TeamsChannel | null>(null);
+  const [channels, setChannels] = useState<SavedChannel[]>([]);
+  const [loadingChannels, setLoadingChannels] = useState(true);
+  const [selected, setSelected] = useState<SavedChannel | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Add channel form
+  const [showAdd, setShowAdd] = useState(false);
+  const [addUrl, setAddUrl] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addTeamId, setAddTeamId] = useState("");
+  const [addChannelId, setAddChannelId] = useState("");
+  const [addMode, setAddMode] = useState<"url" | "manual">("url");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  function loadChannels() {
+    setLoadingChannels(true);
     fetch("/api/standup/teams-channels", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((d) => {
-        if (d.channels) setChannels(d.channels);
-        else setError(d.error ?? "Failed to load channels");
-      })
-      .catch(() => setError("Network error"))
-      .finally(() => setLoading(false));
-  }, [token]);
+      .then((d) => { if (d.channels) setChannels(d.channels); })
+      .finally(() => setLoadingChannels(false));
+  }
+
+  useEffect(() => { loadChannels(); }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-parse URL as user types
+  useEffect(() => {
+    if (addMode !== "url") return;
+    const parsed = parseTeamsUrl(addUrl.trim());
+    if (parsed) {
+      setAddTeamId(parsed.teamId);
+      setAddChannelId(parsed.channelId);
+      setAddError(null);
+    } else if (addUrl.trim()) {
+      setAddTeamId("");
+      setAddChannelId("");
+    }
+  }, [addUrl, addMode]);
+
+  async function handleAdd() {
+    const teamId = addTeamId.trim();
+    const channelId = addChannelId.trim();
+    const name = addName.trim();
+    if (!teamId || !channelId || !name) {
+      setAddError("Fill in all fields.");
+      return;
+    }
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/standup/teams-channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, team_id: teamId, channel_id: channelId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setAddError(d.error ?? "Failed to save"); return; }
+      setAddUrl(""); setAddName(""); setAddTeamId(""); setAddChannelId("");
+      setShowAdd(false);
+      loadChannels();
+    } catch { setAddError("Network error"); }
+    finally { setAdding(false); }
+  }
+
+  async function handleRemove(id: string) {
+    await fetch(`/api/standup/teams-channels?id=${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setChannels((prev) => prev.filter((c) => c.id !== id));
+    if (selected?.id === id) setSelected(null);
+  }
 
   async function handleSend() {
     if (!selected) return;
     setSending(true);
-    setError(null);
+    setSendError(null);
     try {
       const res = await fetch("/api/standup/share-teams", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          teamId: selected.teamId,
-          channelId: selected.channelId,
-          channelName: `${selected.teamName} › ${selected.channelName}`,
+          teamId: selected.team_id,
+          channelId: selected.channel_id,
+          channelName: selected.name,
           summaryText,
         }),
       });
       const data = await res.json();
-      if (!res.ok) setError(data.error ?? "Failed to send");
-      else setSent(`${selected.teamName} › ${selected.channelName}`);
-    } catch {
-      setError("Network error");
-    } finally {
-      setSending(false);
-    }
+      if (!res.ok) setSendError(data.error ?? "Failed to send");
+      else setSent(selected.name);
+    } catch { setSendError("Network error"); }
+    finally { setSending(false); }
   }
 
-  const filtered = channels.filter((c) => {
-    const q = search.toLowerCase();
-    return !q || c.teamName.toLowerCase().includes(q) || c.channelName.toLowerCase().includes(q);
-  });
-
-  // Group by team
-  const byTeam: Record<string, TeamsChannel[]> = {};
-  for (const ch of filtered) {
-    if (!byTeam[ch.teamName]) byTeam[ch.teamName] = [];
-    byTeam[ch.teamName].push(ch);
-  }
+  const urlParsed = addMode === "url" && !!parseTeamsUrl(addUrl.trim());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -728,8 +788,8 @@ function TeamsShareModal({
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-4 flex items-center justify-between">
           <div>
-            <h3 className="text-white font-bold">Share to Teams</h3>
-            <p className="text-indigo-100 text-xs">Pick a channel to post the standup</p>
+            <h3 className="text-white font-bold">🟣 Share to Teams</h3>
+            <p className="text-indigo-100 text-xs">Post standup to a channel</p>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
@@ -737,75 +797,167 @@ function TeamsShareModal({
         <div className="p-5 space-y-4">
           {sent ? (
             <div className="text-center py-8 space-y-3">
-              <div className="text-4xl">✅</div>
-              <p className="font-semibold text-gray-900">Posted!</p>
+              <div className="text-5xl">✅</div>
+              <p className="font-semibold text-gray-900">Posted to Teams!</p>
               <p className="text-sm text-gray-500">{sent}</p>
-              <button
-                onClick={onClose}
-                className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
-              >
-                Close
+              <button onClick={onClose} className="mt-2 px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+                Done
               </button>
             </div>
           ) : (
             <>
-              {/* Search */}
-              <input
-                type="text"
-                placeholder="Search channels…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              />
+              {/* Saved channels */}
+              {loadingChannels ? (
+                <div className="flex items-center gap-2 py-4 justify-center">
+                  <div className="animate-spin w-4 h-4 border-2 border-gray-200 border-t-indigo-500 rounded-full" />
+                  <span className="text-sm text-gray-400">Loading…</span>
+                </div>
+              ) : channels.length === 0 ? (
+                <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-4 text-center">
+                  <p className="text-sm text-indigo-700 font-medium">No channels saved yet</p>
+                  <p className="text-xs text-indigo-500 mt-0.5">Add your first channel below</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Saved channels</p>
+                  {channels.map((ch) => {
+                    const isSel = selected?.id === ch.id;
+                    return (
+                      <div
+                        key={ch.id}
+                        className={`group flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
+                          isSel
+                            ? "border-indigo-400 bg-indigo-50"
+                            : "border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40"
+                        }`}
+                        onClick={() => setSelected(isSel ? null : ch)}
+                      >
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSel ? "bg-indigo-500" : "bg-gray-300"}`} />
+                        <span className={`flex-1 text-sm font-medium ${isSel ? "text-indigo-800" : "text-gray-700"}`}>
+                          {ch.name}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemove(ch.id); }}
+                          className="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-base leading-none"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Channel list */}
-              <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
-                {loading && (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin w-5 h-5 border-2 border-gray-200 border-t-indigo-500 rounded-full" />
-                    <span className="ml-2 text-sm text-gray-500">Loading channels…</span>
+              {/* Add channel */}
+              {showAdd ? (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+                  <p className="text-sm font-semibold text-indigo-800">Add a channel</p>
+
+                  {/* Mode toggle */}
+                  <div className="flex rounded-lg overflow-hidden border border-indigo-200 text-xs font-medium">
+                    <button
+                      onClick={() => setAddMode("url")}
+                      className={`flex-1 py-1.5 transition-colors ${addMode === "url" ? "bg-indigo-600 text-white" : "bg-white text-indigo-600 hover:bg-indigo-50"}`}
+                    >
+                      Paste Teams link
+                    </button>
+                    <button
+                      onClick={() => setAddMode("manual")}
+                      className={`flex-1 py-1.5 transition-colors ${addMode === "manual" ? "bg-indigo-600 text-white" : "bg-white text-indigo-600 hover:bg-indigo-50"}`}
+                    >
+                      Enter IDs manually
+                    </button>
                   </div>
-                )}
-                {!loading && error && (
-                  <div className="rounded-xl bg-red-50 border border-red-200 p-3">
-                    <p className="text-xs text-red-700 font-medium">⚠️ {error}</p>
-                    {error.includes("permission") && (
-                      <p className="text-xs text-red-500 mt-1">
-                        Add <code>Team.ReadBasic.All</code>, <code>Channel.ReadBasic.All</code>, and <code>ChannelMessage.Send</code> as application permissions in your Azure app registration, then grant admin consent.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!loading && !error && Object.keys(byTeam).length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">No channels found.</p>
-                )}
-                {!loading && !error && Object.entries(byTeam).map(([teamName, chs]) => (
-                  <div key={teamName}>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">{teamName}</p>
-                    <div className="space-y-1">
-                      {chs.map((ch) => {
-                        const isSelected = selected?.channelId === ch.channelId && selected?.teamId === ch.teamId;
-                        return (
-                          <button
-                            key={ch.channelId}
-                            onClick={() => setSelected(ch)}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-all border ${
-                              isSelected
-                                ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
-                                : "border-transparent hover:border-gray-200 hover:bg-gray-50 text-gray-700"
-                            }`}
-                          >
-                            # {ch.channelName}
-                          </button>
-                        );
-                      })}
+
+                  {addMode === "url" ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Paste Teams channel link…"
+                          value={addUrl}
+                          onChange={(e) => setAddUrl(e.target.value)}
+                          className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white pr-7"
+                        />
+                        {urlParsed && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-500 text-sm">✓</span>
+                        )}
+                      </div>
+                      {urlParsed && (
+                        <p className="text-xs text-emerald-600 px-1">
+                          ✓ Team + channel detected — just add a name below
+                        </p>
+                      )}
+                      {addUrl.trim() && !urlParsed && (
+                        <p className="text-xs text-amber-600 px-1">
+                          Paste the link from Teams: open the channel → … menu → Get link to channel
+                        </p>
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Team ID (groupId)"
+                        value={addTeamId}
+                        onChange={(e) => setAddTeamId(e.target.value)}
+                        className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-indigo-400 bg-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Channel ID (19:...@thread.tacv2)"
+                        value={addChannelId}
+                        onChange={(e) => setAddChannelId(e.target.value)}
+                        className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-indigo-400 bg-white"
+                      />
+                    </div>
+                  )}
 
-              {error && !loading && (
-                <p className="text-xs text-red-600">{error}</p>
+                  <input
+                    type="text"
+                    placeholder="Label, e.g. Techniline › Daily Scrum"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
+                  />
+
+                  {addError && <p className="text-xs text-red-600">{addError}</p>}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAdd}
+                      disabled={adding || !addName.trim() || !(addTeamId && addChannelId)}
+                      className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {adding ? "Saving…" : "Save channel"}
+                    </button>
+                    <button
+                      onClick={() => { setShowAdd(false); setAddUrl(""); setAddName(""); setAddTeamId(""); setAddChannelId(""); setAddError(null); }}
+                      className="px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAdd(true)}
+                  className="w-full py-2 rounded-xl border border-dashed border-indigo-300 text-sm text-indigo-600 font-medium hover:bg-indigo-50 transition-colors"
+                >
+                  + Add channel
+                </button>
+              )}
+
+              {sendError && (
+                <div className="rounded-xl bg-red-50 border border-red-200 p-3">
+                  <p className="text-xs text-red-700">⚠️ {sendError}</p>
+                  {sendError.includes("ChannelMessage.Send") && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Add <code>ChannelMessage.Send</code> as an <b>application</b> permission to your Azure app registration and grant admin consent.
+                    </p>
+                  )}
+                </div>
               )}
 
               <button
@@ -814,10 +966,10 @@ function TeamsShareModal({
                 className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
                   !selected || sending
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-md"
+                    : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow hover:shadow-md"
                 }`}
               >
-                {sending ? "Sending…" : selected ? `Post to #${selected.channelName}` : "Select a channel"}
+                {sending ? "Sending…" : selected ? `Post to ${selected.name}` : "Select a channel above"}
               </button>
             </>
           )}
