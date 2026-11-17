@@ -1033,9 +1033,15 @@ function ManagerOverview({ date }: { date: string }) {
       name: "Vihan",
     };
     const entries: { log: StandupLog; name: string }[] = [...teamEntries, vihanEntry];
-    if (vihanTomorrowLog && vihanTomorrowLog.today_items.some((i) => i.text)) {
-      entries.push({ log: vihanTomorrowLog, name: "Vihan (Tomorrow)" });
-    }
+    // Always include Vihan's tomorrow plan (empty if not yet filled)
+    entries.push({
+      log: vihanTomorrowLog ?? {
+        id: "", user_id: profile?.id ?? "", log_date: nextDay(date),
+        yesterday_items: [], today_items: [], blocker_items: [],
+        created_at: "", updated_at: "",
+      },
+      name: "Vihan (Tomorrow)",
+    });
     return entries;
   }
 
