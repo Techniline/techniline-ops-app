@@ -45,6 +45,7 @@ import {
   ResellerIcon,
   ReturnsIcon,
   ShopifyIcon,
+  StandupIcon,
 } from "./icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -154,6 +155,7 @@ export function Sidebar({
       heading: "Daily",
       items: [
         { href: "/checklist", label: "Checklist", icon: ChecklistIcon, show: canViewChecklist(profile) },
+        { href: "/standup", label: "Daily Standup", icon: StandupIcon, show: isManager(profile) || profile?.id === "cbb81b27-8756-4f2d-bfe0-04211c27092c" || profile?.id === "227fdb27-80b5-4040-ab14-4bb945068af7" },
         { href: "/consults", label: "Musicmajlis Consult Bookings", icon: ActionsIcon, show: canViewConsults(profile) },
         { href: "/priorities", label: "Priorities", icon: PrioritiesIcon, show: true },
         { href: "/blockers", label: "Blockers", icon: BlockerIcon, show: true },

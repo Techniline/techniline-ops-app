@@ -219,6 +219,17 @@ export function AiIcon(props: IconProps) {
   );
 }
 
+export function StandupIcon(props: IconProps) {
+  return (
+    <svg {...base} aria-hidden="true" {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+      <path d="M12 14v6" />
+      <path d="M9 17h6" />
+    </svg>
+  );
+}
+
 export function LogoutIcon(props: IconProps) {
   return (
     <svg {...base} aria-hidden="true" {...props}>
