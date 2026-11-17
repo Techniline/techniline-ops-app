@@ -1149,6 +1149,7 @@ function ManagerOverview({ date }: { date: string }) {
 export default function StandupPage() {
   const { profile } = useAuth();
   const [date, setDate] = useState(dubaiToday());
+  const [managerTab, setManagerTab] = useState<"my-log" | "team">("team");
   const today = dubaiToday();
   const manager = profile ? isManager(profile) : false;
   const isAaron   = profile?.id === AARON_ID;
@@ -1182,13 +1183,9 @@ export default function StandupPage() {
             </svg>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {manager ? "Standup Overview" : "Daily Standup"}
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900">Daily Standup</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {manager
-                ? "Aaron and Maricel's morning scrum logs"
-                : "Log your yesterday, today, and blockers"}
+              {manager ? "Log your standup or view the team" : "Log your yesterday, today, and blockers"}
             </p>
           </div>
         </div>
@@ -1226,9 +1223,39 @@ export default function StandupPage() {
         </div>
       </div>
 
+      {/* Manager tab switcher */}
+      {manager && (
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+          <button
+            onClick={() => setManagerTab("my-log")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              managerTab === "my-log"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            🧑‍💼 My Log
+          </button>
+          <button
+            onClick={() => setManagerTab("team")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              managerTab === "team"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            👥 Team Overview
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       {manager ? (
-        <ManagerOverview date={date} />
+        managerTab === "my-log" ? (
+          <StandupForm userId={profile.id} date={date} isOwnLog={true} />
+        ) : (
+          <ManagerOverview date={date} />
+        )
       ) : (
         <StandupForm
           userId={profile.id}
