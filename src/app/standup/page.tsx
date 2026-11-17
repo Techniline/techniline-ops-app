@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { isManager } from "@/lib/permissions";
@@ -43,57 +43,77 @@ function nextDay(d: string): string {
   return dt.toISOString().slice(0, 10);
 }
 
-// ─── item editor component ───────────────────────────────────────────────────
+// ─── bullet textarea ─────────────────────────────────────────────────────────
 
-function ItemEditor({
-  item,
-  onUpdate,
-  onRemove,
+function BulletTextarea({
+  items,
+  onChange,
   placeholder,
   accent,
 }: {
-  item: StandupItem;
-  onUpdate: (updated: StandupItem) => void;
-  onRemove: () => void;
+  items: StandupItem[];
+  onChange: (items: StandupItem[]) => void;
   placeholder: string;
   accent: string;
 }) {
-  const [expanded, setExpanded] = useState(!!item.detail);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Derive initial text from items
+  const toText = (its: StandupItem[]) =>
+    its.filter((i) => i.text).map((i) => i.text).join("\n");
+
+  const [text, setText] = useState(() => toText(items));
+
+  // Sync when items change externally (e.g., carried item prepended)
+  const itemsKey = items.map((i) => i.id + ":" + i.text).join("|");
+  useEffect(() => {
+    setText(toText(items));
+  }, [itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-resize textarea
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.max(ta.scrollHeight, 72) + "px";
+  }, [text]);
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    setText(val);
+
+    // Map lines → StandupItems, reusing existing IDs when text matches
+    const existingByText = new Map(items.map((i) => [i.text, i]));
+    const newItems = val
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => existingByText.get(line) ?? emptyItem(line));
+
+    onChange(newItems);
+  }
+
+  const borderMap: Record<string, string> = {
+    blue:    "border-blue-200 focus:border-blue-400 focus:ring-blue-100",
+    red:     "border-red-200 focus:border-red-400 focus:ring-red-100",
+    emerald: "border-emerald-200 focus:border-emerald-400 focus:ring-emerald-100",
+  };
+
+  const count = text.split("\n").filter((l) => l.trim()).length;
+
   return (
-    <div className={`group rounded-xl border ${accent}-border bg-white/60 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden`}>
-      <div className="flex items-start gap-2 p-3">
-        <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${accent}-dot`} />
-        <input
-          className="flex-1 bg-transparent text-sm font-medium text-gray-800 placeholder-gray-400 outline-none"
-          value={item.text}
-          onChange={(e) => onUpdate({ ...item, text: e.target.value })}
-          placeholder={placeholder}
-        />
-        <button
-          onClick={() => setExpanded((x) => !x)}
-          className="text-gray-400 hover:text-gray-600 text-xs px-1.5 py-0.5 rounded-md hover:bg-gray-100 transition-colors"
-          title="Add detail"
-        >
-          {expanded ? "▲" : "▼ detail"}
-        </button>
-        <button
-          onClick={onRemove}
-          className="text-gray-300 hover:text-red-400 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100"
-          title="Remove"
-        >
-          ×
-        </button>
-      </div>
-      {expanded && (
-        <div className="px-7 pb-3">
-          <textarea
-            rows={2}
-            className="w-full text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 outline-none resize-none placeholder-gray-400"
-            value={item.detail ?? ""}
-            onChange={(e) => onUpdate({ ...item, detail: e.target.value || undefined })}
-            placeholder="Add detail, link, or context…"
-          />
-        </div>
+    <div className="relative">
+      <textarea
+        ref={textareaRef}
+        value={text}
+        onChange={handleChange}
+        placeholder={placeholder}
+        className={`w-full text-sm text-gray-800 bg-white/80 border ${borderMap[accent] ?? "border-gray-200 focus:border-blue-400 focus:ring-blue-100"} rounded-xl px-4 py-3 outline-none resize-none placeholder-gray-400 focus:ring-2 transition-all leading-relaxed`}
+        style={{ minHeight: "72px", overflow: "hidden" }}
+      />
+      {count > 0 && (
+        <span className="absolute top-2.5 right-3 text-xs text-gray-300 pointer-events-none select-none">
+          {count}
+        </span>
       )}
     </div>
   );
@@ -262,7 +282,7 @@ function StandupForm({
       if (existing) {
         setLog(existing);
         setYesterdayItems(existing.yesterday_items);
-        setTodayItems(existing.today_items.length > 0 ? existing.today_items : [emptyItem()]);
+        setTodayItems(existing.today_items);
         setBlockerItems(existing.blocker_items);
       } else {
         // No log yet — auto-fill from previous day
@@ -277,7 +297,7 @@ function StandupForm({
           carriedFrom: prevDate,
         }));
         setYesterdayItems(autoYesterday);
-        setTodayItems([emptyItem()]);
+        setTodayItems([]);
         setBlockerItems([]);
         setLog(null);
       }
@@ -345,56 +365,22 @@ function StandupForm({
     scheduleAutoSave(updated, updatedToday, blockerItems);
   }
 
-  function addYesterdayItem() {
-    setYesterdayItems((prev) => [...prev, emptyItem()]);
+  // Manual yesterday items = those without carriedFrom (user-typed, not auto-filled)
+  function setManualYesterdayItems(newManual: StandupItem[]) {
+    const autoItems = yesterdayItems.filter((i) => i.carriedFrom);
+    const updated = [...autoItems, ...newManual];
+    setYesterdayItems(updated);
+    scheduleAutoSave(updated, todayItems, blockerItems);
   }
 
-  function updateYesterdayItem(id: string, updated: StandupItem) {
-    const list = yesterdayItems.map((i) => (i.id === id ? updated : i));
-    setYesterdayItems(list);
-    scheduleAutoSave(list, todayItems, blockerItems);
+  function setTodayFromTextarea(newItems: StandupItem[]) {
+    setTodayItems(newItems);
+    scheduleAutoSave(yesterdayItems, newItems, blockerItems);
   }
 
-  function removeYesterdayItem(id: string) {
-    const list = yesterdayItems.filter((i) => i.id !== id);
-    setYesterdayItems(list);
-    scheduleAutoSave(list, todayItems, blockerItems);
-  }
-
-  function addTodayItem(text = "") {
-    const list = [...todayItems, emptyItem(text)];
-    setTodayItems(list);
-    scheduleAutoSave(yesterdayItems, list, blockerItems);
-  }
-
-  function updateTodayItem(id: string, updated: StandupItem) {
-    const list = todayItems.map((i) => (i.id === id ? updated : i));
-    setTodayItems(list);
-    scheduleAutoSave(yesterdayItems, list, blockerItems);
-  }
-
-  function removeTodayItem(id: string) {
-    const list = todayItems.filter((i) => i.id !== id);
-    setTodayItems(list.length > 0 ? list : [emptyItem()]);
-    scheduleAutoSave(yesterdayItems, todayItems.filter((i) => i.id !== id), blockerItems);
-  }
-
-  function addBlockerItem(text = "") {
-    const list = [...blockerItems, emptyItem(text)];
-    setBlockerItems(list);
-    scheduleAutoSave(yesterdayItems, todayItems, list);
-  }
-
-  function updateBlockerItem(id: string, updated: StandupItem) {
-    const list = blockerItems.map((i) => (i.id === id ? updated : i));
-    setBlockerItems(list);
-    scheduleAutoSave(yesterdayItems, todayItems, list);
-  }
-
-  function removeBlockerItem(id: string) {
-    const list = blockerItems.filter((i) => i.id !== id);
-    setBlockerItems(list);
-    scheduleAutoSave(yesterdayItems, todayItems, list);
+  function setBlockersFromTextarea(newItems: StandupItem[]) {
+    setBlockerItems(newItems);
+    scheduleAutoSave(yesterdayItems, todayItems, newItems);
   }
 
   function addSuggestedBlocker(what: string) {
@@ -454,85 +440,70 @@ function StandupForm({
       </div>
 
       {/* Yesterday */}
-      <Section
-        title="Yesterday"
-        emoji="✅"
-        color="emerald"
-        addLabel={isOwnLog ? "+ Add item" : undefined}
-        onAdd={isOwnLog ? addYesterdayItem : undefined}
-      >
-        {yesterdayItems.length === 0 && (
+      <Section title="Yesterday" emoji="✅" color="emerald">
+        {yesterdayItems.length === 0 && !isOwnLog && (
           <p className="text-sm text-gray-400 italic px-1">No items from yesterday yet.</p>
         )}
-        {yesterdayItems.map((item) =>
-          isOwnLog ? (
-            <div key={item.id} className="space-y-1">
-              {item.status === "pending" && item.carriedFrom ? (
-                <YesterdayItem item={item} onMark={(s) => markYesterday(item.id, s)} />
-              ) : (
-                <ItemEditor
-                  item={item}
-                  onUpdate={(u) => updateYesterdayItem(item.id, u)}
-                  onRemove={() => removeYesterdayItem(item.id)}
-                  placeholder="What did you complete?"
-                  accent="emerald"
-                />
-              )}
-            </div>
-          ) : (
-            <ReadonlyItem key={item.id} item={item} />
-          )
+        {/* Auto-filled cards (from previous day's Today list) */}
+        {yesterdayItems
+          .filter((item) => item.carriedFrom)
+          .map((item) =>
+            isOwnLog ? (
+              <YesterdayItem key={item.id} item={item} onMark={(s) => markYesterday(item.id, s)} />
+            ) : (
+              <ReadonlyItem key={item.id} item={item} />
+            )
+          )}
+        {/* Manually-added yesterday items via textarea */}
+        {isOwnLog ? (
+          <BulletTextarea
+            items={yesterdayItems.filter((i) => !i.carriedFrom)}
+            onChange={setManualYesterdayItems}
+            placeholder={"Each line = one thing you completed yesterday\n• Responded to customer queries\n• Fixed invoice bug"}
+            accent="emerald"
+          />
+        ) : (
+          yesterdayItems
+            .filter((i) => !i.carriedFrom)
+            .map((item) => <ReadonlyItem key={item.id} item={item} />)
         )}
       </Section>
 
       {/* Today */}
-      <Section
-        title="Today"
-        emoji="📋"
-        color="blue"
-        addLabel={isOwnLog ? "+ Add item" : undefined}
-        onAdd={isOwnLog ? () => addTodayItem() : undefined}
-      >
-        {todayItems.map((item) =>
-          isOwnLog ? (
-            <ItemEditor
-              key={item.id}
-              item={item}
-              onUpdate={(u) => updateTodayItem(item.id, u)}
-              onRemove={() => removeTodayItem(item.id)}
-              placeholder="What will you work on today?"
-              accent="blue"
-            />
-          ) : (
-            <ReadonlyItem key={item.id} item={item} />
-          )
+      <Section title="Today" emoji="📋" color="blue">
+        {isOwnLog ? (
+          <BulletTextarea
+            items={todayItems}
+            onChange={setTodayFromTextarea}
+            placeholder={"Each line = one task for today\n• Follow up on shipment #1234\n• Review Amazon listings"}
+            accent="blue"
+          />
+        ) : (
+          <>
+            {todayItems.length === 0 && (
+              <p className="text-sm text-gray-400 italic px-1">No tasks logged.</p>
+            )}
+            {todayItems.map((item) => <ReadonlyItem key={item.id} item={item} />)}
+          </>
         )}
       </Section>
 
       {/* Blockers */}
-      <Section
-        title="Blockers"
-        emoji="🚫"
-        color="red"
-        addLabel={isOwnLog ? "+ Add blocker" : undefined}
-        onAdd={isOwnLog ? () => addBlockerItem() : undefined}
-      >
-        {blockerItems.length === 0 && !isOwnLog && (
-          <p className="text-sm text-gray-400 italic px-1">No blockers reported.</p>
-        )}
-        {blockerItems.map((item) =>
-          isOwnLog ? (
-            <ItemEditor
-              key={item.id}
-              item={item}
-              onUpdate={(u) => updateBlockerItem(item.id, u)}
-              onRemove={() => removeBlockerItem(item.id)}
-              placeholder="Describe the blocker…"
-              accent="red"
-            />
-          ) : (
-            <ReadonlyItem key={item.id} item={item} />
-          )
+      <Section title="Blockers" emoji="🚫" color="red">
+        {isOwnLog ? (
+          <BulletTextarea
+            items={blockerItems}
+            onChange={setBlockersFromTextarea}
+            placeholder={"Each line = one blocker (leave empty if none)\n• Waiting for supplier quote\n• Access needed for portal"}
+            accent="red"
+          />
+        ) : (
+          <>
+            {blockerItems.length === 0 && (
+              <p className="text-sm text-gray-400 italic px-1">No blockers reported.</p>
+            )}
+            {blockerItems.map((item) => <ReadonlyItem key={item.id} item={item} />)}
+          </>
         )}
 
         {/* Suggested from blockers table */}
@@ -543,7 +514,7 @@ function StandupForm({
               {suggestedBlockers.map((b) => (
                 <button
                   key={b.id}
-                  onClick={() => addBlockerItem(b.what)}
+                  onClick={() => addSuggestedBlocker(b.what)}
                   className="w-full text-left text-xs text-amber-800 hover:text-amber-900 hover:bg-amber-100 rounded-lg px-2 py-1 transition-colors"
                 >
                   + {b.what}
