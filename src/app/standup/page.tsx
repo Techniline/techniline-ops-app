@@ -954,6 +954,7 @@ function ManagerOverview({ date }: { date: string }) {
   const { profile } = useAuth();
   const [logs, setLogs] = useState<Record<string, StandupLog>>({});
   const [vihanLog, setVihanLog] = useState<StandupLog | null>(null);
+  const [vihanTomorrowLog, setVihanTomorrowLog] = useState<StandupLog | null>(null);
   const [loading, setLoading] = useState(true);
   const [meetingCopied, setMeetingCopied] = useState(false);
   const [showTeamsModal, setShowTeamsModal] = useState(false);
@@ -965,12 +966,14 @@ function ManagerOverview({ date }: { date: string }) {
     Promise.all([
       fetchStandupsByDate(date),
       fetchStandupLog(profile.id, date),
+      fetchStandupLog(profile.id, nextDay(date)),
     ])
-      .then(([rows, myLog]) => {
+      .then(([rows, myLog, myTomorrowLog]) => {
         const map: Record<string, StandupLog> = {};
         for (const row of rows) map[row.user_id] = row;
         setLogs(map);
         setVihanLog(myLog);
+        setVihanTomorrowLog(myTomorrowLog);
       })
       .finally(() => setLoading(false));
   }, [date, profile]);
@@ -1016,7 +1019,12 @@ function ManagerOverview({ date }: { date: string }) {
       },
       name: "Vihan",
     };
-    return [...teamEntries, vihanEntry];
+    const entries: { log: StandupLog; name: string }[] = [...teamEntries, vihanEntry];
+    // Include Vihan's tomorrow log if it exists
+    if (vihanTomorrowLog && vihanTomorrowLog.today_items.some((i) => i.text)) {
+      entries.push({ log: vihanTomorrowLog, name: "Vihan (Tomorrow)" });
+    }
+    return entries;
   }
 
   async function copyMeetingSummary() {
